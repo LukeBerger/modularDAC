@@ -1,0 +1,219 @@
+# library(SILGGM)
+# library(igraph)
+# library(dplyr)
+
+
+######################
+### Graph learning ###
+######################
+
+### Takes a n x p matrix of data and inputs to silgggm function
+### Then generates networks based on partial correlation between nodes
+learn_SILGGM_graph <- function(x,
+                               method  = "B_NW_SL",
+                               global = T,
+                               alpha = 0.05,
+                               fdr.filter = T,
+                               max.fdr = 0.05,
+                               pos.cut = 0,
+                               neg.cut = 0,
+                               ...){
+
+  #run silggm
+  sOut <- suppressMessages(
+    SILGGM::SILGGM(x,
+                   method = method,
+                   alpha = alpha,
+                   global = global,
+                   ...)
+  )
+  #get partial.cor and zScore based on method
+  if(method == "D-S_NW_SL"){
+    partial.cor <- .upper_tri_vec(sOut$partialCor)
+    z.score.partial.cor <- sapply(partial.cor, .pcor_zscore, nrow(x))
+  }
+  if(method == "B_NW_SL"){
+    partial.cor <- .upper_tri_vec(sOut$partialCor)
+    z.score.partial.cor <- .upper_tri_vec(sOut$z_score_partialCor)
+  }
+
+  #estimate the adjusted p-value of each edge
+  qval.pcor <- sapply(z.score.partial.cor, .pvalue) %>%
+    upper_tri_to_matrix(., variable_names = colnames(x), diagl = 1) %>%
+    matrix_p_adjust(.)
+
+  #make network
+  pcor.avg <- partial.cor %>%
+    round(.,2) %>%
+    upper_tri_to_matrix(., variable_names = colnames(x), diagl = 1)
+  adj.mat <- apply(pcor.avg, c(1,2), .abs_pcor_filter, pos.cut, neg.cut)
+
+  ## further filtering by significance
+  if(fdr.filter){
+    adj.mat[qval.pcor>=max.fdr] <- 0
+  }
+
+  ## diagonal to 0 before creating igraph object
+  diag(adj.mat) <- 0
+
+  # to igraph object
+  g  <- igraph::graph_from_adjacency_matrix(adj.mat,
+                                            mode = "undirected",
+                                            weighted = TRUE)
+
+  return(g)
+}
+
+
+## Helpers to simpleSILGGM graph taken from RSCGGM
+## So that i can run it without loading the full package
+upper_tri_to_matrix <- function(upper_tri_values,
+                                variable_names =NULL,
+                                diagl=1){
+  p <- (1 + sqrt(1 + 8 * length(upper_tri_values))) / 2
+  if( (length(diagl)>1) & (length(diagl) != p) ) stop("invalid dignoal!")
+
+  mat <- matrix(0, p, p)
+
+  if(!is.null(variable_names)){
+    row.names(mat) <- variable_names
+    colnames(mat) <- variable_names
+  }
+
+  ## Fill the diagonal
+  diag(mat) <- diagl
+
+  ## Fill the upper triangular part
+  mat[upper.tri(mat, diag = FALSE)] <- upper_tri_values
+
+  # Fill the lower triangular part (mirror the upper triangular part)
+  mat[lower.tri(mat)] <- t(mat)[lower.tri(mat)]
+
+  return(mat)
+}
+
+matrix_p_adjust <- function( mx_p ) {
+  ## initialize
+  mx_q <- mx_p
+  ## adjust upper triangle
+  mx_q[upper.tri(mx_q)] <-
+    p.adjust(mx_p[upper.tri(mx_p)], method = "BH")
+  ## copy to lower triangle
+  mx_q[lower.tri(mx_q)] <-
+    t(mx_q)[lower.tri(mx_q)]
+  ## some checks
+  stopifnot(isTRUE(
+    all.equal(
+      mx_q[upper.tri(mx_q)],
+      t(mx_q)[upper.tri(mx_q)]
+    )
+  ))
+  stopifnot(!isTRUE(all.equal(mx_p,mx_q)))
+  return( mx_q)
+}
+
+.upper_tri_vec <- function(mat){
+  vec <- mat[upper.tri(mat)]
+  if(length(vec) != (ncol(mat)*(ncol(mat)-1))/2) stop ("invalid length!")
+  return(vec)
+}
+
+.pcor_zscore <- function(pcor,n){
+  std_new <- sqrt(.pow((1-.pow(pcor,2)),2)/n)
+  return(pcor/std_new)
+}
+
+.pvalue <- function(z_score){
+  return(2*stats::pnorm(q=abs(z_score), lower.tail=FALSE))
+}
+
+
+.abs_pcor_filter <- function(x,
+                             pos_cut,
+                             neg_cut){
+
+  if( (x) > 0 & (abs(x) <= abs(pos_cut)) ){
+    return(0)
+  }
+
+  if( (x) < 0 & (abs(x) <= abs(neg_cut)) ){
+    return(0)
+  }
+
+  return(x)
+}
+
+####################
+###Compare Graphs###
+####################
+
+calc_F1 <- function(g.true, g.pred) {
+  #check that the graphs have the same nodes
+  if (!all(igraph::V(g.true)$name %in% igraph::V(g.pred)$name)) {
+    stop("True and Predicted graphs must contain the same nodes")
+  }
+
+  #extract edges as character vectors in a consistent format
+  edges.true <- apply(igraph::as_edgelist(g.true), 1, function(x) paste(sort(x), collapse = " -- "))
+  edges.pred <- apply(igraph::as_edgelist(g.pred), 1, function(x) paste(sort(x), collapse = " -- "))
+
+  #count True Positives, False Positives, False Negatives
+  tp <- sum(edges.pred %in% edges.true)
+  fp <- sum(!(edges.pred %in% edges.true))
+  fn <- sum(!(edges.true %in% edges.pred))
+
+  #calc precision and recall
+  precision <- ifelse(tp + fp == 0, 0, tp / (tp + fp))
+  recall <- ifelse(tp + fn == 0, 0, tp / (tp + fn))
+
+  #calc F1 Score
+  if (precision + recall == 0) {
+    f1 <- 0 #to avoid zero divison error in edge case
+  } else {
+    f1 <- 2 * precision * recall / (precision + recall)
+  }
+
+  #return values as list
+  return(list(
+    F1 = f1,
+    Precision = precision,
+    Recall = recall,
+    TruePos = tp,
+    FalsePos = fp,
+    FalseNeg = fn
+  ))
+}
+
+
+###############
+#### Other ####
+###############
+
+### Preform half min imputation to fill in missing values in dat matrix
+halfmin_impute <- function(dat) {
+  halfmin <- matrix(matrixStats::rowMins(dat, na.rm = TRUE) / 2,
+                    nrow = nrow(dat), ncol = ncol(dat), dimnames = dimnames(dat)
+  )
+  ## just checking
+  stopifnot(all.equal(
+    matrixStats::rowMeans2(halfmin),
+    matrixStats::rowMins(dat, na.rm = TRUE) / 2
+  ))
+  dat[is.na(dat)] <- halfmin[is.na(dat)]
+  return(dat)
+}
+
+
+###########
+## TEST ###
+###########
+
+# source("/restricted/projectnb/agedisease/personal/lberger/modular_graph_learning/ModularDAC/00.SimulateGraphs.R")
+#
+# # make data
+# er <- make_modular_graph()
+# x <- sim_graph_data(er, n.samples = 100)
+#
+# # test silggm learning
+# s <- learn_SILGGM_graph(t(x))
+# calc_F1(er, s)
