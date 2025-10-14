@@ -23,4 +23,5 @@ Imports:
     parallel,
     foreach,
     doParallel
-
+URL: https://github.com/LukeBerger/modularDAC
+BugReports: https://github.com/LukeBerger/modularDAC/issues
