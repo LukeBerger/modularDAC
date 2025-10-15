@@ -13,6 +13,7 @@ Imports:
     stats,
     igraph,
     dplyr,
+    netUtils,
     visNetwork,
     BDgraph,
     MASS,

@@ -1,6 +1,6 @@
 # library(fastICA)
 # library(DescTools)
-# library(dplyr)
+library(dplyr)
 
 
 ## Complex Module detection via multistage algorithm (based on ICA core modules)
@@ -12,14 +12,14 @@
 ## RETURNS: list of module assignments
 
 complexICA <- function(dataMat,nComp, coreSize = 5, intialThreshold = 0.5, minThreshold = 0){
-  set.seed(123) #setting seed removes randomness in fastaICA iterations
+  # set.seed(123) #setting seed removes randomness in fastaICA iterations
 
   #########################
   ###Define core modules###
   #########################
 
   #preform ICA
-  ICAOut <- fastICA(X= dataMat,
+  ICAOut <- fastICA::fastICA(X= dataMat,
                     n.comp = nComp,
                     verbose = 0
   )
@@ -32,7 +32,7 @@ complexICA <- function(dataMat,nComp, coreSize = 5, intialThreshold = 0.5, minTh
   basicMods <- apply(sMat, 1, which.max) #modules named based on ICA column n
 
   #very stringent modules based on top 5 values
-  complexMods <- basicMods #probably a beter way to this, may not need to define basic mods
+  complexMods <- basicMods #probably a better way to this, may not need to define basic mods
   top5 <- apply(sMat, 2, function(col){
     which(col %in% sort(col, decreasing = T)[1:coreSize])
   })
@@ -86,6 +86,18 @@ complexICA <- function(dataMat,nComp, coreSize = 5, intialThreshold = 0.5, minTh
 
   return(complexMods)
 }
+
+##########
+###TEST###
+##########
+
+# source("/restricted/projectnb/agedisease/personal/lberger/modular_graph_learning/ModularDAC/00.SimulateGraphs.R")
+#
+# er <- make_modular_graph()
+# x <- sim_graph_data(er, n.samples = 100)
+# mods <- complexICA(x, 3)
+
+
 
 ##################################################
 ###Alternative methods for defining core module###

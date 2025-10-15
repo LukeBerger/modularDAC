@@ -1,4 +1,5 @@
 # library(igraph)
+# library(netUtils)
 # library(BDgraph)
 # library(MASS)
 # library(dplyr)
@@ -189,6 +190,37 @@ make_submodular_graph <- function(g.type="er",
     igraph::V(g)[label.start:((n.nodes / n.mods)*i)]$module <- mod.names[i]
     label.start <- (n.nodes / n.mods)*i + 1
   }
+  return(g)
+}
+
+
+## Wrapper of netUtils sample_lft
+## Takes inputs and returns graph labled to match the above format
+##      I.E containing Node_Names and $modules
+make_lft <- function(n = 120,        #number of nodes
+                     tau1 = 3,       #power-law exponent for degree distribution
+                     tau2 = 2,       #power-law exponent for community size distribution
+                     mu = 0.08,      #mixing parameter
+                     average.degree = 6,   #required: typical node degree
+                     max.degree = 10,      #required: highest possible node  degree
+                     min.community = 30,   # min communitu size
+                     max.community = 50){
+
+  g <- netUtils::sample_lfr(
+    n = n,
+    tau1 = tau1,
+    tau2 = tau2,
+    mu = mu,
+    average_degree = average.degree,
+    max_degree = max.degree,
+    min_community = min.community,
+    max_community = max.community
+  )
+
+  #label
+  igraph::V(g)$name <- paste0("Node_", igraph::V(g))
+  igraph::V(g)$module <- igraph::V(g)$membership
+
   return(g)
 }
 
