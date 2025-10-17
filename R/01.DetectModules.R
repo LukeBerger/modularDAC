@@ -158,12 +158,12 @@ eigen_fuzzy_modules <- function(x, modules, max.size){
     n.fuzzy.nodes <- max.size - length(mod)
 
     #get the modules eigen gene
-    modPC <- prcomp(t(x[mod,]), scale. = TRUE)
-    modEigen <- modPC$x[,1]
+    mod.PC <- prcomp(t(x[mod,]), scale. = TRUE)
+    mod.eigen <- mod.PC$x[,1]
 
     #get genes outside the module the covary with the eigen gene
-    eigenCor <- abs(apply(x[-mod,], 1, function(x) cor(x, modEigen))) #correlation
-    corRank <- sort(eigenCor, decreasing = TRUE) #ranked absolute covariance
+    eigen.cor <- abs(apply(x[-mod,], 1, function(x) cor(x, mod.eigen))) #correlation
+    corRank <- sort(eigen.cor, decreasing = TRUE) #ranked absolute covariance
     fuzzy.nodes <- names(corRank[1:n.fuzzy.nodes]) #n.fuzzy.nodes nodes with the highest ranks
 
     #convert fuzzy nodes to numerics (stored naturally as names)
@@ -179,7 +179,7 @@ eigen_fuzzy_modules <- function(x, modules, max.size){
 ## new nodes are selected based on correlation with individual nodes in the module
 nodewise_fuzzy_modules <- function(x, modules, max.size){
   #get cor matrix
-  corMat <- abs(cor(t(x)))
+  cor.matrix <- abs(cor(t(x)))
 
   #create fuzzy modules
   lapply(modules, function(mod){
@@ -187,12 +187,12 @@ nodewise_fuzzy_modules <- function(x, modules, max.size){
     n.fuzzy.nodes <- max.size - length(mod)
 
     #get only covariance of genes in the module with genes not in the module
-    corSub <- corMat[mod,-mod] #mod-genes by not-mod-genes matrix
+    cor.sub.matrix <- cor.matrix[mod,-mod] #mod-genes by not-mod-genes matrix
 
     #get column maxes for absolute covariance and use them to select fuzzy nodes
-    cMx <- apply(corSub,2 ,max)
-    corRank <- order(cMx, decreasing = TRUE)
-    fuzzy.nodes <- colnames(corSub)[corRank[1:n.fuzzy.nodes]]
+    column.maxes <- apply(cor.sub.matrix,2 ,max)
+    corRank <- order(column.maxes, decreasing = TRUE)
+    fuzzy.nodes <- colnames(cor.sub.matrix)[corRank[1:n.fuzzy.nodes]]
 
     #convert fuzzy nodes to numerics (stored naturally as names)
     fuzzy.nodes <- which(rownames(x) %in% fuzzy.nodes)
@@ -204,6 +204,89 @@ nodewise_fuzzy_modules <- function(x, modules, max.size){
   })
 }
 
+## Get a new set of modules, completely overlapping the old set
+## To ensure the learned graph can stitch together vary nicely
+create_overlap_modules <- function(x, modules, use.eigen = TRUE, best.pairs = TRUE){
+  # get absolute correlation matrix of all node (absolute only in the case of undirected graphs)
+  cor.matrix <- abs(cor(t(x)))
+
+
+  #create poteintial pairs list
+  p.pairs <- as.data.frame(t(combn(length(modules), 2)))
+  if(use.eigen){
+    # get eigen genes (first PC)
+    mod.eigens <- lapply(modules, function(mod){
+      mod.PC <- prcomp(t(x[mod,]), scale. = TRUE)
+      mod.PC$x[,1]
+    })
+
+    # get eigen covar
+    p.pairs$cor <- apply(p.pairs, 1, function(r){
+      #get overall mean correlation between each pair of modules
+      cor(mod.eigens[[r[1]]], mod.eigens[[r[2]]])
+
+    })
+  }else{
+    # get score representing the abs correlation between nodes in the modules
+    p.pairs$cor <- apply(p.pairs, 1, function(r){
+      #get overall mean correlation between each pair of modules
+      # mean(cor.matrix[modules[[r[1]]], modules[[r[2]]]])
+      max(
+        mean(apply(cor.matrix[modules[[r[1]]], modules[[r[2]]]]), 1, max), # row/ col matrix are non symmetric
+        mean(apply(cor.matrix[modules[[r[1]]], modules[[r[2]]]]), 2, max) # gives rough measure of overall cor between mods
+      )
+
+    })
+  }
+  p.pairs <- p.pairs[order(p.pairs$cor, decreasing = T),]
+
+  # if only using best pairs
+  if(best.pairs){
+    #track which items are aleardy in pairs, which rows to keep
+    in.pairs = vector(mode = "numeric", length = length(modules))
+    keep.rows <- vector(mode = "logical", length = nrow(p.pairs))
+
+    #for each row in the the pair table
+    in.pairs[p.pairs[1,1]] <- 1 #set first item to one, so it will remain open to close loop
+    for(i in 1:nrow(p.pairs)){
+      #check if either item is already in two pairs
+      used.twice <- in.pairs[c(p.pairs[i,1],p.pairs[i,2])] >= 2
+
+      #if they are both open
+      if(all(!used.twice)){
+        #keep the row
+        keep.rows[i] <- TRUE
+
+        #iterate the pair
+        in.pairs[c(p.pairs[i,1],p.pairs[i,2])] <- in.pairs[c(p.pairs[i,1],p.pairs[i,2])] + 1
+      }
+    }
+    # add a final row: the pair between the two modules that only occure once, the first module and the last (by ordered eigen gene cor)
+    p.pairs <- rbind(p.pairs[keep.rows,], c(p.pairs[1,1], which(in.pairs == 1), NA))
+  }
+
+  #get overlap mods
+  overlap.modules <- lapply(1:nrow(p.pairs), function(i){
+    left <- modules[[as.numeric(p.pairs[i,1])]] # get two modules in pair
+    right <- modules[[as.numeric(p.pairs[i,2])]]
+
+    #get the correlation of nodes between the two modules
+    cor.sub.matrix <- cor.matrix[left, right]
+
+    #get the best nodes from each module: the upper half of row
+    left.nodes <- left[order(apply(cor.sub.matrix, 1, max))[1:floor(length(left)/2)]]
+    right.nodes <- right[order(apply(cor.sub.matrix, 2, max))[1:floor(length(right)/2)]]
+
+    #return overlap mods
+    list(
+      index = sort(c(left.nodes,right.nodes)),
+      overalp = c(p.pairs[i,1],p.pairs[i,2])
+    )
+
+  })
+
+  return(overlap.modules)
+}
 
 
 ###########
@@ -224,3 +307,8 @@ p <- pragmatic_modules(x,n.mods = 3, max.size = 60)
 # fuzzy mods
 f <- eigen_fuzzy_modules(x, lapply(p, function(x) x$index), 80)
 f <- nodewise_fuzzy_modules(x, lapply(p, function(x) x$index), 80)
+
+# overlap mods
+o <- create_overlap_modules(x, lapply(p, function(x) x$index))
+
+
