@@ -150,18 +150,77 @@ pragmatic_modules <- function(x, max.size, n.mods = NULL){
   return(modules)
 }
 
+## Create overlapping fuzzy modules by adding nodes to prexisiting modules up to a max size,
+## new nodes are selected based on correlation with the modules eigen gene (first pc)
+eigen_fuzzy_modules <- function(x, modules, max.size){
+  lapply(modules, function(mod){
+    #get number of required fuzzy nodes
+    n.fuzzy.nodes <- max.size - length(mod)
+
+    #get the modules eigen gene
+    modPC <- prcomp(t(x[mod,]), scale. = TRUE)
+    modEigen <- modPC$x[,1]
+
+    #get genes outside the module the covary with the eigen gene
+    eigenCor <- abs(apply(x[-mod,], 1, function(x) cor(x, modEigen))) #correlation
+    corRank <- sort(eigenCor, decreasing = TRUE) #ranked absolute covariance
+    fuzzy.nodes <- names(corRank[1:n.fuzzy.nodes]) #n.fuzzy.nodes nodes with the highest ranks
+
+    #convert fuzzy nodes to numerics (stored naturally as names)
+    fuzzy.nodes <- which(rownames(x) %in% fuzzy.nodes)
+    names(fuzzy.nodes) <- rownames(x[fuzzy.nodes,])
+
+    #return fuzzy module combining original and fuzzy nodes
+    sort(c(mod, fuzzy.nodes))
+  })
+}
+
+## Create overlapping fuzzy modules by adding nodes to prexisiting modules up to a max size,
+## new nodes are selected based on correlation with individual nodes in the module
+nodewise_fuzzy_modules <- function(x, modules, max.size){
+  #get cor matrix
+  corMat <- abs(cor(t(x)))
+
+  #create fuzzy modules
+  lapply(modules, function(mod){
+    #get number of required fuzzy nodes
+    n.fuzzy.nodes <- max.size - length(mod)
+
+    #get only covariance of genes in the module with genes not in the module
+    corSub <- corMat[mod,-mod] #mod-genes by not-mod-genes matrix
+
+    #get column maxes for absolute covariance and use them to select fuzzy nodes
+    cMx <- apply(corSub,2 ,max)
+    corRank <- order(cMx, decreasing = TRUE)
+    fuzzy.nodes <- colnames(corSub)[corRank[1:n.fuzzy.nodes]]
+
+    #convert fuzzy nodes to numerics (stored naturally as names)
+    fuzzy.nodes <- which(rownames(x) %in% fuzzy.nodes)
+    names(fuzzy.nodes) <- rownames(x[fuzzy.nodes,])
+
+    #return fuzzy module combining original and fuzzy nodes
+    sort(c(mod, fuzzy.nodes))
+
+  })
+}
+
+
 
 ###########
 ## TEST ###
 ###########
 
-# source("/restricted/projectnb/agedisease/personal/lberger/modular_graph_learning/ModularDAC/00.SimulateGraphs.R")
-#
-# # make data
-# er <- make_modular_graph()
-# x <- sim_graph_data(er, n.samples = 10)
-#
-# # learn mods
-# w <- find_WGCNA_mods(t(x), cor.FN = "bicor")
-# i <- find_ICA_mods(x, 3)
-# p <- pragmatic_modules(x, max.size = 60)
+source("/restricted/projectnb/agedisease/personal/lberger/modular_graph_learning/ModularDAC/00.SimulateGraphs.R")
+
+# make data
+er <- make_modular_graph()
+x <- sim_graph_data(er, n.samples =100)
+
+# learn mods
+w <- find_WGCNA_mods(t(x), cor.FN = "bicor")
+i <- find_ICA_mods(x, 3)
+p <- pragmatic_modules(x,n.mods = 3, max.size = 60)
+
+# fuzzy mods
+f <- eigen_fuzzy_modules(x, lapply(p, function(x) x$index), 80)
+f <- nodewise_fuzzy_modules(x, lapply(p, function(x) x$index), 80)

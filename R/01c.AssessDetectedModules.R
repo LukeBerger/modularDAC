@@ -79,27 +79,6 @@ module_contiguity <- function(g, module.name = "module"){
 }
 
 
-eigen_fuzzy_modules <- function(x, modules, max.size){
-  lapply(modules, function(mod){
-    #get number of required fuzzy nodes
-    n.fuzzy.nodes <- max.size - length(mod)
-
-    #get the modules eigen gene
-    modPC <- prcomp(t(x[mod,]), scale. = TRUE)
-    modEigen <- modPC$x[,1]
-
-    #get genes outside the module the covary with the eigen gene
-    eigenCov <- apply(x[!(rownames(x) %in% mod),], 1, function(x) cov(x, modEigen)) #covariance
-    covRank <- sort(abs(eigenCov), decreasing = TRUE) #ranked absolute covariance
-    fuzzy.nodes <- covRank[1:n.fuzzy.nodes] #n.fuzzy.nodes nodes with the highest ranks
-
-    #return fuzzy module combining original and fuzzy nodes
-    sort(c(mod, names(fuzzy.nodes)))
-  })
-}
-
-
-
 ############
 ### TEST ###
 ############
@@ -114,8 +93,6 @@ eigen_fuzzy_modules <- function(x, modules, max.size){
 # # learn mods
 # i <- find_ICA_mods(x, 3)
 #
-# # fuzzy mods
-# f <- eigen_fuzzy_modules(x, split(V(er)$name, i), 80)
 #
 # #assess accuracy
 # igraph::V(er)$ica <- i
