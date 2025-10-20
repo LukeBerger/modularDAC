@@ -15,6 +15,12 @@ Imports:
     dplyr,
     netUtils,
     visNetwork,
+    BiocGenerics,
+    dynamicTreeCut,
+    flashClust,
+    matrixStats,
+    stringr,
+    tmvtnorm
     BDgraph,
     MASS,
     WGCNA,
