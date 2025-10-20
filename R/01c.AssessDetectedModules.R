@@ -20,7 +20,7 @@ percent_module_match <- function(g, m1, m2){
   matches <- .match_modules(m1.nodes, m2.nodes, m1.names, m2.names)
   #count total matches and total nodes in modules
   matched.nodes <- 0
-  n.nodes <- vcount(g)
+  n.nodes <- igraph::vcount(g)
   for (match in matches) {
     matched.nodes = matched.nodes + as.numeric(match[5])
   }
@@ -65,7 +65,7 @@ percent_module_match <- function(g, m1, m2){
 module_contiguity <- function(g, module.name = "module"){
   #get module assignments
   mods <-igraph::vertex.attributes(g)[[module.name]]
-  adj <- as.matrix(as_adjacency_matrix(g))
+  adj <- as.matrix(igraph::as_adjacency_matrix(g))
 
   #get number nodes with more neighbors within module than between modules
   moreWithin <- length(which(unlist(
