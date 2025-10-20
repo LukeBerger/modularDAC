@@ -44,7 +44,7 @@ find_WGCNA_mods <- function(x,
   dis <- WGCNA::TOMdist(adjMat=adj, TOMType="unsigned")
 
   # Fast hierarchical clustering of dissimilarity
-  dendro <- flashClust::flashClust(d=as.dist(dis), method=hclust.method)
+  dendro <- flashClust::flashClust(d=stats::as.dist(dis), method=hclust.method)
 
   # Module identification using dynamic tree cut algorithm
   modules <- dynamicTreeCut::cutreeDynamic(dendro=dendro,
@@ -158,11 +158,11 @@ eigen_fuzzy_modules <- function(x, modules, max.size){
     n.fuzzy.nodes <- max.size - length(mod)
 
     #get the modules eigen gene
-    mod.PC <- prcomp(t(x[mod,]), scale. = TRUE)
+    mod.PC <- stats::prcomp(t(x[mod,]), scale. = TRUE)
     mod.eigen <- mod.PC$x[,1]
 
     #get genes outside the module the covary with the eigen gene
-    eigen.cor <- abs(apply(x[-mod,], 1, function(x) cor(x, mod.eigen))) #correlation
+    eigen.cor <- abs(apply(x[-mod,], 1, function(x) stats::cor(x, mod.eigen))) #correlation
     corRank <- sort(eigen.cor, decreasing = TRUE) #ranked absolute covariance
     fuzzy.nodes <- names(corRank[1:n.fuzzy.nodes]) #n.fuzzy.nodes nodes with the highest ranks
 
@@ -179,7 +179,7 @@ eigen_fuzzy_modules <- function(x, modules, max.size){
 ## new nodes are selected based on correlation with individual nodes in the module
 nodewise_fuzzy_modules <- function(x, modules, max.size){
   #get cor matrix
-  cor.matrix <- abs(cor(t(x)))
+  cor.matrix <- abs(stats::cor(t(x)))
 
   #create fuzzy modules
   lapply(modules, function(mod){
@@ -208,22 +208,22 @@ nodewise_fuzzy_modules <- function(x, modules, max.size){
 ## To ensure the learned graph can stitch together vary nicely
 create_overlap_modules <- function(x, modules, use.eigen = TRUE, best.pairs = TRUE){
   # get absolute correlation matrix of all node (absolute only in the case of undirected graphs)
-  cor.matrix <- abs(cor(t(x)))
+  cor.matrix <- abs(stats::cor(t(x)))
 
 
   #create poteintial pairs list
-  p.pairs <- as.data.frame(t(combn(length(modules), 2)))
+  p.pairs <- as.data.frame(t(utils::combn(length(modules), 2)))
   if(use.eigen){
     # get eigen genes (first PC)
     mod.eigens <- lapply(modules, function(mod){
-      mod.PC <- prcomp(t(x[mod,]), scale. = TRUE)
+      mod.PC <- stats::prcomp(t(x[mod,]), scale. = TRUE)
       mod.PC$x[,1]
     })
 
     # get eigen covar
     p.pairs$cor <- apply(p.pairs, 1, function(r){
       #get overall mean correlation between each pair of modules
-      cor(mod.eigens[[r[1]]], mod.eigens[[r[2]]])
+      stats::cor(mod.eigens[[r[1]]], mod.eigens[[r[2]]])
 
     })
   }else{
@@ -293,22 +293,22 @@ create_overlap_modules <- function(x, modules, use.eigen = TRUE, best.pairs = TR
 ## TEST ###
 ###########
 
-source("/restricted/projectnb/agedisease/personal/lberger/modular_graph_learning/ModularDAC/00.SimulateGraphs.R")
-
-# make data
-er <- make_modular_graph()
-x <- sim_graph_data(er, n.samples =100)
-
-# learn mods
-w <- find_WGCNA_mods(t(x), cor.FN = "bicor")
-i <- find_ICA_mods(x, 3)
-p <- pragmatic_modules(x,n.mods = 3, max.size = 60)
-
-# fuzzy mods
-f <- eigen_fuzzy_modules(x, lapply(p, function(x) x$index), 80)
-f <- nodewise_fuzzy_modules(x, lapply(p, function(x) x$index), 80)
-
-# overlap mods
-o <- create_overlap_modules(x, lapply(p, function(x) x$index))
+# source("/restricted/projectnb/agedisease/personal/lberger/modular_graph_learning/ModularDAC/00.SimulateGraphs.R")
+#
+# # make data
+# er <- make_modular_graph()
+# x <- sim_graph_data(er, n.samples =100)
+#
+# # learn mods
+# w <- find_WGCNA_mods(t(x), cor.FN = "bicor")
+# i <- find_ICA_mods(x, 3)
+# p <- pragmatic_modules(x,n.mods = 3, max.size = 60)
+#
+# # fuzzy mods
+# f <- eigen_fuzzy_modules(x, lapply(p, function(x) x$index), 80)
+# f <- nodewise_fuzzy_modules(x, lapply(p, function(x) x$index), 80)
+#
+# # overlap mods
+# o <- create_overlap_modules(x, lapply(p, function(x) x$index))
 
 
