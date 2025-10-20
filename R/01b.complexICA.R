@@ -24,9 +24,9 @@ complexICA <- function(dataMat,nComp, coreSize = 5, intialThreshold = 0.5, minTh
                     verbose = 0
   )
   sMat <- abs(ICAOut$S)
-  #get covariance matrix from data
-  covMat <- cov(t(dataMat))
-  diag(covMat) <- 0 # set diagonals as zero to ignore loops
+  #get correlation matrix from data
+  corMat <- stats::cor(t(dataMat))
+  diag(corMat) <- 0 # set diagonals as zero to ignore loops
 
   #get basic mods based on max component score of ICA
   basicMods <- apply(sMat, 1, which.max) #modules named based on ICA column n
@@ -54,7 +54,7 @@ complexICA <- function(dataMat,nComp, coreSize = 5, intialThreshold = 0.5, minTh
     #for each unassigned node
     for(node in unassigned){
       #get neighbors based on current threshold
-      nbs <- assigned[which(abs(covMat[node, assigned]) > threshold)]
+      nbs <- assigned[which(abs(corMat[node, assigned]) > threshold)]
       #and assign this node based on the mode of their modules
       md <- DescTools::Mode(lastMods[nbs])[1]
       if(length(md) == 1){
@@ -129,7 +129,7 @@ complexICA <- function(dataMat,nComp, coreSize = 5, intialThreshold = 0.5, minTh
 #   #for each unassigned node
 #   for(node in unassigned){
 #     #get avg covariance with all current assigned nodes
-#     covars <- abs(covMat[node, ])
+#     covars <- abs(corMat[node, ])
 #     modCovars <- split(covars,lastMods)
 #     modCovars["0"] <- NULL #remove unassigned
 #     avgCovars <-lapply(modCovars, mean)
@@ -178,7 +178,7 @@ complexICA <- function(dataMat,nComp, coreSize = 5, intialThreshold = 0.5, minTh
 #   unassigned <- which(complexMods == 0)
 #   for(node in assigned){
 #     #assign its "best" unassigned neighbor (based on covar) the same module
-#     best <- unassigned[which.max(abs(covMat[node, unassigned]))]
+#     best <- unassigned[which.max(abs(corMat[node, unassigned]))]
 #     complexMods[best] <- complexMods[node]
 #   }
 #   #end iterations if stuck
@@ -194,7 +194,7 @@ complexICA <- function(dataMat,nComp, coreSize = 5, intialThreshold = 0.5, minTh
 #   #for each module
 #   unassigned <- which(complexMods == 0)
 #   for(module in 1:nComp){ #what module goes last can steal nodes, need to store values then take max
-#     subCov <- covMat[which(complexMods == module), unassigned]
+#     subCov <- corMat[which(complexMods == module), unassigned]
 #     #find the unassigned node closest to the overall module
 #     complexMods[unassigned[which.max(colMeans(abs(subCov)))]] <- module
 #
@@ -215,15 +215,15 @@ complexICA <- function(dataMat,nComp, coreSize = 5, intialThreshold = 0.5, minTh
 # #border nodes are nodes with neighbors of a different module
 # borderNodes <- which(unlist(
 #   lapply(complexMods, function(node){
-#     all(unique(complexMods[which(abs(covMat[node, ]) > threshold)]) == complexMods[node])
+#     all(unique(complexMods[which(abs(corMat[node, ]) > threshold)]) == complexMods[node])
 #   })
 # ))
 # while(length(borderNodes > 0)){
 #   for(node in borderNodes){
 #     #get neighbors (based on threshold) and neighbors neighbors
-#     n1 <- which(abs(covMat[node, ]) > threshold)
+#     n1 <- which(abs(corMat[node, ]) > threshold)
 #     n2 <- unique(unlist(lapply(n1, function(n){
-#         which(abs(covMat[n, ]) > threshold)
+#         which(abs(corMat[n, ]) > threshold)
 #       })))[-node]
 #     #assign node to mode of n2 modules
 #     md <- DescTools::Mode(lastMods[n2])[1]
@@ -237,19 +237,19 @@ complexICA <- function(dataMat,nComp, coreSize = 5, intialThreshold = 0.5, minTh
 #   lastMods <- complexMods
 #   borderNodes <- which(unlist(
 #     lapply(complexMods, function(node){
-#       all(unique(complexMods[which(abs(covMat[node, ]) > threshold)]) == complexMods[node])
+#       all(unique(complexMods[which(abs(corMat[node, ]) > threshold)]) == complexMods[node])
 #     })
 #   ))
 # }
 
 ###Reassign border nodes based on covariance with final modules
 # #border nodes are those whose closest neighbor is of a different module
-# borderNodes <- which(complexMods != complexMods[apply(abs(covMat),1, which.max)])
+# borderNodes <- which(complexMods != complexMods[apply(abs(corMat),1, which.max)])
 # lastMods <- complexMods
 # while(length(borderNodes > 0)){
 #   for(node in borderNodes){
 #     #get avg covariance with all modules
-#     covars <- abs(covMat[node, ])
+#     covars <- abs(corMat[node, ])
 #     modCovars <- split(covars,lastMods)
 #     modCovars["0"] <- NULL #remove unassigned (if any still exist)
 #     avgCovars <-lapply(modCovars, mean)
@@ -259,6 +259,6 @@ complexICA <- function(dataMat,nComp, coreSize = 5, intialThreshold = 0.5, minTh
 #   }
 #   if(all(lastMods == complexMods)){break}
 #   lastMods <- complexMods
-#   borderNodes <- which(complexMods != complexMods[apply(abs(covMat),1, which.max)])
+#   borderNodes <- which(complexMods != complexMods[apply(abs(corMat),1, which.max)])
 # }
 
