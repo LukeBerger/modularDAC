@@ -1,6 +1,21 @@
 # library(WGCNA)
 # library(fastICA)
 
+## Declare module object
+setClass("module",
+         slots = list(
+           source = "character",
+           data.dim = "numeric",
+           overlapping = "logical",
+           index.vector = "numeric",
+           score.vector = "numeric",
+           index.list = "list",
+           name.list = "list"
+         ))
+
+
+
+
 ## Takes a n x p  matrix of  data and list of args to cuttreeDynamic
 ## Returns dendo plot and list of modules
 ## Based on mods.detect from shin
@@ -54,7 +69,19 @@ find_WGCNA_mods <- function(x,
                                            deepSplit=4,
                                            pamRespectsDendro=FALSE,
                                            minClusterSize=min.size)
-  return(as.numeric(modules))
+
+  #create module object holding the object
+  modules = as.numeric(modules)
+  WGCNA_Mods  <- new("module",
+                     source = "find_WGCNA_mods",
+                     data.dim = dim(t(x)),
+                     overlapping = FALSE,
+                     index.vector = modules,
+                     index.list = split(1:120 , modules),
+                     name.list = split(colnames(x), modules)
+  )
+
+  return(WGCNA_Mods)
 }
 
 .sft_check <- function(sft) {
@@ -81,7 +108,19 @@ find_ICA_mods <- function(x, #exprs(eset)
                                   ...
   )
   modules <- apply(abs(ICA.results$S), 1, which.max)
-  return(modules)
+
+  # convert to module object and return
+  ICA_modules <- new("module",
+                     source = "find_ICA_mods",
+                     data.dim = dim(x),
+                     overlapping = FALSE,
+                     index.vector = modules,
+                     score.vector = apply(abs(ICA.results$S), 1, max),
+                     index.list =split(1:120 , modules),
+                     name.list = split(rownames(x), modules))
+
+
+  return(ICA_modules)
 }
 
 ## Detect initial modules based on ICA components
@@ -136,24 +175,32 @@ pragmatic_modules <- function(x, max.size, n.mods = NULL){
     }
   }
 
-  # add additional information
-  modules <- lapply(seq_along(modules), function(i){
+  # reformat to get index and score vector from modules index list
+  index.vector = vector(mode = "numeric", length = nrow(x))
+  score.vector = vector(mode = "numeric", length = nrow(x))
+  for(i in seq_along(modules)){
     mod <-  modules[[i]]
-    names(mod) <- colnames(t(x))[mod]
-    list(
-      index = mod,
-      name = colnames(t(x))[mod],
-      ica.score = comp.score[mod,i]
-    )
-  })
+    index.vector[mod] <- i
+    score.vector[mod] <- comp.score[mod,i]
+  }
 
-  return(modules)
+  # convert to module object and return
+  Pragmatic_modules <- new("module",
+                     source = "pragmatic_modules",
+                     data.dim = dim(x),
+                     overlapping = FALSE,
+                     index.vector = index.vector,
+                     score.vector = score.vector,
+                     index.list = modules,
+                     name.list = lapply(modules, function(mod){rownames(x)[mod]})
+  )
+  return(Pragmatic_modules)
 }
 
 ## Create overlapping fuzzy modules by adding nodes to prexisiting modules up to a max size,
 ## new nodes are selected based on correlation with the modules eigen gene (first pc)
-eigen_fuzzy_modules <- function(x, modules, max.size){
-  lapply(modules, function(mod){
+eigen_fuzzy_modules <- function(x, input.modules, max.size){
+  modules <- lapply(input.modules@index.list, function(mod){
     #get number of required fuzzy nodes
     n.fuzzy.nodes <- max.size - length(mod)
 
@@ -173,16 +220,27 @@ eigen_fuzzy_modules <- function(x, modules, max.size){
     #return fuzzy module combining original and fuzzy nodes
     sort(c(mod, fuzzy.nodes))
   })
+
+  # convert to module object and return
+  fuzzy_modules <- new("module",
+                           source = paste("eigen_fuzzy_modules", "generated from", input.modules@source),
+                           data.dim = dim(x),
+                           overlapping = TRUE,
+                           index.list = modules,
+                           name.list = lapply(modules, function(mod){rownames(x)[mod]})
+  )
+  return(fuzzy_modules)
+
 }
 
 ## Create overlapping fuzzy modules by adding nodes to prexisiting modules up to a max size,
 ## new nodes are selected based on correlation with individual nodes in the module
-nodewise_fuzzy_modules <- function(x, modules, max.size){
+nodewise_fuzzy_modules <- function(x, input.modules, max.size){
   #get cor matrix
   cor.matrix <- abs(stats::cor(t(x)))
 
   #create fuzzy modules
-  lapply(modules, function(mod){
+  modules <- lapply(input.modules@index.list, function(mod){
     #get number of required fuzzy nodes
     n.fuzzy.nodes <- max.size - length(mod)
 
@@ -202,20 +260,32 @@ nodewise_fuzzy_modules <- function(x, modules, max.size){
     sort(c(mod, fuzzy.nodes))
 
   })
+
+  # convert to module object and return
+  fuzzy_modules <- new("module",
+                       source = paste("nodewise_fuzzy_modules", "generated from", input.modules@source),
+                       data.dim = dim(x),
+                       overlapping = TRUE,
+                       index.list = modules,
+                       name.list = lapply(modules, function(mod){rownames(x)[mod]})
+  )
+  return(fuzzy_modules)
 }
 
 ## Get a new set of modules, completely overlapping the old set
 ## To ensure the learned graph can stitch together vary nicely
-create_overlap_modules <- function(x, modules, use.eigen = TRUE, best.pairs = TRUE){
+create_overlap_modules <- function(x, input.modules, use.eigen = TRUE, best.pairs = TRUE){
+  #extract input modules index list
+  input.indexes <- input.modules@index.list
+
   # get absolute correlation matrix of all node (absolute only in the case of undirected graphs)
   cor.matrix <- abs(stats::cor(t(x)))
 
-
   #create poteintial pairs list
-  p.pairs <- as.data.frame(t(utils::combn(length(modules), 2)))
+  p.pairs <- as.data.frame(t(utils::combn(length(input.indexes), 2)))
   if(use.eigen){
     # get eigen genes (first PC)
-    mod.eigens <- lapply(modules, function(mod){
+    mod.eigens <- lapply(input.indexes, function(mod){
       mod.PC <- stats::prcomp(t(x[mod,]), scale. = TRUE)
       mod.PC$x[,1]
     })
@@ -232,8 +302,8 @@ create_overlap_modules <- function(x, modules, use.eigen = TRUE, best.pairs = TR
       #get overall mean correlation between each pair of modules
       # mean(cor.matrix[modules[[r[1]]], modules[[r[2]]]])
       max(
-        mean(apply(cor.matrix[modules[[r[1]]], modules[[r[2]]]]), 1, max), # row/ col matrix are non symmetric
-        mean(apply(cor.matrix[modules[[r[1]]], modules[[r[2]]]]), 2, max) # gives rough measure of overall cor between mods
+        mean(apply(cor.matrix[input.indexes[[r[1]]], input.indexes[[r[2]]]]), 1, max), # row/ col matrix are non symmetric
+        mean(apply(cor.matrix[input.indexes[[r[1]]], input.indexes[[r[2]]]]), 2, max) # gives rough measure of overall cor between mods
       )
 
     })
@@ -243,7 +313,7 @@ create_overlap_modules <- function(x, modules, use.eigen = TRUE, best.pairs = TR
   # if only using best pairs
   if(best.pairs){
     #track which items are aleardy in pairs, which rows to keep
-    in.pairs = vector(mode = "numeric", length = length(modules))
+    in.pairs = vector(mode = "numeric", length = length(input.indexes))
     keep.rows <- vector(mode = "logical", length = nrow(p.pairs))
 
     #for each row in the the pair table
@@ -267,8 +337,8 @@ create_overlap_modules <- function(x, modules, use.eigen = TRUE, best.pairs = TR
 
   #get overlap mods
   overlap.modules <- lapply(1:nrow(p.pairs), function(i){
-    left <- modules[[as.numeric(p.pairs[i,1])]] # get two modules in pair
-    right <- modules[[as.numeric(p.pairs[i,2])]]
+    left <- input.indexes[[as.numeric(p.pairs[i,1])]] # get two modules in pair
+    right <- input.indexes[[as.numeric(p.pairs[i,2])]]
 
     #get the correlation of nodes between the two modules
     cor.sub.matrix <- cor.matrix[left, right]
@@ -280,11 +350,26 @@ create_overlap_modules <- function(x, modules, use.eigen = TRUE, best.pairs = TR
     #return overlap mods
     list(
       index = sort(c(left.nodes,right.nodes)),
-      overalp = c(p.pairs[i,1],p.pairs[i,2])
+      overlap = c(p.pairs[i,1],p.pairs[i,2])
     )
-
   })
+  index.list <- lapply(overlap.modules, function(mod){
+    mod$index
+  })
+  names(index.list) <- unlist(
+    lapply(overlap.modules, function(mod){
+      as.numeric(paste(mod$overlap[1], mod$overlap[2], sep = "."))
+    })
+  )
 
+  # convert to module object and return
+  overlap.modules <- new("module",
+                       source = paste("create_overlap_modules", "generated from", input.modules@source),
+                       data.dim = dim(x),
+                       overlapping = TRUE,
+                       index.list = index.list,
+                       name.list = lapply(index.list, function(mod){rownames(x)[mod]})
+  )
   return(overlap.modules)
 }
 
@@ -293,22 +378,29 @@ create_overlap_modules <- function(x, modules, use.eigen = TRUE, best.pairs = TR
 ## TEST ###
 ###########
 
-# source("/restricted/projectnb/agedisease/personal/lberger/modular_graph_learning/ModularDAC/00.SimulateGraphs.R")
-#
-# # make data
-# er <- make_modular_graph()
-# x <- sim_graph_data(er, n.samples =100)
-#
-# # learn mods
-# w <- find_WGCNA_mods(t(x), cor.FN = "bicor")
-# i <- find_ICA_mods(x, 3)
-# p <- pragmatic_modules(x,n.mods = 3, max.size = 60)
-#
-# # fuzzy mods
-# f <- eigen_fuzzy_modules(x, lapply(p, function(x) x$index), 80)
-# f <- nodewise_fuzzy_modules(x, lapply(p, function(x) x$index), 80)
-#
-# # overlap mods
-# o <- create_overlap_modules(x, lapply(p, function(x) x$index))
+source("/restricted/projectnb/agedisease/personal/lberger/modular_graph_learning/ModularDAC/00.SimulateGraphs.R")
+
+# make data
+er <- make_modular_graph()
+x <- sim_graph_data(er, n.samples =100)
+true_modules <- new("module",
+                    source = "True Modules",
+                    overlapping = FALSE,
+                    index.vector = igraph::V(er)$module,
+                    index.list = split(1:120 , igraph::V(er)$module),
+                    name.list = split(igraph::V(er)$name , igraph::V(er)$module)
+)
+
+# learn mods
+w <- find_WGCNA_mods(t(x), cor.FN = "bicor")
+i <- find_ICA_mods(x, 3)
+p <- pragmatic_modules(x,n.mods = 3, max.size = 60)
+
+# fuzzy mods
+f <- eigen_fuzzy_modules(x, p, 80)
+f <- nodewise_fuzzy_modules(x, p, 80)
+
+# overlap mods
+o <- create_overlap_modules(x, p)
 
 
