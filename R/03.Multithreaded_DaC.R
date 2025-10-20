@@ -143,7 +143,7 @@ fastDivideAndConquer <- function(x, # input data, p x n matrix
   full.graph <- igraph::graph_from_adjacency_matrix(adj, mode = "undirected")
 
   #remove non overlap edges
-  sg.pairs <- combn(seq_along(sub.graphs), m = 2, simplify = F) #get all pairs of subgraphs
+  sg.pairs <- utils::combn(seq_along(sub.graphs), m = 2, simplify = F) #get all pairs of subgraphs
   edges.to.remove <- lapply(sg.pairs, function(pr){ #for each pair of subgraphs
     #get index for 'left' and 'right' subgraphs
     left = pr[1]
@@ -190,8 +190,8 @@ fastDivideAndConquer <- function(x, # input data, p x n matrix
         if(nrow(left.edges) > 0 && nrow(right.edges) > 0){
           #get the edges that dont occur in both sets
           sym.diff <- dplyr::bind_rows(
-            as.data.frame(left.edges) %>% anti_join(as.data.frame(right.edges), by = c("V1","V2")),
-            as.data.frame(right.edges) %>% anti_join(as.data.frame(left.edges), by = c("V1","V2"))
+            as.data.frame(left.edges) %>% dplyr::anti_join(as.data.frame(right.edges), by = c("V1","V2")),
+            as.data.frame(right.edges) %>% dplyr::anti_join(as.data.frame(left.edges), by = c("V1","V2"))
           )
           #return the matrix of edges to remove
           return(as.matrix(sym.diff))
@@ -306,8 +306,7 @@ fastDivideAndConquer <- function(x, # input data, p x n matrix
 #                              arg.wrapping.func = .other_arg_wrapper,
 #                              out.parsing.func = .default_output_parser,
 #                              packages.to.each = c("igraph", "BDgraph"),
-#                              export.to.each = c("bdWrapper"),
-#                              n.bootstraps = 100, sub.ratio = 0.9
+#                              export.to.each = c("bdWrapper")
 # )
 # calc_F1(g, test$final.graph)
 #
