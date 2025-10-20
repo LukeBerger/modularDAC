@@ -97,7 +97,7 @@ matrix_p_adjust <- function( mx_p ) {
   mx_q <- mx_p
   ## adjust upper triangle
   mx_q[upper.tri(mx_q)] <-
-    p.adjust(mx_p[upper.tri(mx_p)], method = "BH")
+    stats::p.adjust(mx_p[upper.tri(mx_p)], method = "BH")
   ## copy to lower triangle
   mx_q[lower.tri(mx_q)] <-
     t(mx_q)[lower.tri(mx_q)]
@@ -121,6 +121,10 @@ matrix_p_adjust <- function( mx_p ) {
 .pcor_zscore <- function(pcor,n){
   std_new <- sqrt(.pow((1-.pow(pcor,2)),2)/n)
   return(pcor/std_new)
+}
+
+.pow <- function(x,n){
+  return(x^n)
 }
 
 .pvalue <- function(z_score){
