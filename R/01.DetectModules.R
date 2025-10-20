@@ -397,10 +397,55 @@ i <- find_ICA_mods(x, 3)
 p <- pragmatic_modules(x,n.mods = 3, max.size = 60)
 
 # fuzzy mods
-f <- eigen_fuzzy_modules(x, p, 80)
-f <- nodewise_fuzzy_modules(x, p, 80)
+ef <- eigen_fuzzy_modules(x, p, 80)
+nf <- nodewise_fuzzy_modules(x, p, 80)
 
 # overlap mods
 o <- create_overlap_modules(x, p)
 
+#check mod constraints
+for(mod in list(w, i ,p)){
+  #check feature number matches input data
+  if(length(mod@index.vector) != nrow(x)){
+    stop(paste(mod@source, "produced a index vector with the incorrect number of features"))
+  }
+  #check that all feature names in modules come from the data
+  if(!all(unlist(mod@name.list) %in% rownames(x))){
+    stop(paste(mod@source, "feature names do not match input data"))
+  }
+  #check that each module has the same number of feature indexes and names
+  if(
+    !all(
+      unlist(
+        lapply(seq_along(mod@index.list), function(i) length(mod@index.list[[i]]) == length(mod@name.list[[i]]))
+        )
+      )
+  ){stop(paste(mod@source, "produced differnet length index and name lists"))}
+
+}
+
+for(mod in list(ef, nf ,o)){
+  #check that all feature names in modules come from the data
+  if(!all(unlist(mod@name.list) %in% rownames(x))){
+    stop(paste(mod@source, "feature names do not match input data"))
+  }
+  #check that each module has the same number of feature indexes and names
+  if(
+    !all(
+      unlist(
+        lapply(seq_along(mod@index.list), function(i) length(mod@index.list[[i]]) == length(mod@name.list[[i]]))
+      )
+    )
+  ){stop(paste(mod@source, "produced differnet length index and name lists"))}
+  #check that overlaps exist between all modules
+  if(!all(
+    unlist(
+      lapply(seq_along(mod@index.list), function(i){
+        any(unlist(mod@index.list[i]) %in% unlist(mod@index.list[-i]))
+      })
+    )
+  )){stop(paste(mod@source, "has modules with incomplete overlaps"))}
+
+
+}
 
