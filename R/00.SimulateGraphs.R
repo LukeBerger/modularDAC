@@ -64,7 +64,7 @@ make_modular_graph <- function(g.type="er",
 
   if(link.all){
     #add edges between each pair of modules
-    mod.pairs <- combn(1:n.mods, m = 2, simplify = F)
+    mod.pairs <- utils::combn(1:n.mods, m = 2, simplify = F)
   }else{
     mod.chain <- c(1:n.mods)
     mod.pairs <- mapply(c, mod.chain, c(mod.chain[-1], mod.chain[1]), SIMPLIFY = FALSE)
@@ -474,8 +474,8 @@ mod.bdgraph.sim <- function (p = 10, graph = "random", n = 0, type = "Gaussian",
       not.cont[1:p] = 1
       if (p > 16)
         stop("'p' must be less than 16, for option 'type = \"binary\"'")
-      clique_factors = generate_clique_factors(ug = G)
-      d = sample_ug(n = n, ug = G, clique_factors = clique_factors)
+      clique_factors = BDgraph::generate_clique_factors(ug = G)
+      d = BDgraph::sample_ug(n = n, ug = G, clique_factors = clique_factors)
       d = d - 1
     }
     if ((type == "dweibull") | (type == "dw")) {
