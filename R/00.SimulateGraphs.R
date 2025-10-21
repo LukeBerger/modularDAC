@@ -412,10 +412,8 @@ mod.bdgraph.sim <- function (p = 10, graph = "random", n = 0, type = "Gaussian",
       diag(G) = 0
       K = matrix(0, p, p)
       threshold = 1e-08
-      result = .C("rgwish_c", as.integer(G), as.double(Ti),
-                  K = as.double(K), as.integer(b), as.integer(p),
-                  as.double(threshold), PACKAGE = "BDgraph")
-      K = matrix(result$K, p, p)
+      K = BDgraph::rgwish(adj = G, b = b, D = Ti, threshold = threshold)
+      # K = matrix(result$K, p, p)
       sigma = stats::cov2cor(solve(K))
       K = solve(sigma)
     }
