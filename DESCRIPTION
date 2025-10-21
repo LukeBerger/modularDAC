@@ -20,8 +20,8 @@ Imports:
     flashClust,
     matrixStats,
     stringr,
-    tmvtnorm
     BDgraph,
+    tmvtnorm,
     MASS,
     WGCNA,
     fastICA,
