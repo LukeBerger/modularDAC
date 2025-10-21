@@ -62,7 +62,7 @@ find_WGCNA_mods <- function(x,
   dendro <- flashClust::flashClust(d=stats::as.dist(dis), method=hclust.method)
 
   # Module identification using dynamic tree cut algorithm
-  modules <- dynamicTreeCut::cutreeDynamic(dendro=dendro,
+  index.vector <- dynamicTreeCut::cutreeDynamic(dendro=dendro,
                                            cutHeight = cut.height,
                                            method="hybrid",
                                            distM=dis,
@@ -71,17 +71,17 @@ find_WGCNA_mods <- function(x,
                                            minClusterSize=min.size)
 
   #create module object holding the object
-  modules = as.numeric(modules)
-  WGCNA_Mods  <- new("module",
+  index.vector = as.numeric(index.vector)
+  WGCNA.mods  <- new("module",
                      source = "find_WGCNA_mods",
                      data.dim = dim(t(x)),
                      overlapping = FALSE,
-                     index.vector = modules,
-                     index.list = split(1:120 , modules),
-                     name.list = split(colnames(x), modules)
+                     index.vector = index.vector,
+                     index.list = split(1:ncol(x) , index.vector),
+                     name.list = split(colnames(x), index.vector)
   )
 
-  return(WGCNA_Mods)
+  return(WGCNA.mods)
 }
 
 .sft_check <- function(sft) {
@@ -107,20 +107,20 @@ find_ICA_mods <- function(x, #exprs(eset)
                                   n.comp = n.comp,
                                   ...
   )
-  modules <- apply(abs(ICA.results$S), 1, which.max)
+  index.vector <- apply(abs(ICA.results$S), 1, which.max)
 
   # convert to module object and return
-  ICA_modules <- new("module",
+  ICA.mods <- new("module",
                      source = "find_ICA_mods",
                      data.dim = dim(x),
                      overlapping = FALSE,
-                     index.vector = modules,
+                     index.vector = index.vector,
                      score.vector = apply(abs(ICA.results$S), 1, max),
-                     index.list =split(1:120 , modules),
-                     name.list = split(rownames(x), modules))
+                     index.list =split(1:nrow(x) , index.vector),
+                     name.list = split(rownames(x), index.vector))
 
 
-  return(ICA_modules)
+  return(ICA.mods)
 }
 
 ## Detect initial modules based on ICA components
@@ -185,7 +185,7 @@ pragmatic_modules <- function(x, max.size, n.mods = NULL){
   }
 
   # convert to module object and return
-  Pragmatic_modules <- new("module",
+  prag.mods <- new("module",
                      source = "pragmatic_modules",
                      data.dim = dim(x),
                      overlapping = FALSE,
@@ -194,13 +194,13 @@ pragmatic_modules <- function(x, max.size, n.mods = NULL){
                      index.list = modules,
                      name.list = lapply(modules, function(mod){rownames(x)[mod]})
   )
-  return(Pragmatic_modules)
+  return(prag.mods)
 }
 
 ## Create overlapping fuzzy modules by adding nodes to prexisiting modules up to a max size,
 ## new nodes are selected based on correlation with the modules eigen gene (first pc)
 eigen_fuzzy_modules <- function(x, input.modules, max.size){
-  modules <- lapply(input.modules@index.list, function(mod){
+  index.list <- lapply(input.modules@index.list, function(mod){
     #get number of required fuzzy nodes
     n.fuzzy.nodes <- max.size - length(mod)
 
@@ -222,14 +222,14 @@ eigen_fuzzy_modules <- function(x, input.modules, max.size){
   })
 
   # convert to module object and return
-  fuzzy_modules <- new("module",
+  fuzzy.mods <- new("module",
                            source = paste("eigen_fuzzy_modules", "generated from", input.modules@source),
                            data.dim = dim(x),
                            overlapping = TRUE,
-                           index.list = modules,
-                           name.list = lapply(modules, function(mod){rownames(x)[mod]})
+                           index.list = index.list,
+                           name.list = lapply(index.list, function(mod){rownames(x)[mod]})
   )
-  return(fuzzy_modules)
+  return(fuzzy.mods)
 
 }
 
@@ -378,74 +378,74 @@ create_overlap_modules <- function(x, input.modules, use.eigen = TRUE, best.pair
 ## TEST ###
 ###########
 
-source("/restricted/projectnb/agedisease/personal/lberger/modular_graph_learning/ModularDAC/00.SimulateGraphs.R")
-
-# make data
-er <- make_modular_graph()
-x <- sim_graph_data(er, n.samples =100)
-true_modules <- new("module",
-                    source = "True Modules",
-                    overlapping = FALSE,
-                    index.vector = igraph::V(er)$module,
-                    index.list = split(1:120 , igraph::V(er)$module),
-                    name.list = split(igraph::V(er)$name , igraph::V(er)$module)
-)
-
-# learn mods
-w <- find_WGCNA_mods(t(x), cor.FN = "bicor")
-i <- find_ICA_mods(x, 3)
-p <- pragmatic_modules(x,n.mods = 3, max.size = 60)
-
-# fuzzy mods
-ef <- eigen_fuzzy_modules(x, p, 80)
-nf <- nodewise_fuzzy_modules(x, p, 80)
-
-# overlap mods
-o <- create_overlap_modules(x, p)
-
-#check mod constraints
-for(mod in list(w, i ,p)){
-  #check feature number matches input data
-  if(length(mod@index.vector) != nrow(x)){
-    stop(paste(mod@source, "produced a index vector with the incorrect number of features"))
-  }
-  #check that all feature names in modules come from the data
-  if(!all(unlist(mod@name.list) %in% rownames(x))){
-    stop(paste(mod@source, "feature names do not match input data"))
-  }
-  #check that each module has the same number of feature indexes and names
-  if(
-    !all(
-      unlist(
-        lapply(seq_along(mod@index.list), function(i) length(mod@index.list[[i]]) == length(mod@name.list[[i]]))
-        )
-      )
-  ){stop(paste(mod@source, "produced differnet length index and name lists"))}
-
-}
-
-for(mod in list(ef, nf ,o)){
-  #check that all feature names in modules come from the data
-  if(!all(unlist(mod@name.list) %in% rownames(x))){
-    stop(paste(mod@source, "feature names do not match input data"))
-  }
-  #check that each module has the same number of feature indexes and names
-  if(
-    !all(
-      unlist(
-        lapply(seq_along(mod@index.list), function(i) length(mod@index.list[[i]]) == length(mod@name.list[[i]]))
-      )
-    )
-  ){stop(paste(mod@source, "produced differnet length index and name lists"))}
-  #check that overlaps exist between all modules
-  if(!all(
-    unlist(
-      lapply(seq_along(mod@index.list), function(i){
-        any(unlist(mod@index.list[i]) %in% unlist(mod@index.list[-i]))
-      })
-    )
-  )){stop(paste(mod@source, "has modules with incomplete overlaps"))}
-
-
-}
-
+# source("/restricted/projectnb/agedisease/personal/lberger/modular_graph_learning/ModularDAC/00.SimulateGraphs.R")
+#
+# # make data
+# er <- make_modular_graph()
+# x <- sim_graph_data(er, n.samples =100)
+# true_modules <- new("module",
+#                     source = "True Modules",
+#                     overlapping = FALSE,
+#                     index.vector = igraph::V(er)$module,
+#                     index.list = split(1:120 , igraph::V(er)$module),
+#                     name.list = split(igraph::V(er)$name , igraph::V(er)$module)
+# )
+#
+# # learn mods
+# w <- find_WGCNA_mods(t(x), cor.FN = "bicor")
+# i <- find_ICA_mods(x, 3)
+# p <- pragmatic_modules(x,n.mods = 3, max.size = 60)
+#
+# # fuzzy mods
+# ef <- eigen_fuzzy_modules(x, p, 80)
+# nf <- nodewise_fuzzy_modules(x, p, 80)
+#
+# # overlap mods
+# o <- create_overlap_modules(x, p)
+#
+# #check mod constraints
+# for(mod in list(w, i ,p)){
+#   #check feature number matches input data
+#   if(length(mod@index.vector) != nrow(x)){
+#     stop(paste(mod@source, "produced a index vector with the incorrect number of features"))
+#   }
+#   #check that all feature names in modules come from the data
+#   if(!all(unlist(mod@name.list) %in% rownames(x))){
+#     stop(paste(mod@source, "feature names do not match input data"))
+#   }
+#   #check that each module has the same number of feature indexes and names
+#   if(
+#     !all(
+#       unlist(
+#         lapply(seq_along(mod@index.list), function(i) length(mod@index.list[[i]]) == length(mod@name.list[[i]]))
+#         )
+#       )
+#   ){stop(paste(mod@source, "produced differnet length index and name lists"))}
+#
+# }
+#
+# for(mod in list(ef, nf ,o)){
+#   #check that all feature names in modules come from the data
+#   if(!all(unlist(mod@name.list) %in% rownames(x))){
+#     stop(paste(mod@source, "feature names do not match input data"))
+#   }
+#   #check that each module has the same number of feature indexes and names
+#   if(
+#     !all(
+#       unlist(
+#         lapply(seq_along(mod@index.list), function(i) length(mod@index.list[[i]]) == length(mod@name.list[[i]]))
+#       )
+#     )
+#   ){stop(paste(mod@source, "produced differnet length index and name lists"))}
+#   #check that overlaps exist between all modules
+#   if(!all(
+#     unlist(
+#       lapply(seq_along(mod@index.list), function(i){
+#         any(unlist(mod@index.list[i]) %in% unlist(mod@index.list[-i]))
+#       })
+#     )
+#   )){stop(paste(mod@source, "has modules with incomplete overlaps"))}
+#
+#
+# }
+#
