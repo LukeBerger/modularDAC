@@ -1,17 +1,17 @@
-#libs
-library(dplyr)
-library(WGCNA)
-library(parallel)
-library(foreach)
-library(doParallel)
-
-#load functions
-source("/restricted/projectnb/agedisease/personal/lberger/modular_graph_learning/ModularDAC/modularDAC/R/00.SimulateGraphs.R")
-source("/restricted/projectnb/agedisease/personal/lberger/modular_graph_learning/ModularDAC/modularDAC/R/01.DetectModules.R")
-source("/restricted/projectnb/agedisease/personal/lberger/modular_graph_learning/ModularDAC/modularDAC/R/01b.complexICA.R")
-source("/restricted/projectnb/agedisease/personal/lberger/modular_graph_learning/ModularDAC/modularDAC/R/01c.AssessDetectedModules.R")
-source("/restricted/projectnb/agedisease/personal/lberger/modular_graph_learning/ModularDAC/modularDAC/R/02.LearnGraphs.R")
-source("/restricted/projectnb/agedisease/personal/lberger/modular_graph_learning/ModularDAC/modularDAC/R/03.Multithreaded_DaC.R")
+# #libs
+# library(dplyr)
+# library(WGCNA)
+# library(parallel)
+# library(foreach)
+# library(doParallel)
+#
+# #load functions
+# source("/restricted/projectnb/agedisease/personal/lberger/modular_graph_learning/ModularDAC/modularDAC/R/00.SimulateGraphs.R")
+# source("/restricted/projectnb/agedisease/personal/lberger/modular_graph_learning/ModularDAC/modularDAC/R/01.DetectModules.R")
+# source("/restricted/projectnb/agedisease/personal/lberger/modular_graph_learning/ModularDAC/modularDAC/R/01b.complexICA.R")
+# source("/restricted/projectnb/agedisease/personal/lberger/modular_graph_learning/ModularDAC/modularDAC/R/01c.AssessDetectedModules.R")
+# source("/restricted/projectnb/agedisease/personal/lberger/modular_graph_learning/ModularDAC/modularDAC/R/02.LearnGraphs.R")
+# source("/restricted/projectnb/agedisease/personal/lberger/modular_graph_learning/ModularDAC/modularDAC/R/03.Multithreaded_DaC.R")
 
 
 ### Sources and runs tests for all functions in package
@@ -174,12 +174,12 @@ bdWrapper <- function(x){
 
 
 
-#create and register the cluster
-cl <- parallel::makeCluster(detectCores() -1)
-doParallel::registerDoParallel(cl)
-
-#run tester
-test_all()
-
-# Stop the cluster
-stopCluster(cl)
+# #create and register the cluster
+# cl <- parallel::makeCluster(detectCores() -1)
+# doParallel::registerDoParallel(cl)
+#
+# #run tester
+# test_all()
+#
+# # Stop the cluster
+# stopCluster(cl)
