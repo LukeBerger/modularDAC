@@ -158,7 +158,7 @@ make_submodular_graph <- function(g.type="er",
 
   if(link.all){
     #add edges between each pair of modules
-    mod.pairs <- combn(1:n.sg, m = 2, simplify = F)
+    mod.pairs <- utils::combn(1:n.sg, m = 2, simplify = F)
   }else{
     mod.chain <- c(1:n.sg)
     mod.pairs <- mapply(c, mod.chain, c(mod.chain[-1], mod.chain[1]), SIMPLIFY = FALSE)
