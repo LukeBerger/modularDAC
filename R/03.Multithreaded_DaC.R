@@ -150,7 +150,7 @@ fastDivideAndConquer <- function(x, # input data, p x n matrix
     right = pr[2]
 
     #get set of nodes that are in both graphs
-    overlapping.nodes <- BiocGenerics::intersect(
+    overlapping.nodes <- intersect(
       igraph::V(sub.graphs[[left]])$name, igraph::V(sub.graphs[[right]])$name
     )
 

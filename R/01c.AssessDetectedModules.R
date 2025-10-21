@@ -1,6 +1,5 @@
 # library(igraph)
 # library(dplyr)
-# library(BiocGenerics)
 
 
 ## function with a series of helpers to get the percentage of nodes
@@ -33,7 +32,7 @@ percent_module_match <- function(m1, m2){
     for (i in (1:length(m1.nodes))[-as.numeric(matched1)]) { #iterate through both sets of nodes
       for (j in (1:length(m2.nodes))[-as.numeric(matched2)]) {
         overlap <- length(
-          BiocGenerics::intersect(
+          intersect(
             as.numeric(m1.nodes[[i]]),as.numeric(m2.nodes[[j]])
           ) #recording overlap
         )
@@ -83,7 +82,7 @@ module_contiguity <- function(g, test.module){
 # x <- sim_graph_data(er, n.samples = 10)
 #
 # # learn mods
-# true_modules <- methods::new("module","module",
+# true_modules <- methods::new("module",
 #                                         source = "True Modules",
 #                                         overlapping = FALSE,
 #                                         index.vector = igraph::V(er)$module,
@@ -94,14 +93,14 @@ module_contiguity <- function(g, test.module){
 #
 #
 # #
-# test1 <- methods::new("module","module",
+# test1 <- methods::new("module",
 #                     source = "test",
 #                     overlapping = FALSE,
 #                     index.vector = c(1,1,2,2,3,3),
 #                     index.list = list(c(1,2),c(3,4),c(5,6)),
 #                     name.list = list(c("Node_1","Node_2"),c("Node_3","Node_4"),c("Node_5","Node_6"))
 # )
-# test2 <- methods::new("module","module",
+# test2 <- methods::new("module",
 #              source = "test",
 #              overlapping = FALSE,
 #              index.vector = c(1,1,2,3,2,3),
