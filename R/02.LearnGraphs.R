@@ -20,7 +20,7 @@ learn_SILGGM_graph <- function(x,
                                ...){
 
   #run silggm
-  sOut <- suppressMessages(
+  silggm.output <- suppressMessages(
     SILGGM::SILGGM(x,
                    method = method,
                    alpha = alpha,
@@ -29,23 +29,23 @@ learn_SILGGM_graph <- function(x,
   )
   #get partial.cor and zScore based on method
   if(method == "D-S_NW_SL"){
-    partial.cor <- .upper_tri_vec(sOut$partialCor)
+    partial.cor <- .upper_tri_vec(silggm.output$partialCor)
     z.score.partial.cor <- sapply(partial.cor, .pcor_zscore, nrow(x))
   }
   if(method == "B_NW_SL"){
-    partial.cor <- .upper_tri_vec(sOut$partialCor)
-    z.score.partial.cor <- .upper_tri_vec(sOut$z_score_partialCor)
+    partial.cor <- .upper_tri_vec(silggm.output$partialCor)
+    z.score.partial.cor <- .upper_tri_vec(silggm.output$z_score_partialCor)
   }
 
   #estimate the adjusted p-value of each edge
   qval.pcor <- sapply(z.score.partial.cor, .pvalue) %>%
-    upper_tri_to_matrix(., variable_names = colnames(x), diagl = 1) %>%
-    matrix_p_adjust(.)
+    .upper_tri_to_matrix(., variable_names = colnames(x), diagl = 1) %>%
+    .matrix_p_adjust(.)
 
   #make network
   pcor.avg <- partial.cor %>%
     round(.,2) %>%
-    upper_tri_to_matrix(., variable_names = colnames(x), diagl = 1)
+    .upper_tri_to_matrix(., variable_names = colnames(x), diagl = 1)
   adj.mat <- apply(pcor.avg, c(1,2), .abs_pcor_filter, pos.cut, neg.cut)
 
   ## further filtering by significance
@@ -67,7 +67,7 @@ learn_SILGGM_graph <- function(x,
 
 ## Helpers to simpleSILGGM graph taken from RSCGGM
 ## So that i can run it without loading the full package
-upper_tri_to_matrix <- function(upper_tri_values,
+.upper_tri_to_matrix <- function(upper_tri_values,
                                 variable_names =NULL,
                                 diagl=1){
   p <- (1 + sqrt(1 + 8 * length(upper_tri_values))) / 2
@@ -92,7 +92,7 @@ upper_tri_to_matrix <- function(upper_tri_values,
   return(mat)
 }
 
-matrix_p_adjust <- function( mx_p ) {
+.matrix_p_adjust <- function( mx_p ) {
   ## initialize
   mx_q <- mx_p
   ## adjust upper triangle
@@ -212,7 +212,7 @@ halfmin_impute <- function(dat) {
 ## TEST ###
 ###########
 
-# source("/restricted/projectnb/agedisease/personal/lberger/modular_graph_learning/ModularDAC/00.SimulateGraphs.R")
+# source("/restricted/projectnb/agedisease/personal/lberger/modular_graph_learning/ModularDAC/modularDAC/R/00.SimulateGraphs.R")
 #
 # # make data
 # er <- make_modular_graph()
