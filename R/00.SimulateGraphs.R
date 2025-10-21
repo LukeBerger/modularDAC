@@ -468,14 +468,6 @@ mod.bdgraph.sim <- function (p = 10, graph = "random", n = 0, type = "Gaussian",
       }
       d = d - 1
     }
-    if (type == "binary") {
-      not.cont[1:p] = 1
-      if (p > 16)
-        stop("'p' must be less than 16, for option 'type = \"binary\"'")
-      clique_factors = BDgraph::generate_clique_factors(ug = G)
-      d = BDgraph::sample_ug(n = n, ug = G, clique_factors = clique_factors)
-      d = d - 1
-    }
     if ((type == "dweibull") | (type == "dw")) {
       if (length(q) == 1)
         q = rep(q, time = p)
