@@ -17,15 +17,15 @@
 ## subGraphs, the subgraphs/modules defined by vectors of ints within a list
 
 fastDivideAndConquer <- function(x, # input data, p x n matrix
-                                 modules, # overlappping subsets of p
+                                 subgraph.features, # overlappping subsets of p
                                  keep.all.edges = FALSE, # whether to keep all edges in the overlap graph
                                  graph.learning.func = learn_SILGGM_graph,  # function to learn graphs
                                  arg.wrapping.func = .default_arg_wrapper,  # function to wrap each module of x with args for graph learning function
                                  out.parsing.func = .default_output_parser, # function to parse outputs of graph learning into list of igraphs and other outputs
                                  packages.to.each = c("SILGGM", "igraph"),  # packages for each thread
                                  export.to.each = c("learn_SILGGM_graph",
-                                                    "upper_tri_to_matrix",
-                                                    "matrix_p_adjust",
+                                                    ".upper_tri_to_matrix",
+                                                    ".matrix_p_adjust",
                                                     ".upper_tri_vec",
                                                     ".pcor_zscore",
                                                     ".pvalue",
@@ -41,14 +41,14 @@ fastDivideAndConquer <- function(x, # input data, p x n matrix
     stop("'data' should be a p x n numeric matrix ")
   }
 
-  #Check 'modules' is a list of integer vectors with overlapping values
-  if (!is.list(modules) || length(modules) == 0) {
-    stop("'modules' must be a non-empty list of integer vectors.")
+  #Check 'subgraph.features' is a list of integer vectors with overlapping values
+  if (!is.list(subgraph.features) || length(subgraph.features) == 0) {
+    stop("'subgraph.features' must be a non-empty list of integer vectors.")
   }
   row.range <- c(1:nrow(x)) #get rows of data  matrix
-  for (i in seq_along(modules)) { #for each subgraph
-    sg <- modules[[i]] #get the subgraph node indices
-    other.indexs <- unlist(modules[-i]) #and the other graphs indices
+  for (i in seq_along(subgraph.features)) { #for each subgraph
+    sg <- subgraph.features[[i]] #get the subgraph node indices
+    other.indexs <- unlist(subgraph.features[-i]) #and the other graphs indices
     #check that all values are numeric
     if (!is.numeric(sg) || any(sg %% 1 != 0)) {
       stop(sprintf("Subgraph %d has non integer values.", i))
@@ -64,8 +64,8 @@ fastDivideAndConquer <- function(x, # input data, p x n matrix
   }
 
   #Check every row index is in at least one subGraph
-  if (!all(row.range %in% unique(unlist(modules)))) {
-    stop("Not all rows of data are covered by 'modules'.")
+  if (!all(row.range %in% unique(unlist(subgraph.features)))) {
+    stop("Not all rows of data are covered by 'subgraph.features'.")
   }
 
   #Check if both functions exist
@@ -87,7 +87,7 @@ fastDivideAndConquer <- function(x, # input data, p x n matrix
   ##################################
 
   #divide data based on subGraph indices
-  sub.x  <- lapply(modules, function(sg){
+  sub.x  <- lapply(subgraph.features, function(sg){
     x[sg,]
   })
 
@@ -246,43 +246,38 @@ fastDivideAndConquer <- function(x, # input data, p x n matrix
 ### TEST ###
 ############
 
-# # load graph learning func
-# source("/restricted/projectnb/agedisease/personal/lberger/modular_graph_learning/ModularDAC/02.LearnGraphs.R")
+# source("/restricted/projectnb/agedisease/personal/lberger/modular_graph_learning/ModularDAC/modularDAC/R/00.SimulateGraphs.R")
+# source("/restricted/projectnb/agedisease/personal/lberger/modular_graph_learning/ModularDAC/modularDAC/R/01.DetectModules.R")
+# source("/restricted/projectnb/agedisease/personal/lberger/modular_graph_learning/ModularDAC/modularDAC/R/02.LearnGraphs.R")
 #
-# # create test data
-# source("/restricted/projectnb/agedisease/personal/lberger/modular_graph_learning/ModularDAC/00.SimulateGraphs.R")
 #
 # g <- make_modular_graph()
 # x <- sim_graph_data(g, 150)
 #
 # #get modules from true graph
-# mods <- split(igraph::V(g), igraph::V(g)$module)
+# trueModules <- new("module",
+#                     source = "True Modules",
+#                     overlapping = FALSE,
+#                     index.vector = igraph::V(g)$module,
+#                     index.list = split(1:120 , igraph::V(g)$module),
+#                     name.list = split(igraph::V(g)$name , igraph::V(g)$module)
+# )
 #
-# #create fuzzy module including all second degree neighbors
-# fuzzyMods <- lapply(mods, function(mod){
-#   sort(unique(unlist(
-#     igraph::neighborhood(
-#       g,
-#       order = 2,
-#       nodes = igraph::V(g)[mod],
-#       mode = "all",
-#       mindist = 0
-#     )
-#   )))
-# })
-#
-# #get N threads
-# nThreads <- min(detectCores() - 1, length(args))
+# #create fuzzy modules
+# fuzzyModules <- eigen_fuzzy_modules(x, trueModules, 80)
 #
 # #create and register the cluster
+# nThreads <- detectCores() - 1
 # cl <- makeCluster(nThreads)
 # registerDoParallel(cl)
 #
 # ### Test Function with Defaults
-# test <- fastDivideAndConquer(x, fuzzyMods) # basic run
+# test <- fastDivideAndConquer(x, fuzzyModules@index.list) # basic run
 # calc_F1(g, test$final.graph)
 #
-#
+# stopCluster(cl)
+
+
 # ### Test function with bd graph learn
 # library(BDgraph)
 #
