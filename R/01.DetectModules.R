@@ -72,7 +72,7 @@ find_WGCNA_mods <- function(x,
 
   #create module object holding the object
   index.vector = as.numeric(index.vector)
-  WGCNA.mods  <- new("module",
+  WGCNA.mods  <- methods::new("module",
                      source = "find_WGCNA_mods",
                      data.dim = dim(t(x)),
                      overlapping = FALSE,
@@ -110,7 +110,7 @@ find_ICA_mods <- function(x, #exprs(eset)
   index.vector <- apply(abs(ICA.results$S), 1, which.max)
 
   # convert to module object and return
-  ICA.mods <- new("module",
+  ICA.mods <- methods::new("module",
                      source = "find_ICA_mods",
                      data.dim = dim(x),
                      overlapping = FALSE,
@@ -185,7 +185,7 @@ pragmatic_modules <- function(x, max.size, n.mods = NULL){
   }
 
   # convert to module object and return
-  prag.mods <- new("module",
+  prag.mods <- methods::new("module",
                      source = "pragmatic_modules",
                      data.dim = dim(x),
                      overlapping = FALSE,
@@ -222,7 +222,7 @@ eigen_fuzzy_modules <- function(x, input.modules, max.size){
   })
 
   # convert to module object and return
-  fuzzy.mods <- new("module",
+  fuzzy.mods <- methods::new("module",
                            source = paste("eigen_fuzzy_modules", "generated from", input.modules@source),
                            data.dim = dim(x),
                            overlapping = TRUE,
@@ -262,7 +262,7 @@ nodewise_fuzzy_modules <- function(x, input.modules, max.size){
   })
 
   # convert to module object and return
-  fuzzy_modules <- new("module",
+  fuzzy_modules <- methods::new("module",
                        source = paste("nodewise_fuzzy_modules", "generated from", input.modules@source),
                        data.dim = dim(x),
                        overlapping = TRUE,
@@ -363,7 +363,7 @@ create_overlap_modules <- function(x, input.modules, use.eigen = TRUE, best.pair
   )
 
   # convert to module object and return
-  overlap.modules <- new("module",
+  overlap.modules <- methods::new("module",
                        source = paste("create_overlap_modules", "generated from", input.modules@source),
                        data.dim = dim(x),
                        overlapping = TRUE,
@@ -383,7 +383,7 @@ create_overlap_modules <- function(x, input.modules, use.eigen = TRUE, best.pair
 # # make data
 # er <- make_modular_graph()
 # x <- sim_graph_data(er, n.samples =100)
-# true_modules <- new("module",
+# true_modules <- methods::new("module",
 #                     source = "True Modules",
 #                     overlapping = FALSE,
 #                     index.vector = igraph::V(er)$module,
