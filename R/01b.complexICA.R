@@ -77,7 +77,7 @@ complex_ICA_modules <- function(x,n.comp, core.size = 5, starting.threshold = 0.
   }
 
   # convert to module object and return
-  cICA.mods <- new("module",
+  cICA.mods <- methods::new("module",
                      source = "complexICA",
                      data.dim = dim(x),
                      overlapping = FALSE,
