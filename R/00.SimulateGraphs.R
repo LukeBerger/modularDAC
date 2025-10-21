@@ -4,7 +4,23 @@
 # library(MASS)
 # library(dplyr)
 
-# Create graph comprised of scale free modules
+#' Create graph comprised of multiple modules
+#' @param g.type a character determining graph type graph type, er for Erdos Renyi or sf for scale free
+#' @param n.mods an integer determining the number of modules in output graph
+#' @param n.nodes an integer determining the number of features/nodes in the graph
+#' @param n.mod.links an integer determining the number of edges between each module in the graph
+#' @param no.uncon a boolean determining if nodes with zero edges are allowed
+#' @param link.all a boolean determining whether all modules have edges between each other
+#' @param p.edge an integer determining the odds of two nodes within a module havin an edge
+#' @param power an integer determining the power in scale free graph generation
+#' @param z.appeal an integer determining the z appeal of nodes in scale fre graph generation
+#' @param ... other arguments passed to graph building functions
+
+#' @return an igraph object
+
+#' @importFrom igraph sample_gnp sample_pa V add_edges simplify
+
+#' @export
 make_modular_graph <- function(g.type="er",
                                n.mods=3, n.nodes=120, n.mod.links=3,
                                no.uncon =T, link.all = T,
@@ -60,7 +76,7 @@ make_modular_graph <- function(g.type="er",
   }
 
   #merge modules
-  mg <- BiocGenerics::Reduce("+", modules) #taking advantage the fact that igraphs are just fancy lists
+  mg <- Reduce("+", modules) #taking advantage the fact that igraphs are just fancy lists
 
   if(link.all){
     #add edges between each pair of modules
@@ -73,8 +89,8 @@ make_modular_graph <- function(g.type="er",
   #for each pair
   for (pair in mod.pairs) {
     #get node indexes based on modules
-    i.nodes <- BiocGenerics::which(igraph::V(mg)$module == pair[1]) #first half of pair
-    j.nodes <- BiocGenerics::which(igraph::V(mg)$module == pair[2]) #second half of nodes
+    i.nodes <- which(igraph::V(mg)$module == pair[1]) #first half of pair
+    j.nodes <- which(igraph::V(mg)$module == pair[2]) #second half of nodes
 
     #link i and j by adding edges between random nodes
     mg <- igraph::add_edges(mg,
@@ -165,8 +181,8 @@ make_submodular_graph <- function(g.type="er",
   }
   for (pair in mod.pairs) {
     #get node indexes based on subgraphs
-    i.nodes <- BiocGenerics::which(igraph::V(hybrid)$subgraph == pair[1]) #first half of pair
-    j.nodes <- BiocGenerics::which(igraph::V(hybrid)$subgraph == pair[2]) #second half of nodes
+    i.nodes <- which(igraph::V(hybrid)$subgraph == pair[1]) #first half of pair
+    j.nodes <- which(igraph::V(hybrid)$subgraph == pair[2]) #second half of nodes
     #link i and j by adding edges between random nodes
     hybrid <- igraph::add_edges(hybrid,
                                 as.vector(
