@@ -41,39 +41,74 @@ test_all <- function(){
   print("00.SimulateGraphs : All functions passed all tests!")
 
 
-  ## 01.DetectModules (NEED TO UPDATE WITH MODULES OBJECT)
+  ## 01.DetectModules
   # learn mods
   w <- suppressMessages(find_WGCNA_mods(t(x), cor.FN = "bicor"))
   i <- find_ICA_mods(x, 3)
   p <- pragmatic_modules(x,n.mods = 3, max.size = 60)
 
   # fuzzy mods
-  f <- eigen_fuzzy_modules(x, lapply(p, function(x) x$index), 80)
-  f <- nodewise_fuzzy_modules(x, lapply(p, function(x) x$index), 80)
+  ef <- eigen_fuzzy_modules(x, p, 80)
+  nf <- nodewise_fuzzy_modules(x, p, 80)
 
   # overlap mods
-  o <- create_overlap_modules(x, lapply(p, function(x) x$index))
+  o <- create_overlap_modules(x, p)
+
+  ## 01b.complexICA
+  # complex ICA mods
+  c <- complex_ICA_modules(x, 3)
+
+  #test they are proper modules
+  for(mod in list(w, i ,p, ef, nf, o)){
+    if(mod@overlapping){
+      #check that overlaps exist between all modules
+      if(!all(
+        unlist(
+          lapply(seq_along(mod@index.list), function(i){
+            any(unlist(mod@index.list[i]) %in% unlist(mod@index.list[-i]))
+          })
+        )
+      )){stop(paste(mod@source, "has modules with incomplete overlaps"))}
+    }else{
+      #check feature number matches input data
+      if(length(mod@index.vector) != nrow(x)){
+        stop(paste(mod@source, "produced a index vector with the incorrect number of features"))
+      }
+      #check that there are no overlaps
+      if(any(
+        unlist(
+          lapply(seq_along(mod@index.list), function(i){
+            any(unlist(mod@index.list[i]) %in% unlist(mod@index.list[-i]))
+          })
+        )
+      )){stop(paste(mod@source, "has modules with overlaps"))}
+    }
+
+    #check that all feature names in modules come from the data
+    if(!all(unlist(mod@name.list) %in% rownames(x))){
+      stop(paste(mod@source, "feature names do not match input data"))
+    }
+    #check that each module has the same number of feature indexes and names
+    if(
+      !all(
+        unlist(
+          lapply(seq_along(mod@index.list), function(i) length(mod@index.list[[i]]) == length(mod@name.list[[i]]))
+          )
+        )
+    ){stop(paste(mod@source, "produced differnet length index and name lists"))}
+
+  }
 
   print("01.DetectModules : All functions passed all tests!")
 
 
-  ## 01b.complexICA
-  # complex ICA mods
-  c <- complexICA(x, 3)
-
-  print("01b.complexICA : All functions passed all tests!")
-
-
   ## 01c.AssessDetectedModules
-  # add modules to er igraph object
-  igraph::V(er)$ica <- i
-
   # percent match
-  pmm <- percent_module_match(er, "module", "ica")
+  pmm <- percent_module_match(w, i)
   if(!is.numeric(pmm) || !dplyr::between(pmm, 0, 100)){stop("percent_module_match failed to return a numeric between 0 and 100")}
 
   # module contiguity
-  mc <- module_contiguity(er, "ica")
+  mc <- module_contiguity(er, i)
   if(!is.numeric(mc) || !dplyr::between(mc, 0, 100)){stop("module_contiguity failed to return a numeric between 0 and 100")}
 
   print("01c.AssessDetectedModule : All functions passed all tests!")
@@ -98,14 +133,14 @@ test_all <- function(){
   print("02.LearnGraphs : All functions passed all tests!")
 
 
-  ## 03.MultiTrheaded_DaC
+  ## 03.MultiThreaded_DaC
   # Test Function with Defaults
-  dac <- fastDivideAndConquer(x, f) # basic run
+  dac <- fastDivideAndConquer(x, ef@index.list) # basic run
   if(!igraph::is_igraph(dac$final.graph)){stop("fastDivideAndConquer failed to produce an igraph with default functions")}
   if(!all(unlist(lapply(dac$modular.subgraphs, igraph::is_igraph)))){stop("fastDivideAndConquer failed to produce a list of modular igraphs with default functions")}
 
   #test function with BDgrapg learning
-  dac <- fastDivideAndConquer(x, f,
+  dac <- fastDivideAndConquer(x, ef@index.list,
                                graph.learning.func = bdWrapper,
                                arg.wrapping.func = .other_arg_wrapper,
                                out.parsing.func = .default_output_parser,
