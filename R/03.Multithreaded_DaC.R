@@ -255,7 +255,7 @@ fastDivideAndConquer <- function(x, # input data, p x n matrix
 # x <- sim_graph_data(g, 150)
 #
 # #get modules from true graph
-# trueModules <- new("module",
+# trueModules <- methods::new("module","module",
 #                     source = "True Modules",
 #                     overlapping = FALSE,
 #                     index.vector = igraph::V(g)$module,
