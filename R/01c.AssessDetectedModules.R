@@ -83,7 +83,7 @@ module_contiguity <- function(g, test.module){
 # x <- sim_graph_data(er, n.samples = 10)
 #
 # # learn mods
-# true_modules <- new("module",
+# true_modules <- methods::new("module","module",
 #                                         source = "True Modules",
 #                                         overlapping = FALSE,
 #                                         index.vector = igraph::V(er)$module,
@@ -94,14 +94,14 @@ module_contiguity <- function(g, test.module){
 #
 #
 # #
-# test1 <- new("module",
+# test1 <- methods::new("module","module",
 #                     source = "test",
 #                     overlapping = FALSE,
 #                     index.vector = c(1,1,2,2,3,3),
 #                     index.list = list(c(1,2),c(3,4),c(5,6)),
 #                     name.list = list(c("Node_1","Node_2"),c("Node_3","Node_4"),c("Node_5","Node_6"))
 # )
-# test2 <- new("module",
+# test2 <- methods::new("module","module",
 #              source = "test",
 #              overlapping = FALSE,
 #              index.vector = c(1,1,2,3,2,3),
