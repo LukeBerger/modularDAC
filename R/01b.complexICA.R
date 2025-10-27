@@ -11,6 +11,7 @@
 
 ## RETURNS: list of module assignments
 
+#' Uses ICA to find the core of modules, then iteratively expands outward based on a decreasing threshold of correlation
 #' @param x PLACEHOLDER
 #' @param n.comp PLACEHOLDER
 #' @param core.size PLACEHOLDER

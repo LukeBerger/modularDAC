@@ -6,6 +6,7 @@
 ## matching between two sets of modules
 ## takes a graph, and the names of two modules (attributes of the vertexs)
 
+#' Calculates the perctage of nodes assigned to the same module between to module sets, based on node index, not module name
 #' @param m1 a module object
 #' @param m2 another module object to compare to
 
@@ -24,6 +25,7 @@ percent_module_match <- function(m1, m2){
   return((matched.nodes / n.nodes) * 100)
 }
 
+#' Finds the best module matches between two sets of nodes
 #' @param m1.nodes Node index vector from m1
 #' @param m2.nodes Node index vector from m2
 #' @param m1.names Node character vector from m1
@@ -68,6 +70,7 @@ percent_module_match <- function(m1, m2){
 ## Assess module quality based on the number of nodes with more edges outside
 ## of module then within it
 
+#' Calculate the percentage of nodes with more edges within their module then outside of it
 #' @param g an igraph object
 #' @param test.module a module to test for contiguity, whose nodes indexs and names must match the graph
 

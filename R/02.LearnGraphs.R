@@ -230,6 +230,7 @@ learn_SILGGM_graph <- function(x,
 ###Compare Graphs###
 ####################
 
+#' Calculates F1 score from a true and predicted graph
 #' @param g.true an igraph object, the true graph for the purpose of F1 calculation
 #' @param g.pred an igraph object, the predicted graph for the purpose of F1 calculation
 

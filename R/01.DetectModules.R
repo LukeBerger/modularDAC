@@ -341,6 +341,7 @@ nodewise_fuzzy_modules <- function(x, input.modules, max.size){
 ## Get a new set of modules, completely overlapping the old set
 ## To ensure the learned graph can stitch together vary nicely
 
+#' Create a set of overlapping modules from data matrix and strict, none overlapping modules
 #' @param x a p x n matrix of features
 #' @param input.modules a module object
 #' @param use.eigen whether or not to use the eigen gene to determine overlaps, otherwise nodewise correlation is used
