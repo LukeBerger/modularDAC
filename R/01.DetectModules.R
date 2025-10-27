@@ -14,11 +14,29 @@ setClass("module",
          ))
 
 
-
-
 ## Takes a n x p  matrix of  data and list of args to cuttreeDynamic
 ## Returns dendo plot and list of modules
 ## Based on mods.detect from shin
+
+#' Uses WGCNA to detect modules from a data matrix
+#' @param x a n x p matrix of features
+#' @param min.size an integer, the min size parameter for dynamicTreeCut
+#' @param min.sft an integer, the min sft used by the pickSoftThreshold function
+#' @param beta an integer, the power value used by WGCNA::adjacency
+#' @param cor.FN a character, the cor.options WGCNA::adjacency
+#' @param powers an integer vector, the powers vector used by WGCNA::pickSoftThreshold
+#' @param hclust.method a character, the method used by flashClust
+#' @param cut.height an integer between 0 and 1, the cut height used by cutreeDynamic
+
+#' @return a module object
+
+#' @importFrom WGCNA pickSoftThreshold adjacency TOMdist
+#' @importFrom flashClust flashClust
+#' @importFrom stats as.dist
+#' @importFrom dynamicTreeCut cutreeDynamic
+#' @importFrom methods new
+
+#' @export
 find_WGCNA_mods <- function(x,
                             min.size=10,
                             min.sft=0.85,
@@ -99,6 +117,18 @@ find_WGCNA_mods <- function(x,
 ## Simple module detection based on ICA components
 ## takes a n x p matrix of data, a number of components to search for, and args to fastICA
 ## returns a list of modules assigned based on maximum abs competent score
+
+#' Uses ICA to detect modules from a data matrix
+#' @param x a p x n matrix of features
+#' @param n.comp the number of components to search for in the data
+#' @param ... other arguments to fastICA
+
+#' @return a module object
+
+#' @importFrom fastICA fastICA
+#' @importFrom methods new
+
+#' @export
 find_ICA_mods <- function(x, #exprs(eset)
                           n.comp,
                           ...){
@@ -126,6 +156,18 @@ find_ICA_mods <- function(x, #exprs(eset)
 ## Detect initial modules based on ICA components
 ## Convert to n.mods modules of max.size nodes
 ## returns a list contian module indexes, node names, and ica scores
+
+#' Uses ICA to detect modules from a data matrix then reassigned nodes to fit all modules to a max size
+#' @param x  a p x n matrix of features
+#' @param max.size the maximum number of members in a data matrix
+#' @param n.mods the number of modules to search for in the data
+
+#' @return a module object
+
+#' @importFrom fastICA fastICA
+#' @importFrom methods new
+
+#' @export
 pragmatic_modules <- function(x, max.size, n.mods = NULL){
   # Perform ICA
   # n initial modules of max size will cover the entire network
@@ -199,6 +241,18 @@ pragmatic_modules <- function(x, max.size, n.mods = NULL){
 
 ## Create overlapping fuzzy modules by adding nodes to prexisiting modules up to a max size,
 ## new nodes are selected based on correlation with the modules eigen gene (first pc)
+
+#' Creates overlapping sets of fuzzy modules based on correlation of nodes outside the module with its eigen gene
+#' @param x a p x n matrix of features
+#' @param input.modules a module object
+#' @param max.size The maximum number of members in a data matrix
+
+#' @return a module object
+
+#' @importFrom stats prcomp cor
+#' @importFrom methods new
+
+#' @export
 eigen_fuzzy_modules <- function(x, input.modules, max.size){
   index.list <- lapply(input.modules@index.list, function(mod){
     #get number of required fuzzy nodes
@@ -235,6 +289,18 @@ eigen_fuzzy_modules <- function(x, input.modules, max.size){
 
 ## Create overlapping fuzzy modules by adding nodes to prexisiting modules up to a max size,
 ## new nodes are selected based on correlation with individual nodes in the module
+
+#' Creates overlapping sets of fuzzy modules based on nodewise correlation of nodes outside the module with any of the nodes within it
+#' @param x a p x n matrix of features
+#' @param input.modules a module object
+#' @param max.size The maximum number of members in a data matrix
+
+#' @return a module object
+
+#' @importFrom stats cor
+#' @importFrom methods new
+
+#' @export
 nodewise_fuzzy_modules <- function(x, input.modules, max.size){
   #get cor matrix
   cor.matrix <- abs(stats::cor(t(x)))
@@ -274,6 +340,19 @@ nodewise_fuzzy_modules <- function(x, input.modules, max.size){
 
 ## Get a new set of modules, completely overlapping the old set
 ## To ensure the learned graph can stitch together vary nicely
+
+#' @param x a p x n matrix of features
+#' @param input.modules a module object
+#' @param use.eigen whether or not to use the eigen gene to determine overlaps, otherwise nodewise correlation is used
+#' @param best.pairs whether or not to overlap the best pairs of modules based on eigen genes only, otherwise all pairs of models are overlapped
+
+#' @return a module object
+
+#' @importFrom stats cor prcomp
+#' @importFrom utils combn
+#' @importFrom methods new
+
+#' @export
 create_overlap_modules <- function(x, input.modules, use.eigen = TRUE, best.pairs = TRUE){
   #extract input modules index list
   input.indexes <- input.modules@index.list

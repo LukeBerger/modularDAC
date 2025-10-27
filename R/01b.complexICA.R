@@ -11,6 +11,20 @@
 
 ## RETURNS: list of module assignments
 
+#' @param x PLACEHOLDER
+#' @param n.comp PLACEHOLDER
+#' @param core.size PLACEHOLDER
+#' @param starting.threshold PLACEHOLDER
+#' @param min.threshold PLACEHOLDER
+
+#' @return a module object
+
+#' @importFrom fastICA fastICA
+#' @importFrom stats cor
+#' @importFrom DescTools Mode
+#' @importFrom methods new
+
+#' @export
 complex_ICA_modules <- function(x,n.comp, core.size = 5, starting.threshold = 0.5, min.threshold = 0){
   #########################
   ###Define core modules###

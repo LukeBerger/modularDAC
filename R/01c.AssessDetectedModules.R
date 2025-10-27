@@ -6,6 +6,12 @@
 ## matching between two sets of modules
 ## takes a graph, and the names of two modules (attributes of the vertexs)
 
+#' @param m1 a module object
+#' @param m2 another module object to compare to
+
+#' @return an integer between 0 and 100
+
+#' @export
 percent_module_match <- function(m1, m2){
   #get matched sets
   matches <- .match_modules(m1@index.list, m2@index.list, m1@name.list, m2@name.list)
@@ -18,6 +24,14 @@ percent_module_match <- function(m1, m2){
   return((matched.nodes / n.nodes) * 100)
 }
 
+#' @param m1.nodes Node index vector from m1
+#' @param m2.nodes Node index vector from m2
+#' @param m1.names Node character vector from m1
+#' @param m2.names Node character vector from m2
+
+#' return a list of all the best modules matched based on node membership
+
+#' @keywords internal
 .match_modules <- function(m1.nodes, m2.nodes, m1.names, m2.names){
   matches <- vector(mode = "list",
                     length = min(length(m1.nodes), length(m2.nodes)))
@@ -53,6 +67,15 @@ percent_module_match <- function(m1, m2){
 
 ## Assess module quality based on the number of nodes with more edges outside
 ## of module then within it
+
+#' @param g an igraph object
+#' @param test.module a module to test for contiguity, whose nodes indexs and names must match the graph
+
+#' @return an integer between 0 and 100
+
+#' @importFrom igraph as_adjacency_matrix
+
+#' @export
 module_contiguity <- function(g, test.module){
   #get module assignments
   index.vector <- test.module@index.vector

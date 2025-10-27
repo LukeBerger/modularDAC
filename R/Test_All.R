@@ -135,20 +135,20 @@ test_all <- function(){
 
   ## 03.MultiThreaded_DaC
   # Test Function with Defaults
-  dac <- fastDivideAndConquer(x, ef@index.list) # basic run
-  if(!igraph::is_igraph(dac$final.graph)){stop("fastDivideAndConquer failed to produce an igraph with default functions")}
-  if(!all(unlist(lapply(dac$modular.subgraphs, igraph::is_igraph)))){stop("fastDivideAndConquer failed to produce a list of modular igraphs with default functions")}
+  dac <- divide_and_conquer(x, ef@index.list) # basic run
+  if(!igraph::is_igraph(dac$final.graph)){stop("divide_and_conquer failed to produce an igraph with default functions")}
+  if(!all(unlist(lapply(dac$modular.subgraphs, igraph::is_igraph)))){stop("divide_and_conquer failed to produce a list of modular igraphs with default functions")}
 
   #test function with BDgrapg learning
-  dac <- fastDivideAndConquer(x, ef@index.list,
+  dac <- divide_and_conquer(x, ef@index.list,
                                graph.learning.func = bdWrapper,
                                arg.wrapping.func = .other_arg_wrapper,
                                out.parsing.func = .default_output_parser,
                                packages.to.each = c("igraph", "BDgraph"),
                                export.to.each = c("bdWrapper")
   )
-  if(!igraph::is_igraph(dac$final.graph)){stop("fastDivideAndConquer failed to produce an igraph with bdgraph learning")}
-  if(!all(unlist(lapply(dac$modular.subgraphs, igraph::is_igraph)))){stop("fastDivideAndConquer failed to produce a list of modular igraphs bdgraph learning")}
+  if(!igraph::is_igraph(dac$final.graph)){stop("divide_and_conquer failed to produce an igraph with bdgraph learning")}
+  if(!all(unlist(lapply(dac$modular.subgraphs, igraph::is_igraph)))){stop("divide_and_conquer failed to produce a list of modular igraphs bdgraph learning")}
 
   print("03.MultiTrheaded_DaC : All functions passed all tests!")
 
@@ -156,7 +156,7 @@ test_all <- function(){
   print("Package testing complete! modularDAC is fully functional!")
 }
 
-### Alternative functions for testing fastDivideAndConquer
+### Alternative functions for testing divide_and_conquer
 .other_arg_wrapper <- function(sub.x, n.bootstraps, sub.ratio){
   lapply(sub.x, function(x){
     list(

@@ -9,6 +9,24 @@
 
 ### Takes a n x p matrix of data and inputs to silgggm function
 ### Then generates networks based on partial correlation between nodes
+
+#' Learns a graph from data using SILGGM
+#' @param x an  n by p matrix of numeric data
+#' @param method Methods for statistical inference with 5 options: "B_NW_SL", "D-S_NW_SL", "D-S_GL", "GFC_SL" and "GFC_L"
+#' @param global 	If global = TRUE, the global inference of all gene pairs is performed.
+#' @param alpha A user-supplied sequence of pre-sepecified alpha levels for FDR control. The default is alpha = 0.05, 0.1 if no sequence is provided.
+#' @param fdr.filter Whether to filter adjacency matrix results based on
+#' @param max.fdr The threshold to define an edge based on partial cor q val
+#' @param pos.cut Threhold to zero values in adjacency matrix
+#' @param neg.cut Threhold to zero values in adjacency matrix
+#' @param ... Additional arguments passed to SILGGM function
+
+#' @return an igraph object
+
+#' @importFrom SILGGM SILGGM
+#' @importFrom igraph graph_from_adjacency_matrix
+
+#' @export
 learn_SILGGM_graph <- function(x,
                                method  = "B_NW_SL",
                                global = T,
@@ -67,6 +85,19 @@ learn_SILGGM_graph <- function(x,
 
 ## Helpers to simpleSILGGM graph taken from RSCGGM
 ## So that i can run it without loading the full package
+
+
+#' Reconstruct the symmetric matrix from upper triangular vector
+#'
+#' @param upper_tri_values a numeric vector of the upper triangle of the matrix
+#' @param variable_names row&column names
+#' @param diagl the diagnoal elemenet, a number of a numerci vector
+
+#' @return a symmetric matrix
+
+#' @import methods utils
+
+#' @keywords internal
 .upper_tri_to_matrix <- function(upper_tri_values,
                                 variable_names =NULL,
                                 diagl=1){
@@ -92,6 +123,15 @@ learn_SILGGM_graph <- function(x,
   return(mat)
 }
 
+#' Perform adjustments of p-values on a p x p matrix
+#'
+#' @param mx_p a p x p matrix, (i,j) represents the p-value of the partial correlation between node i and node j
+#'
+#' @return a p x p matrix, (i,j) represents the adjusted p-value of the partial correlation between node i and node j
+
+#' @import methods utils
+
+#' @keywords internal
 .matrix_p_adjust <- function( mx_p ) {
   ## initialize
   mx_q <- mx_p
@@ -112,26 +152,65 @@ learn_SILGGM_graph <- function(x,
   return( mx_q)
 }
 
+
+#' Take the upper triangular vector of a symmetric matrix
+#'
+#' @param mat the input symmetric matrix
+#'
+#' @return a numeric vector
+
+#' @keywords internal
 .upper_tri_vec <- function(mat){
   vec <- mat[upper.tri(mat)]
   if(length(vec) != (ncol(mat)*(ncol(mat)-1))/2) stop ("invalid length!")
   return(vec)
 }
 
+
+#' Compute the z-score of a partial correlation, see https://github.com/cran/SILGGM/blob/master/src/SILGGMCpp.cpp
+#'
+#' @param pcor the partial correlation
+#' @param n the number of samples
+#'
+#' @return the z-score of the corresponding partial correlation
+
+#' @keywords internal
 .pcor_zscore <- function(pcor,n){
   std_new <- sqrt(.pow((1-.pow(pcor,2)),2)/n)
   return(pcor/std_new)
 }
 
+#' Raise of number to its n-th power
+#'
+#' @param x the input number
+#' @param n the order of power
+#'
+#' @return a number
+
+#' @keywords internal
 .pow <- function(x,n){
   return(x^n)
 }
 
+#' Compute the two-sided p-value of a z-score
+#'
+#' @param z_score a z-score
+#'
+#' @return the p-value
+#' @keywords internal
 .pvalue <- function(z_score){
   return(2*stats::pnorm(q=abs(z_score), lower.tail=FALSE))
 }
 
+#' Filter edges whose effect size is small
+#'
+#' @param x the average partial correlation
+#' @param pos_cut a threshold for positive partial correlation
+#' @param neg_cut a threshold for negative partial correlation
 
+#' @return the average value or 0
+
+#' @keywords internal
 .abs_pcor_filter <- function(x,
                              pos_cut,
                              neg_cut){
@@ -151,6 +230,14 @@ learn_SILGGM_graph <- function(x,
 ###Compare Graphs###
 ####################
 
+#' @param g.true an igraph object, the true graph for the purpose of F1 calculation
+#' @param g.pred an igraph object, the predicted graph for the purpose of F1 calculation
+
+#' @return a list of F1 score and its components
+
+#' @importFrom igraph V as_edgelist
+
+#' @export
 calc_F1 <- function(g.true, g.pred) {
   #check that the graphs have the same nodes
   if (!all(igraph::V(g.true)$name %in% igraph::V(g.pred)$name)) {
@@ -193,7 +280,14 @@ calc_F1 <- function(g.true, g.pred) {
 #### Other ####
 ###############
 
-### Preform half min imputation to fill in missing values in dat matrix
+#' Preforms halfmin imputation to fill NAs in matrix missing values
+#' @param dat data matrix of numeric values
+
+#' @return the data matrix with NAs filled
+
+#' @importFrom matrixStats rowMins rowMeans2
+
+#' @export
 halfmin_impute <- function(dat) {
   halfmin <- matrix(matrixStats::rowMins(dat, na.rm = TRUE) / 2,
                     nrow = nrow(dat), ncol = ncol(dat), dimnames = dimnames(dat)

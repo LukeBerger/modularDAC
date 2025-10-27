@@ -16,7 +16,24 @@
 ## data, an p (variable) x n (sample) matrix containing the data to build the network
 ## subGraphs, the subgraphs/modules defined by vectors of ints within a list
 
-fastDivideAndConquer <- function(x, # input data, p x n matrix
+#' Learns a network from data by dividing into it modules which are learned individually and stitched back together
+#' @param x PLACEHOLDER
+#' @param subgraph.features PLACEHOLDER
+#' @param keep.all.edges PLACEHOLDER
+#' @param graph.learning.func PLACEHOLDER
+#' @param arg.wrapping.func PLACEHOLDER
+#' @param out.parsing.func PLACEHOLDER
+#' @param packages.to.each PLACEHOLDER
+#' @param export.to.each PLACEHOLDER
+#' @param ... PLACEHOLDER
+
+#' @return a list containing a the full graph (an igraph objects), the modular subgraphs (also igraphs), and any other outputs of graph learning
+
+#' @importFrom foreach foreach %dopar%
+#' @importFrom igraph is_igraph
+
+#' @export
+divide_and_conquer <- function(x, # input data, p x n matrix
                                  subgraph.features, # overlappping subsets of p
                                  keep.all.edges = FALSE, # whether to keep all edges in the overlap graph
                                  graph.learning.func = learn_SILGGM_graph,  # function to learn graphs
@@ -128,6 +145,15 @@ fastDivideAndConquer <- function(x, # input data, p x n matrix
   )
 }
 
+#' @param sub.graphs PLACEHOLDER
+#' @param keep.all.edges PLACEHOLDER
+
+#' @importFrom igraph union as_adjacency_matrix graph_from_adjacency_matrix V as_edgelist delete_edges get.edge.ids
+#' @importFrom stringr str_remove
+#' @importFrom utils combn
+#' @importFrom dplyr bind_rows anti_join
+
+#' @keywords internal
 .connect_subgraphs <- function(sub.graphs, keep.all.edges = FALSE){
   #new graph containing all edges
   full.graph <- do.call(igraph::union, sub.graphs)
@@ -272,7 +298,7 @@ fastDivideAndConquer <- function(x, # input data, p x n matrix
 # registerDoParallel(cl)
 #
 # ### Test Function with Defaults
-# test <- fastDivideAndConquer(x, fuzzyModules@index.list) # basic run
+# test <- divide_and_conquer(x, fuzzyModules@index.list) # basic run
 # calc_F1(g, test$final.graph)
 #
 # stopCluster(cl)
@@ -296,7 +322,7 @@ fastDivideAndConquer <- function(x, # input data, p x n matrix
 #   igraph::graph_from_adjacency_matrix(adjMat, mode = "undirected") # can change this if I want to test edge directional update for .connect_subgraphs
 # }
 #
-# test <- fastDivideAndConquer(x, fuzzyMods,
+# test <- divide_and_conquer(x, fuzzyMods,
 #                              graph.learning.func = bdWrapper,
 #                              arg.wrapping.func = .other_arg_wrapper,
 #                              out.parsing.func = .default_output_parser,
@@ -322,7 +348,7 @@ fastDivideAndConquer <- function(x, # input data, p x n matrix
 # }
 #
 #
-# test <- fastDivideAndConquer(x, fuzzyMods,
+# test <- divide_and_conquer(x, fuzzyMods,
 #                              graph.learning.func = learn_consensus_graph,
 #                              arg.wrapping.func = .other_arg_wrapper,
 #                              out.parsing.func = .default_output_parser,
