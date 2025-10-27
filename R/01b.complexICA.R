@@ -12,11 +12,11 @@
 ## RETURNS: list of module assignments
 
 #' Uses ICA to find the core of modules, then iteratively expands outward based on a decreasing threshold of correlation
-#' @param x PLACEHOLDER
-#' @param n.comp PLACEHOLDER
-#' @param core.size PLACEHOLDER
-#' @param starting.threshold PLACEHOLDER
-#' @param min.threshold PLACEHOLDER
+#' @param x  a p x n matrix of features
+#' @param n.comp the number of components to search for in the data
+#' @param core.size the size of the module cores determine by ICA
+#' @param starting.threshold the starting threshold for correlation to be added to a module
+#' @param min.threshold the minimun threshold for correlation, if set above zero will result in incomplete assignments
 
 #' @return a module object
 
