@@ -25,6 +25,7 @@
 
 #' @importFrom SILGGM SILGGM
 #' @importFrom igraph graph_from_adjacency_matrix
+#' @importFrom dplyr  %>%
 
 #' @export
 learn_SILGGM_graph <- function(x,

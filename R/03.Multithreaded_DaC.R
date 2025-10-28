@@ -151,7 +151,7 @@ divide_and_conquer <- function(x, # input data, p x n matrix
 #' @importFrom igraph union as_adjacency_matrix graph_from_adjacency_matrix V as_edgelist delete_edges get.edge.ids
 #' @importFrom stringr str_remove
 #' @importFrom utils combn
-#' @importFrom dplyr bind_rows anti_join
+#' @importFrom dplyr bind_rows anti_join %>%
 
 #' @keywords internal
 .connect_subgraphs <- function(sub.graphs, keep.all.edges = FALSE){
