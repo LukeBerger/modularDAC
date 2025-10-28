@@ -13,15 +13,15 @@ complex_ICA_modules(
 )
 }
 \arguments{
-\item{x}{PLACEHOLDER}
+\item{x}{a p x n matrix of features}
 
-\item{n.comp}{PLACEHOLDER}
+\item{n.comp}{the number of components to search for in the data}
 
-\item{core.size}{PLACEHOLDER}
+\item{core.size}{the size of the module cores determine by ICA}
 
-\item{starting.threshold}{PLACEHOLDER}
+\item{starting.threshold}{the starting threshold for correlation to be added to a module}
 
-\item{min.threshold}{PLACEHOLDER}
+\item{min.threshold}{the minimun threshold for correlation, if set above zero will result in incomplete assignments}
 }
 \value{
 a module object
