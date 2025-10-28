@@ -118,6 +118,26 @@ make_modular_graph <- function(g.type="er",
 ## number of nodes, number of modules in each subgraph
 ## average number of edges to other nodes with a module
 ## number of links between models in subgraphs, number of links between subgraphs
+
+#' Create graph comprised of multiple subgraphs each of which is comprised of multi modules
+#' @param g.type a character, graph type graph type, er for Erdos Renyi or sf for scale free
+#' @param n.mods an integer, the number of modules in output graph
+#' @param n.mod.links an integer, the number of edges between each module in the graph
+#' @param n.sg an integer, the number of module subgraphs
+#' @param n.sg.nodes an integer, the number of nodes in each subgraph
+#' @param n.sg.links an integer, the number of edges between each pair of subgraphs
+#' @param no.uncon a boolean, if nodes with zero edges are allowed
+#' @param link.all a boolean, whether all modules have edges between each other
+#' @param p.edge an integer, the odds of two nodes within a module havin an edge
+#' @param power an integer, the power in scale free graph generation
+#' @param z.appeal an integer, the z appeal of nodes in scale fre graph generation
+#' @param ... other arguments passed to graph building functions
+
+#' @return an igraph object
+
+#' @importFrom igraph sample_gnp sample_pa V add_edges simplify
+
+#' @export
 make_submodular_graph <- function(g.type="er",
                                   n.mods=3, n.mod.links=3,
                                   n.sg=3, n.sg.nodes=120, n.sg.links=1,
@@ -223,6 +243,23 @@ make_submodular_graph <- function(g.type="er",
 ## Wrapper of netUtils sample_lft
 ## Takes inputs and returns graph labled to match the above format
 ##      I.E containing Node_Names and $modules
+
+#' Wrapper for netutils sample_lfr that adds name and "module" label to nodes
+#' @param n a integer, the number of nodes
+#' @param tau1 PLACEHOLDER
+#' @param tau2 PLACEHOLDER
+#' @param mu PLACEHOLDER
+#' @param average.degree PLACEHOLDER
+#' @param max.degree PLACEHOLDER
+#' @param min.community PLACEHOLDER
+#' @param max.community PLACEHOLDER
+
+#' @return an igraph object
+
+#' @importFrom netUtils sample_lfr
+#' @importFrom igraph V
+
+#' @export
 make_lft <- function(n = 120,        #number of nodes
                      tau1 = 3,       #power-law exponent for degree distribution
                      tau2 = 2,       #power-law exponent for community size distribution
@@ -255,6 +292,18 @@ make_lft <- function(n = 120,        #number of nodes
 ## Used BD Graph to learn covariance matrix and mass to generate samples
 ## Takes graph, vector of node means, and number of samplesto generate
 ## returns p x n matrix of data
+
+#' Generates simulated data moduleing n.samples based on a network
+#' @param g an igraph object
+#' @param n.samples the number of samples to generate
+#' @param mean.vec a vector of sample means
+
+#' @return a p x n data matrix
+
+#' @importFrom MASS mvrnorm
+#' @importFrom igraph as_adjacency_matrix V
+
+#' @export
 sim_graph_data <- function(g, n.samples, mean.vec = NULL){
   #if mean.vec isnt set, use vector of all 10s
   if(is.null(mean.vec)){
@@ -262,7 +311,7 @@ sim_graph_data <- function(g, n.samples, mean.vec = NULL){
     mean.vec = rep(10, length(g))
   }
 
-  bdg <- mod.bdgraph.sim(n=1, #makes a single samples worth of data
+  bdg <- .mod.bdgraph.sim(n=1, #makes a single samples worth of data
                          graph=as.matrix(igraph::as_adjacency_matrix(g)),
                          type="Gaussian",
                          mean = mean.vec[1]
@@ -288,6 +337,15 @@ sim_graph_data <- function(g, n.samples, mean.vec = NULL){
 ## Requires a graph with a module column on each vertex
 ## Can also plot hybrid graphs with a subgraph column
 ## Names are adjustable to account for graphs with multiple recorded modules
+
+#' Plots a graph with nicely labled modules
+#' @param g an igrapgh object
+#' @param module.name the name of the module value on each node
+#' @param subgraphs boolean indicating whether to use subgraphs
+#' @param subname the name of the subgraph value on each node
+#' @importFrom igraph as_edgelist V vertex.attributes
+#' @importFrom dplyr %>%
+#' @import visNetwork
 modular_plot <- function(g,
                          module.name = "module",
                          subgraphs = FALSE,
@@ -352,7 +410,7 @@ modular_plot <- function(g,
 
 ## bdgraph function with two lines removed which caused a bug when using a
 ## adjency matrix as the graph parameter
-mod.bdgraph.sim <- function (p = 10, graph = "random", n = 0, type = "Gaussian",
+.mod.bdgraph.sim <- function (p = 10, graph = "random", n = 0, type = "Gaussian",
                              prob = 0.2, size = NULL, mean = 0, class = NULL, cut = 4,
                              b = 3, D = diag(p), K = NULL, sigma = NULL, q = exp(-1),
                              beta = 1, vis = FALSE, rewire = 0.05, range.mu = c(3, 5),
