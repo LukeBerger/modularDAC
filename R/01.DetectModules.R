@@ -30,7 +30,7 @@ setClass("module",
 
 #' @return a module object
 
-#' @importFrom WGCNA pickSoftThreshold adjacency TOMdist
+#' @importFrom WGCNA pickSoftThreshold adjacency TOMdist bicor
 #' @importFrom flashClust flashClust
 #' @importFrom stats as.dist
 #' @importFrom dynamicTreeCut cutreeDynamic
