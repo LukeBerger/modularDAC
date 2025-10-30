@@ -308,7 +308,7 @@ sim_graph_data <- function(g, n.samples, mean.vec = NULL){
   #if mean.vec isnt set, use vector of all 10s
   if(is.null(mean.vec)){
     #set as a vector of 10s
-    mean.vec = rep(10, length(g))
+    mean.vec = rep(0, length(g))
   }
 
   bdg <- .mod.bdgraph.sim(n=1, #makes a single samples worth of data
