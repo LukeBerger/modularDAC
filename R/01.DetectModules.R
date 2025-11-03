@@ -115,11 +115,11 @@ find_WGCNA_mods <- function(x,
 
 
 ## Simple module detection based on ICA components
-## takes a n x p matrix of data, a number of components to search for, and args to fastICA
+## takes a p x n  matrix of data, a number of components to search for, and args to fastICA
 ## returns a list of modules assigned based on maximum abs competent score
 
 #' Uses ICA to detect modules from a data matrix
-#' @param x a p x n matrix of features
+#' @param x a p x n  matrix of features
 #' @param n.comp the number of components to search for in the data
 #' @param ... other arguments to fastICA
 
@@ -152,6 +152,65 @@ find_ICA_mods <- function(x, #exprs(eset)
 
   return(ICA.mods)
 }
+
+
+#' Uses MCL to detect modules from a data matrix
+#' @param x a n x p matrix of features
+#' @param beta an integer, the power value for WGCNA::adjacency
+#' @param cut a numeric < 1, the cut threshold for converting from correlation to binary adjacency
+#' @param expansion an integer, the expansion value of the mcl function
+#' @param inflation an integer, the inflation value of the mcl function
+#' @param cor.fn the correlation function to use in WGCNA::adjacency
+#' @param iter an integer, the maximum number of iterations in the mcl function
+
+#' @return a module object
+
+#' @importFrom WGCNA adjacency cor
+#' @import MCL mcl
+#' @importFrom methods new
+
+#' @export
+find_mcl_mods <- function(x,
+                          beta=6,
+                          cut=0.05,
+                          expansion=2,
+                          inflation=1,
+                          cor.fn="cor",
+                          iter=1000){
+  # Compute unsigned and scaled correlation matrix
+  mat <- WGCNA::adjacency(datExpr=x,
+                          power=beta,
+                          corFnc=cor.fn,
+                          type="unsigned")
+
+  # Convert to adjacency matrix with cut point
+  adj <- mat
+  adj[mat >= cut] <- 1
+  adj[mat < cut] <- 0
+  diag(adj) <- 0
+
+  # Markov clustering
+  clusters <- MCL::mcl(x=as.matrix(adj),
+                  addLoops=TRUE,
+                  allow1=FALSE,
+                  ESM=FALSE,
+                  max.iter=iter,
+                  expansion=expansion,
+                  inflation=inflation)
+
+  # Create module object
+  mcl.mods <-methods::new("module",
+                         source = "mcl",
+                         data.dim = dim(t(x)),
+                         overlapping = FALSE,
+                         index.vector = clusters$Cluster,
+                         index.list =split(1:ncol(x) , clusters$Cluster),
+                         name.list = split(colnames(x), clusters$Cluster))
+
+  # Return Modules
+  return(mcl.mods)
+}
+
 
 ## Detect initial modules based on ICA components
 ## Convert to n.mods modules of max.size nodes
