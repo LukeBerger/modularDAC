@@ -260,7 +260,7 @@ make_submodular_graph <- function(g.type="er",
 #' @importFrom igraph V
 
 #' @export
-make_lft <- function(n = 120,        #number of nodes
+make_lfr <- function(n = 120,        #number of nodes
                      tau1 = 3,       #power-law exponent for degree distribution
                      tau2 = 2,       #power-law exponent for community size distribution
                      mu = 0.08,      #mixing parameter
