@@ -212,6 +212,76 @@ find_mcl_mods <- function(x,
 }
 
 
+
+find_megena_mods <- function(x,
+                             method="pearson",
+                             fdr.cutoff=0.05,
+                             mod.pval=0.05,
+                             hub.pval=0.05,
+                             cor.perm=10,
+                             hub.perm=100,
+                             min.size=20,
+                             is.signed=FALSE,
+                             cores=1){
+  # Check
+  do.par <- cores > 1
+  if (do.par) {
+    require(parallel)
+    cl <- parallel::makeCluster(cores)
+    registerDoParallel(cl)
+  }
+
+  ijw <- calculate.correlation(x,
+                               doPerm=cor.perm,
+                               doPar=do.par,
+                               num.cores=cores,
+                               FDR.cutoff=fdr.cutoff,
+                               method=method,
+                               is.signed=is.signed,
+                               output.permFDR=FALSE,
+                               output.corTable=FALSE)
+
+  # Calculate planar filtered network (PFN)
+  el <- calculate.PFN(ijw[,1:3], doPar=TRUE, num.cores=cores, keep.track=FALSE)
+  gd <- graph.data.frame(el, directed=FALSE)
+
+  # Create modules
+  megena <- do.MEGENA(gd,
+                      mod.pval=mod.pval,
+                      hub.pval=hub.pval,
+                      remove.unsig=TRUE,
+                      min.size=min.size,
+                      max.size=vcount(gd)/2,
+                      doPar=do.par,
+                      num.cores=cores,
+                      n.perm=hub.perm,
+                      save.output=FALSE)
+
+  if (getDoParWorkers() > 1) {
+    env <- foreach:::.foreachGlobals
+    rm(list=ls(name=env), pos=env)
+  }
+
+  # Compute modules statistics and summary
+  meg.mods <- MEGENA.ModuleSummary(megena,
+                                  mod.pvalue=mod.pval,
+                                  hub.pvalue=hub.pval,
+                                  min.size=min.size,
+                                  max.size=vcount(gd)/2,
+                                  output.sig=TRUE)
+
+  # Create module object
+  meg.mods <-methods::new("module",
+                         source = "megena",
+                         data.dim = dim(x),
+                         overlapping = TRUE,
+                         index.list =lapply(meg.mods$modules, function(mod) which(rownames(x) %in% mod)),
+                         name.list = meg.mods$modules)
+
+  # Return modules
+  return(meg.mods)
+}
+
 ## Detect initial modules based on ICA components
 ## Convert to n.mods modules of max.size nodes
 ## returns a list contian module indexes, node names, and ica scores
