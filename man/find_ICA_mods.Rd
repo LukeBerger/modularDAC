@@ -7,7 +7,7 @@
 find_ICA_mods(x, n.comp, ...)
 }
 \arguments{
-\item{x}{a p x n matrix of features}
+\item{x}{a p x n  matrix of features}
 
 \item{n.comp}{the number of components to search for in the data}
 
