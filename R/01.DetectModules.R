@@ -30,7 +30,7 @@ setClass("module",
 
 #' @return a module object
 
-#' @importFrom WGCNA pickSoftThreshold adjacency TOMdist bicor
+#' @importFrom WGCNA pickSoftThreshold adjacency TOMdist bicor cor
 #' @importFrom flashClust flashClust
 #' @importFrom stats as.dist
 #' @importFrom dynamicTreeCut cutreeDynamic
@@ -102,6 +102,7 @@ find_WGCNA_mods <- function(x,
   return(WGCNA.mods)
 }
 
+# Needs Roxigen tags
 .sft_check <- function(sft) {
   beta <- sft$powerEstimate
   if (is.na(beta)) {
@@ -166,7 +167,7 @@ find_ICA_mods <- function(x, #exprs(eset)
 #' @return a module object
 
 #' @importFrom WGCNA adjacency cor
-#' @import MCL mcl
+#' @importFrom MCL mcl
 #' @importFrom methods new
 
 #' @export
@@ -212,7 +213,7 @@ find_mcl_mods <- function(x,
 }
 
 
-
+# NOTE: NEED TO ADD ROXIGEN TAGs
 find_megena_mods <- function(x,
                              method="pearson",
                              fdr.cutoff=0.05,
@@ -221,20 +222,11 @@ find_megena_mods <- function(x,
                              cor.perm=10,
                              hub.perm=100,
                              min.size=20,
-                             is.signed=FALSE,
-                             cores=1){
-  # Check
-  do.par <- cores > 1
-  if (do.par) {
-    require(parallel)
-    cl <- parallel::makeCluster(cores)
-    registerDoParallel(cl)
-  }
+                             is.signed=FALSE
+                             ){
 
-  ijw <- calculate.correlation(x,
+  ijw <- MEGENA::calculate.correlation(x,
                                doPerm=cor.perm,
-                               doPar=do.par,
-                               num.cores=cores,
                                FDR.cutoff=fdr.cutoff,
                                method=method,
                                is.signed=is.signed,
@@ -242,32 +234,25 @@ find_megena_mods <- function(x,
                                output.corTable=FALSE)
 
   # Calculate planar filtered network (PFN)
-  el <- calculate.PFN(ijw[,1:3], doPar=TRUE, num.cores=cores, keep.track=FALSE)
-  gd <- graph.data.frame(el, directed=FALSE)
+  el <- MEGENA::calculate.PFN(ijw[,1:3], keep.track=FALSE)
+  gd <- igraph::graph.data.frame(el, directed=FALSE)
 
   # Create modules
-  megena <- do.MEGENA(gd,
+  megena <- MEGENA::do.MEGENA(gd,
                       mod.pval=mod.pval,
                       hub.pval=hub.pval,
                       remove.unsig=TRUE,
                       min.size=min.size,
-                      max.size=vcount(gd)/2,
-                      doPar=do.par,
-                      num.cores=cores,
+                      max.size=igraph::vcount(gd)/2,
                       n.perm=hub.perm,
                       save.output=FALSE)
 
-  if (getDoParWorkers() > 1) {
-    env <- foreach:::.foreachGlobals
-    rm(list=ls(name=env), pos=env)
-  }
-
   # Compute modules statistics and summary
-  meg.mods <- MEGENA.ModuleSummary(megena,
+  meg.mods <- MEGENA::MEGENA.ModuleSummary(megena,
                                   mod.pvalue=mod.pval,
                                   hub.pvalue=hub.pval,
                                   min.size=min.size,
-                                  max.size=vcount(gd)/2,
+                                  max.size=igraph::vcount(gd)/2,
                                   output.sig=TRUE)
 
   # Create module object
