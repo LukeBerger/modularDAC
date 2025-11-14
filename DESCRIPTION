@@ -28,8 +28,8 @@ Imports:
     MCL,
     DescTools,
     SILGGM,
-    foreach
-Suggests:    
+    MEGENA,
+    foreach,
     parallel,
     doParallel
 URL: https://github.com/LukeBerger/modularDAC
