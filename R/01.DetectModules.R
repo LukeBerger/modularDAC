@@ -11,7 +11,32 @@ setClass("module",
            score.vector = "numeric",
            index.list = "list",
            name.list = "list"
-         ))
+         ),
+         validity = function(object){
+           #check that each module has the same number of feature indexes and names
+           if(
+             !all(
+               unlist(
+                 lapply(seq_along(object@index.list), function(i){
+                   length(object@index.list[[i]]) == length(object@name.list[[i]])
+                 })
+               )
+             )
+           ){return("index list and name list must be the same length")}
+           # if not overlapping...
+           if(!object@overlapping){
+             # check that every module contains a unique index
+             if(any(unlist(
+               lapply(seq_along(mod@index.list), function(i){
+                 any(unlist(mod@index.list[i]) %in% unlist(mod@index.list[-i]))
+               })
+             ))){return("All modules must contain overlaps with at least on other module")}
+           }
+
+         }
+
+
+)
 
 
 ## Takes a n x p  matrix of  data and list of args to cuttreeDynamic
@@ -30,7 +55,7 @@ setClass("module",
 
 #' @return a module object
 
-#' @importFrom WGCNA pickSoftThreshold adjacency TOMdist bicor cor
+#' @importFrom WGCNA pickSoftThreshold adjacency TOMdist bicor
 #' @importFrom flashClust flashClust
 #' @importFrom stats as.dist
 #' @importFrom dynamicTreeCut cutreeDynamic
@@ -166,7 +191,7 @@ find_ICA_mods <- function(x, #exprs(eset)
 
 #' @return a module object
 
-#' @importFrom WGCNA adjacency cor
+#' @importFrom WGCNA adjacency
 #' @importFrom MCL mcl
 #' @importFrom methods new
 
@@ -213,7 +238,27 @@ find_mcl_mods <- function(x,
 }
 
 
-# NOTE: NEED TO ADD ROXIGEN TAGs, restore multithreading (can also add to WGCNA)
+#' Uses megena to detect modules from a data matrix
+#' @param x a n x p matrix of features
+#' @param method method for the calculate.correlation function
+#' @param fdr.cutoff fdr cut off value in calculate.correlation
+#' @param mod.pval module p value for the do.MEGENA function
+#' @param hub.pval hub p value for the do.MEGENA function
+#' @param cor.perm number of  permutations in calculate.correlation
+#' @param hub.perm the number of hub permutations in do.MEGENA
+#' @param min.size the minimum number of nodes in each module
+#' @param is.signed indicate using signed/unsigned correlation in calculate.correlation
+#' @param n.cores number of cores to use for multithreading
+
+#' @return a module object
+
+#' @importFrom parallel makeCluster
+#' @importFrom doParallel registerDoParallel
+#' @importFrom MEGENA calculate.correlation calculate.PFN do.MEGENA
+#' @importFrom igraph graph.data.frame
+#' @importFrom methods new
+
+#' @export
 find_megena_mods <- function(x,
                              method="pearson",
                              fdr.cutoff=0.05,
@@ -222,11 +267,22 @@ find_megena_mods <- function(x,
                              cor.perm=10,
                              hub.perm=100,
                              min.size=20,
-                             is.signed=FALSE
+                             is.signed=FALSE,
+                             n.cores = 1
                              ){
+
+  # If given access to multiple cores...
+  do.par <- n.cores > 1
+  if (do.par) {
+    cl <- parallel::makeCluster(n.cores)
+    doParallel::registerDoParallel(cl)
+    on.exit(parallel::stopCluster(cl))
+  }
 
   ijw <- MEGENA::calculate.correlation(x,
                                doPerm=cor.perm,
+                               doPar=do.par,
+                               num.cores=n.cores,
                                FDR.cutoff=fdr.cutoff,
                                method=method,
                                is.signed=is.signed,
@@ -244,6 +300,8 @@ find_megena_mods <- function(x,
                       remove.unsig=TRUE,
                       min.size=min.size,
                       max.size=igraph::vcount(gd)/2,
+                      doPar=do.par,
+                      num.cores=n.cores,
                       n.perm=hub.perm,
                       save.output=FALSE)
 
@@ -256,7 +314,7 @@ find_megena_mods <- function(x,
                                   output.sig=TRUE)
 
   # Create module object
-  meg.mods <-methods::new("module",
+  meg.mods <- methods::new("module",
                          source = "megena",
                          data.dim = dim(x),
                          overlapping = TRUE,
