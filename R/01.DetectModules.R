@@ -213,7 +213,7 @@ find_mcl_mods <- function(x,
 }
 
 
-# NOTE: NEED TO ADD ROXIGEN TAGs
+# NOTE: NEED TO ADD ROXIGEN TAGs, restore multithreading (can also add to WGCNA)
 find_megena_mods <- function(x,
                              method="pearson",
                              fdr.cutoff=0.05,
