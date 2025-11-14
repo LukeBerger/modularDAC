@@ -18,8 +18,9 @@
 
 #' Learns a network from data by dividing into it modules which are learned individually and stitched back together
 #' @param x PLACEHOLDER
-#' @param subgraph.features PLACEHOLDER
+#' @param subgraph.index.list PLACEHOLDER
 #' @param keep.all.edges PLACEHOLDER
+#' @param n.cores number of cores to use for multithreading
 #' @param graph.learning.func PLACEHOLDER
 #' @param arg.wrapping.func PLACEHOLDER
 #' @param out.parsing.func PLACEHOLDER
@@ -34,58 +35,64 @@
 
 #' @export
 divide_and_conquer <- function(x, # input data, p x n matrix
-                                 subgraph.features, # overlappping subsets of p
-                                 keep.all.edges = FALSE, # whether to keep all edges in the overlap graph
-                                 graph.learning.func = learn_SILGGM_graph,  # function to learn graphs
-                                 arg.wrapping.func = .default_arg_wrapper,  # function to wrap each module of x with args for graph learning function
-                                 out.parsing.func = .default_output_parser, # function to parse outputs of graph learning into list of igraphs and other outputs
-                                 packages.to.each = c("SILGGM", "igraph"),  # packages for each thread
-                                 export.to.each = c("learn_SILGGM_graph",
-                                                    ".upper_tri_to_matrix",
-                                                    ".matrix_p_adjust",
-                                                    ".upper_tri_vec",
-                                                    ".pcor_zscore",
-                                                    ".pvalue",
-                                                    ".abs_pcor_filter"),  # functions to export to each thread
-                                 ... # other args to pass through arg wrapper to graph learning
+                               subgraph.module, # overlappping subsets of p
+                               keep.all.edges = FALSE, # whether to keep all edges in the overlap graph
+                               n.cores = 1,
+                               graph.learning.func = learn_SILGGM_graph,  # function to learn graphs
+                               arg.wrapping.func = .default_arg_wrapper,  # function to wrap each module of x with args for graph learning function
+                               out.parsing.func = .default_output_parser, # function to parse outputs of graph learning into list of igraphs and other outputs
+                               packages.to.each = c("SILGGM", "igraph"),  # packages for each thread
+                               export.to.each = c("learn_SILGGM_graph",
+                                                  ".upper_tri_to_matrix",
+                                                  ".matrix_p_adjust",
+                                                  ".upper_tri_vec",
+                                                  ".pcor_zscore",
+                                                  ".pvalue",
+                                                  ".abs_pcor_filter"),  # functions to export to each thread
+                               ... # other args to pass through arg wrapper to graph learning
 ){
   ##################
   ###Check Inputs###
   ##################
 
-  #Check if data is a numeric matrix
+
+
+  # Check if data is a numeric matrix
   if (!is.matrix(x) || !is.numeric(x)) {
     stop("'data' should be a p x n numeric matrix ")
   }
 
-  #Check 'subgraph.features' is a list of integer vectors with overlapping values
-  if (!is.list(subgraph.features) || length(subgraph.features) == 0) {
-    stop("'subgraph.features' must be a non-empty list of integer vectors.")
+  # Extract index list
+  subgraph.index.list <- subgraph.module@index.list
+
+  # Check 'subgraph.index.list' is a list of integer vectors with overlapping values
+  if (!is.list(subgraph.index.list) || length(subgraph.index.list) == 0) {
+    stop("'subgraph.index.list' must be a non-empty list of integer vectors.")
   }
   row.range <- c(1:nrow(x)) #get rows of data  matrix
-  for (i in seq_along(subgraph.features)) { #for each subgraph
-    sg <- subgraph.features[[i]] #get the subgraph node indices
-    other.indexs <- unlist(subgraph.features[-i]) #and the other graphs indices
-    #check that all values are numeric
+  for (i in seq_along(subgraph.index.list)) { #for each subgraph
+    sg <- subgraph.index.list[[i]] #get the subgraph node indices
+    other.indexs <- unlist(subgraph.index.list[-i]) #and the other graphs indices
+    # Check that all values are numeric
     if (!is.numeric(sg) || any(sg %% 1 != 0)) {
       stop(sprintf("Subgraph %d has non integer values.", i))
     }
-    #check that all values correspond to rows in data matrix
+    # Check that all values correspond to rows in data matrix
     if (any(!(sg %in% row.range))) {
       stop(sprintf("Subgraph %d contains invalid row indices.", i))
     }
-    #check that the subgraphs all contain overlaps (necessary for reconnecting after learning)
+    # Check that the subgraphs all contain overlaps (necessary for reconnecting after learning)
     if (!any(sg %in% other.indexs)){
       warning(sprintf("Subgraph %d has no overlaps with the other subgraphs.", i))
     }
   }
 
-  #Check every row index is in at least one subGraph
-  if (!all(row.range %in% unique(unlist(subgraph.features)))) {
-    stop("Not all rows of data are covered by 'subgraph.features'.")
+  # Check every row index is in at least one subGraph
+  if (!all(row.range %in% unique(unlist(subgraph.index.list)))) {
+    stop("Not all rows of data are covered by 'subgraph.index.list'.")
   }
 
-  #Check if both functions exist
+  # Check if both functions exist
   if (!is.function(arg.wrapping.func)){
     stop("Argument wrapping function is not a function.")
   }
@@ -99,12 +106,23 @@ divide_and_conquer <- function(x, # input data, p x n matrix
   graph.learning.func <- match.fun(graph.learning.func)
   out.parsing.func <- match.fun(out.parsing.func)
 
+  ###########################
+  ###Set Up Multithreading###
+  ###########################
+
+  # If given access to multiple cores...
+  if (n.cores > 1) {
+    cl <- parallel::makeCluster(n.cores)
+    doParallel::registerDoParallel(cl)
+    on.exit(parallel::stopCluster(cl))
+  }
+
   ##################################
   ###Divide Data and Learn Graphs###
   ##################################
 
   #divide data based on subGraph indices
-  sub.x  <- lapply(subgraph.features, function(sg){
+  sub.x  <- lapply(subgraph.index.list, function(sg){
     x[sg,]
   })
 
@@ -145,6 +163,7 @@ divide_and_conquer <- function(x, # input data, p x n matrix
   )
 }
 
+#' Connects the subgraphs output by
 #' @param sub.graphs PLACEHOLDER
 #' @param keep.all.edges PLACEHOLDER
 
