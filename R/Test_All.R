@@ -135,17 +135,17 @@ test_all <- function(){
 
   ## 03.MultiThreaded_DaC
   # Test Function with Defaults
-  dac <- divide_and_conquer(x, ef@index.list) # basic run
+  dac <- divide_and_conquer(x, ef) # basic run
   if(!igraph::is_igraph(dac$final.graph)){stop("divide_and_conquer failed to produce an igraph with default functions")}
   if(!all(unlist(lapply(dac$modular.subgraphs, igraph::is_igraph)))){stop("divide_and_conquer failed to produce a list of modular igraphs with default functions")}
 
   #test function with BDgrapg learning
-  dac <- divide_and_conquer(x, ef@index.list,
-                               graph.learning.func = bdWrapper,
+  dac <- divide_and_conquer(x, ef,
+                               graph.learning.func = .bdWrapper,
                                arg.wrapping.func = .other_arg_wrapper,
                                out.parsing.func = .default_output_parser,
                                packages.to.each = c("igraph", "BDgraph"),
-                               export.to.each = c("bdWrapper")
+                               export.to.each = c(".bdWrapper")
   )
   if(!igraph::is_igraph(dac$final.graph)){stop("divide_and_conquer failed to produce an igraph with bdgraph learning")}
   if(!all(unlist(lapply(dac$modular.subgraphs, igraph::is_igraph)))){stop("divide_and_conquer failed to produce a list of modular igraphs bdgraph learning")}
@@ -165,7 +165,7 @@ test_all <- function(){
   })
 }
 
-bdWrapper <- function(x){
+.bdWrapper <- function(x){
   bdFit <- BDgraph::bdgraph(x)
   postProb <- BDgraph::plinks(bdFit)
   adjMat <- BDgraph::select(postProb)
