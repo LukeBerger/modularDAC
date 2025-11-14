@@ -163,7 +163,7 @@ divide_and_conquer <- function(x, # input data, p x n matrix
   )
 }
 
-#' Connects the subgraphs output by
+#' Connects the subgraphs output based on overlapping nodes
 #' @param sub.graphs PLACEHOLDER
 #' @param keep.all.edges PLACEHOLDER
 
