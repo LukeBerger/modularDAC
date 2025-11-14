@@ -3,6 +3,9 @@
 # library(dplyr)
 
 
+### Allow for dplyr piping
+utils::globalVariables(".")
+
 ######################
 ### Graph learning ###
 ######################
