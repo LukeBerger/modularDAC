@@ -8,6 +8,7 @@ divide_and_conquer(
   x,
   subgraph.features,
   keep.all.edges = FALSE,
+  n.cores = 1,
   graph.learning.func = learn_SILGGM_graph,
   arg.wrapping.func = .default_arg_wrapper,
   out.parsing.func = .default_output_parser,
@@ -23,6 +24,8 @@ divide_and_conquer(
 \item{subgraph.features}{PLACEHOLDER}
 
 \item{keep.all.edges}{PLACEHOLDER}
+
+\item{n.cores}{number of cores to use for multithreading}
 
 \item{graph.learning.func}{PLACEHOLDER}
 
