@@ -230,6 +230,69 @@ learn_SILGGM_graph <- function(x,
   return(x)
 }
 
+###########
+###WGCNA###
+###########
+
+#' Uses WGCNA to learn a graph
+#' @param x a n x p matrix of features
+#' @param min.sft an integer, the min sft used by the pickSoftThreshold function
+#' @param beta an integer, the power value used by WGCNA::adjacency
+#' @param cor.FN a character, the cor.options WGCNA::adjacency
+#' @param powers an integer vector, the powers vector used by WGCNA::pickSoftThreshold
+#' @param threshold value to binarize adj matrix against
+
+#' @return a igraph object object
+
+#' @importFrom WGCNA pickSoftThreshold adjacency bicor
+#' @importFrom igraph graph_from_adjacency_matrix
+
+#' @export
+learn_WGCNA_graph <- function(x,
+                              min.sft=0.85,
+                              beta=NULL,
+                              cor.FN=c("bicor", "cor"),
+                              powers=c(seq(1, 10, by = 1), seq(12, 20, by = 2)),
+                              threshold = NULL
+) {
+  # Handle arguments
+  cor.FN <- match.arg(cor.FN)
+
+  # Correlation options
+  if (cor.FN == "cor") cor.options = list(use="p")
+  if (cor.FN == "bicor") cor.options = list(pearsonFallback="individual")
+
+  # Pick soft threshold via scale-free fit
+  if (is.null(beta)) {
+    sft <- WGCNA::pickSoftThreshold(data=x,
+                                    corFnc=cor.FN,
+                                    RsquaredCut=min.sft,
+                                    powerVector=powers)
+
+    # Check selected power
+    beta <- .sft_check(sft)
+  }
+
+  # Construct co-expression similarity
+  adj <- WGCNA::adjacency(datExpr=x,
+                          power=beta,
+                          corFnc=cor.FN,
+                          type="unsigned",
+                          corOptions=cor.options)
+
+  # Binarize based on threshold
+  if(is.null(threshold)){threshold <- quantile(.upper_tri_vec(adj), .999)}
+  binary.adj <- (adj > threshold) * 1
+
+  # Remove looped edges
+  diag(binary.adj) <- 0
+
+  # Return as Igraph
+  return(igraph::graph_from_adjacency_matrix(binary.adj, mode = "undirected"))
+}
+
+
+
 ####################
 ###Compare Graphs###
 ####################
