@@ -1,32 +1,14 @@
-# library(igraph)
-# library(stringr)
-# library(dplyr)
-# library(parallel)
-# library(foreach)
-# library(doParallel)
-
-
-### Takes a network and list of vectors defining
-### subgraphs/modules (overlapping sets of of Nodes)
-### Learns the sub graphs as individual graphs
-### Reconnects them based on overlapping edges
-### And Returns a full graph
-
-## Args:
-## data, an p (variable) x n (sample) matrix containing the data to build the network
-## subGraphs, the subgraphs/modules defined by vectors of ints within a list
-
 #' Learns a network from data by dividing into it modules which are learned individually and stitched back together
-#' @param x PLACEHOLDER
-#' @param subgraph.index.list PLACEHOLDER
-#' @param keep.all.edges PLACEHOLDER
+#' @param x input data, p x n matrix
+#' @param subgraph.module overlappping subsets of p wihtin a module object
+#' @param keep.all.edges whether to keep all edges when combine subgraphs
 #' @param n.cores number of cores to use for multithreading
-#' @param graph.learning.func PLACEHOLDER
-#' @param arg.wrapping.func PLACEHOLDER
-#' @param out.parsing.func PLACEHOLDER
-#' @param packages.to.each PLACEHOLDER
-#' @param export.to.each PLACEHOLDER
-#' @param ... PLACEHOLDER
+#' @param graph.learning.func function to learn graphs
+#' @param arg.wrapping.func function to wrap each module of x with args for graph learning function
+#' @param out.parsing.func function to parse outputs of graph learning into list of igraphs and other outputs
+#' @param packages.to.each packages for each thread
+#' @param export.to.each functions for each thread
+#' @param ... other args to pass through arg wrapper to graph learning
 
 #' @return a list containing a the full graph (an igraph objects), the modular subgraphs (also igraphs), and any other outputs of graph learning
 
@@ -34,22 +16,22 @@
 #' @importFrom igraph is_igraph
 
 #' @export
-divide_and_conquer <- function(x, # input data, p x n matrix
-                               subgraph.module, # overlappping subsets of p
-                               keep.all.edges = FALSE, # whether to keep all edges in the overlap graph
+divide_and_conquer <- function(x,
+                               subgraph.module,
+                               keep.all.edges = FALSE,
                                n.cores = 1,
-                               graph.learning.func = learn_SILGGM_graph,  # function to learn graphs
-                               arg.wrapping.func = .default_arg_wrapper,  # function to wrap each module of x with args for graph learning function
-                               out.parsing.func = .default_output_parser, # function to parse outputs of graph learning into list of igraphs and other outputs
-                               packages.to.each = c("SILGGM", "igraph"),  # packages for each thread
+                               graph.learning.func = learn_SILGGM_graph,
+                               arg.wrapping.func = .default_arg_wrapper,
+                               out.parsing.func = .default_output_parser,
+                               packages.to.each = c("SILGGM", "igraph"),
                                export.to.each = c("learn_SILGGM_graph",
                                                   ".upper_tri_to_matrix",
                                                   ".matrix_p_adjust",
                                                   ".upper_tri_vec",
                                                   ".pcor_zscore",
                                                   ".pvalue",
-                                                  ".abs_pcor_filter"),  # functions to export to each thread
-                               ... # other args to pass through arg wrapper to graph learning
+                                                  ".abs_pcor_filter"),
+                               ...
 ){
   ##################
   ###Check Inputs###
@@ -172,6 +154,8 @@ divide_and_conquer <- function(x, # input data, p x n matrix
 #' @importFrom utils combn
 #' @importFrom dplyr bind_rows anti_join %>%
 
+#' @return an igraph object comprised of the combine subgraphs
+
 #' @keywords internal
 .connect_subgraphs <- function(sub.graphs, keep.all.edges = FALSE){
   #new graph containing all edges
@@ -256,6 +240,20 @@ divide_and_conquer <- function(x, # input data, p x n matrix
   return(full.graph)
 }
 
+#' Basic arg wrapper to prepare args for graph learning in divide_and_conquer
+
+#' @param sub.x subset of a large data matrix x defined based on modules
+#' @param method Methods for statistical inference with 5 options: "B_NW_SL", "D-S_NW_SL", "D-S_GL", "GFC_SL" and "GFC_L"
+#' @param global 	If global = TRUE, the global inference of all gene pairs is performed.
+#' @param alpha A user-supplied sequence of pre-sepecified alpha levels for FDR control. The default is alpha = 0.05, 0.1 if no sequence is provided.
+#' @param fdr.filter Whether to filter adjacency matrix results based on
+#' @param max.fdr The threshold to define an edge based on partial cor q val
+#' @param pos.cut Threhold to zero values in adjacency matrix
+#' @param neg.cut Threhold to zero values in adjacency matrix
+
+#' @return a list of arguments to feed to graph learning function
+
+#' @keywords internal
 .default_arg_wrapper <- function(sub.x,
                                  method  = "B_NW_SL",
                                  global = T,
@@ -278,6 +276,13 @@ divide_and_conquer <- function(x, # input data, p x n matrix
   })
 }
 
+#' Processes output of graph learning function into list of learned graphs and other outputs
+
+#' @param graph.learning.outputs list of outputs from each graph learning call on a subgraph
+
+#' @return a list containing the learned subgraphs and any other outputs of graph learning
+
+#' @keywords internal
 .default_output_parser <- function(graph.learning.outputs){
   return(
     list(
@@ -291,11 +296,7 @@ divide_and_conquer <- function(x, # input data, p x n matrix
 ### TEST ###
 ############
 
-# source("/restricted/projectnb/agedisease/personal/lberger/modular_graph_learning/ModularDAC/modularDAC/R/00.SimulateGraphs.R")
-# source("/restricted/projectnb/agedisease/personal/lberger/modular_graph_learning/ModularDAC/modularDAC/R/01.DetectModules.R")
-# source("/restricted/projectnb/agedisease/personal/lberger/modular_graph_learning/ModularDAC/modularDAC/R/02.LearnGraphs.R")
-#
-#
+
 # g <- make_modular_graph()
 # x <- sim_graph_data(g, 150)
 #

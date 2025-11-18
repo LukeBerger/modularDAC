@@ -1,8 +1,3 @@
-# library(SILGGM)
-# library(igraph)
-# library(dplyr)
-
-
 ### Allow for dplyr piping
 utils::globalVariables(".")
 
@@ -230,10 +225,6 @@ learn_SILGGM_graph <- function(x,
   return(x)
 }
 
-###########
-###WGCNA###
-###########
-
 #' Uses WGCNA to learn a graph
 #' @param x a n x p matrix of features
 #' @param min.sft an integer, the min sft used by the pickSoftThreshold function
@@ -246,6 +237,7 @@ learn_SILGGM_graph <- function(x,
 
 #' @importFrom WGCNA pickSoftThreshold adjacency bicor
 #' @importFrom igraph graph_from_adjacency_matrix
+#' @importFrom stats quantile
 
 #' @export
 learn_WGCNA_graph <- function(x,
@@ -348,7 +340,7 @@ calc_F1 <- function(g.true, g.pred) {
 #### Other ####
 ###############
 
-#' Preforms halfmin imputation to fill NAs in matrix missing values
+#' Preforms halfmin imputation to fill NAs in matrix missing values, useful for filling NAs in matrix before graph learning
 #' @param dat data matrix of numeric values
 
 #' @return the data matrix with NAs filled
@@ -374,8 +366,6 @@ halfmin_impute <- function(dat) {
 ## TEST ###
 ###########
 
-# source("/restricted/projectnb/agedisease/personal/lberger/modular_graph_learning/ModularDAC/modularDAC/R/00.SimulateGraphs.R")
-#
 # # make data
 # er <- make_modular_graph()
 # x <- sim_graph_data(er, n.samples = 100)

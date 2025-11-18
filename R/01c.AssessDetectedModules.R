@@ -1,12 +1,4 @@
-# library(igraph)
-# library(dplyr)
-
-
-## function with a series of helpers to get the percentage of nodes
-## matching between two sets of modules
-## takes a graph, and the names of two modules (attributes of the vertexs)
-
-#' Calculates the perctage of nodes assigned to the same module between to module sets, based on node index, not module name
+#' Calculates the percentage of nodes assigned to the same module between to module sets, based on node index, not module name
 #' @param m1 a module object
 #' @param m2 another module object to compare to
 
@@ -31,7 +23,7 @@ percent_module_match <- function(m1, m2){
 #' @param m1.names Node character vector from m1
 #' @param m2.names Node character vector from m2
 
-#' return a list of all the best modules matched based on node membership
+#' @return a list of all the best modules matched based on node membership
 
 #' @keywords internal
 .match_modules <- function(m1.nodes, m2.nodes, m1.names, m2.names){
@@ -67,9 +59,6 @@ percent_module_match <- function(m1, m2){
   return(matches)
 }
 
-## Assess module quality based on the number of nodes with more edges outside
-## of module then within it
-
 #' Calculate the percentage of nodes with more edges within their module then outside of it
 #' @param g an igraph object
 #' @param test.module a module to test for contiguity, whose nodes indexs and names must match the graph
@@ -100,9 +89,7 @@ module_contiguity <- function(g, test.module){
 ### TEST ###
 ############
 
-# source("/restricted/projectnb/agedisease/personal/lberger/modular_graph_learning/ModularDAC/modularDAC/R/00.SimulateGraphs.R")
-# source("/restricted/projectnb/agedisease/personal/lberger/modular_graph_learning/ModularDAC/modularDAC/R/01.DetectModules.R")
-#
+
 # # make data
 # er <- make_modular_graph()
 # x <- sim_graph_data(er, n.samples = 10)
@@ -118,7 +105,6 @@ module_contiguity <- function(g, test.module){
 # i <- find_ICA_mods(x, 3)
 #
 #
-# #
 # test1 <- methods::new("module",
 #                     source = "test",
 #                     overlapping = FALSE,

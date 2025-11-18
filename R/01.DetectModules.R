@@ -1,7 +1,4 @@
-# library(WGCNA)
-# library(fastICA)
-
-## Declare module object
+# Declare module object
 setClass("module",
          slots = list(
            source = "character",
@@ -37,11 +34,6 @@ setClass("module",
 
 
 )
-
-
-## Takes a n x p  matrix of  data and list of args to cuttreeDynamic
-## Returns dendo plot and list of modules
-## Based on mods.detect from shin
 
 #' Uses WGCNA to detect modules from a data matrix
 #' @param x a n x p matrix of features
@@ -126,7 +118,12 @@ find_WGCNA_mods <- function(x,
   return(WGCNA.mods)
 }
 
-# Needs Roxigen tags
+#' Helper to WGCNA calling functions to select soft thresholding power in WGCNA::adjacency
+#' @param sft output of WGCNA::pickSoftThreshold
+
+#' @return an int power level
+
+#' @keywords internal
 .sft_check <- function(sft) {
   beta <- sft$powerEstimate
   if (is.na(beta)) {
@@ -137,11 +134,6 @@ find_WGCNA_mods <- function(x,
   }
   return(beta)
 }
-
-
-## Simple module detection based on ICA components
-## takes a p x n  matrix of data, a number of components to search for, and args to fastICA
-## returns a list of modules assigned based on maximum abs competent score
 
 #' Uses ICA to detect modules from a data matrix
 #' @param x a p x n  matrix of features
@@ -324,10 +316,6 @@ find_megena_mods <- function(x,
   return(meg.mods)
 }
 
-## Detect initial modules based on ICA components
-## Convert to n.mods modules of max.size nodes
-## returns a list contian module indexes, node names, and ica scores
-
 #' Uses ICA to detect modules from a data matrix then reassigned nodes to fit all modules to a max size
 #' @param x  a p x n matrix of features
 #' @param max.size the maximum number of members in a data matrix
@@ -410,9 +398,6 @@ pragmatic_modules <- function(x, max.size, n.mods = NULL){
   return(prag.mods)
 }
 
-## Create overlapping fuzzy modules by adding nodes to prexisiting modules up to a max size,
-## new nodes are selected based on correlation with the modules eigen gene (first pc)
-
 #' Creates overlapping sets of fuzzy modules based on correlation of nodes outside the module with its eigen gene
 #' @param x a p x n matrix of features
 #' @param input.modules a module object
@@ -461,9 +446,6 @@ eigen_fuzzy_modules <- function(x, input.modules, max.size){
 
 }
 
-## Create overlapping fuzzy modules by adding nodes to prexisiting modules up to a max size,
-## new nodes are selected based on correlation with individual nodes in the module
-
 #' Creates overlapping sets of fuzzy modules based on nodewise correlation of nodes outside the module with any of the nodes within it
 #' @param x a p x n matrix of features
 #' @param input.modules a module object
@@ -511,9 +493,6 @@ nodewise_fuzzy_modules <- function(x, input.modules, max.size){
   )
   return(fuzzy_modules)
 }
-
-## Get a new set of modules, completely overlapping the old set
-## To ensure the learned graph can stitch together vary nicely
 
 #' Create a set of overlapping modules from data matrix and strict, none overlapping modules
 #' @param x a p x n matrix of features
@@ -632,8 +611,6 @@ create_overlap_modules <- function(x, input.modules, use.eigen = TRUE, best.pair
 ## TEST ###
 ###########
 
-# source("/restricted/projectnb/agedisease/personal/lberger/modular_graph_learning/ModularDAC/00.SimulateGraphs.R")
-#
 # # make data
 # er <- make_modular_graph()
 # x <- sim_graph_data(er, n.samples =100)
@@ -656,50 +633,4 @@ create_overlap_modules <- function(x, input.modules, use.eigen = TRUE, best.pair
 #
 # # overlap mods
 # o <- create_overlap_modules(x, p)
-#
-# #check mod constraints
-# for(mod in list(w, i ,p)){
-#   #check feature number matches input data
-#   if(length(mod@index.vector) != nrow(x)){
-#     stop(paste(mod@source, "produced a index vector with the incorrect number of features"))
-#   }
-#   #check that all feature names in modules come from the data
-#   if(!all(unlist(mod@name.list) %in% rownames(x))){
-#     stop(paste(mod@source, "feature names do not match input data"))
-#   }
-#   #check that each module has the same number of feature indexes and names
-#   if(
-#     !all(
-#       unlist(
-#         lapply(seq_along(mod@index.list), function(i) length(mod@index.list[[i]]) == length(mod@name.list[[i]]))
-#         )
-#       )
-#   ){stop(paste(mod@source, "produced differnet length index and name lists"))}
-#
-# }
-#
-# for(mod in list(ef, nf ,o)){
-#   #check that all feature names in modules come from the data
-#   if(!all(unlist(mod@name.list) %in% rownames(x))){
-#     stop(paste(mod@source, "feature names do not match input data"))
-#   }
-#   #check that each module has the same number of feature indexes and names
-#   if(
-#     !all(
-#       unlist(
-#         lapply(seq_along(mod@index.list), function(i) length(mod@index.list[[i]]) == length(mod@name.list[[i]]))
-#       )
-#     )
-#   ){stop(paste(mod@source, "produced differnet length index and name lists"))}
-#   #check that overlaps exist between all modules
-#   if(!all(
-#     unlist(
-#       lapply(seq_along(mod@index.list), function(i){
-#         any(unlist(mod@index.list[i]) %in% unlist(mod@index.list[-i]))
-#       })
-#     )
-#   )){stop(paste(mod@source, "has modules with incomplete overlaps"))}
-#
-#
-# }
-#
+

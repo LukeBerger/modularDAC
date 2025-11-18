@@ -1,16 +1,3 @@
-# library(fastICA)
-# library(DescTools)
-# library(dplyr)
-
-
-## Complex Module detection via multistage algorithm (based on ICA core modules)
-
-## TAKES: data matrix (transformed eset exprs), number of components to look for,
-## number of nodes in "core modules", intial threshold for determining neighbors
-## minium threshold for determining neighbors
-
-## RETURNS: list of module assignments
-
 #' Uses ICA to find the core of modules, then iteratively expands outward based on a decreasing threshold of correlation
 #' @param x  a p x n matrix of features
 #' @param n.comp the number of components to search for in the data
