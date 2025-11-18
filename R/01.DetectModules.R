@@ -27,8 +27,8 @@ setClass("module",
            if(!object@overlapping){
              # check that every module contains a unique index
              if(any(unlist(
-               lapply(seq_along(mod@index.list), function(i){
-                 any(unlist(mod@index.list[i]) %in% unlist(mod@index.list[-i]))
+               lapply(seq_along(object@index.list), function(i){
+                 any(unlist(object@index.list[i]) %in% unlist(object@index.list[-i]))
                })
              ))){return("All modules must contain overlaps with at least on other module")}
            }
@@ -73,7 +73,6 @@ find_WGCNA_mods <- function(x,
 ) {
 
   # Handle arguments
-  args <- as.list(environment())
   cor.FN <- match.arg(cor.FN)
 
   # Correlation options
@@ -429,6 +428,9 @@ eigen_fuzzy_modules <- function(x, input.modules, max.size){
   index.list <- lapply(input.modules@index.list, function(mod){
     #get number of required fuzzy nodes
     n.fuzzy.nodes <- max.size - length(mod)
+    if(n.fuzzy.nodes < 1){
+      stop("Warning, modules exist larger than max size")
+    }
 
     #get the modules eigen gene
     mod.PC <- stats::prcomp(t(x[mod,]), scale. = TRUE)
