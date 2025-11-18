@@ -6,7 +6,7 @@
 \usage{
 divide_and_conquer(
   x,
-  subgraph.features,
+  subgraph.module,
   keep.all.edges = FALSE,
   n.cores = 1,
   graph.learning.func = learn_SILGGM_graph,
@@ -19,25 +19,25 @@ divide_and_conquer(
 )
 }
 \arguments{
-\item{x}{PLACEHOLDER}
+\item{x}{input data, p x n matrix}
 
-\item{subgraph.features}{PLACEHOLDER}
+\item{subgraph.module}{overlappping subsets of p wihtin a module object}
 
-\item{keep.all.edges}{PLACEHOLDER}
+\item{keep.all.edges}{whether to keep all edges when combine subgraphs}
 
 \item{n.cores}{number of cores to use for multithreading}
 
-\item{graph.learning.func}{PLACEHOLDER}
+\item{graph.learning.func}{function to learn graphs}
 
-\item{arg.wrapping.func}{PLACEHOLDER}
+\item{arg.wrapping.func}{function to wrap each module of x with args for graph learning function}
 
-\item{out.parsing.func}{PLACEHOLDER}
+\item{out.parsing.func}{function to parse outputs of graph learning into list of igraphs and other outputs}
 
-\item{packages.to.each}{PLACEHOLDER}
+\item{packages.to.each}{packages for each thread}
 
-\item{export.to.each}{PLACEHOLDER}
+\item{export.to.each}{functions for each thread}
 
-\item{...}{PLACEHOLDER}
+\item{...}{other args to pass through arg wrapper to graph learning}
 }
 \value{
 a list containing a the full graph (an igraph objects), the modular subgraphs (also igraphs), and any other outputs of graph learning

@@ -2,7 +2,7 @@
 % Please edit documentation in R/00.SimulateGraphs.R
 \name{sim_graph_data}
 \alias{sim_graph_data}
-\title{Generates simulated data moduleing n.samples based on a network}
+\title{Generates simulated data modeling n.samples based on a network}
 \usage{
 sim_graph_data(g, n.samples, mean.vec = NULL)
 }
@@ -17,5 +17,5 @@ sim_graph_data(g, n.samples, mean.vec = NULL)
 a p x n data matrix
 }
 \description{
-Generates simulated data moduleing n.samples based on a network
+Generates simulated data modeling n.samples based on a network
 }

@@ -13,8 +13,10 @@
 
 \item{m1.names}{Node character vector from m1}
 
-\item{m2.names}{Node character vector from m2
-return a list of all the best modules matched based on node membership}
+\item{m2.names}{Node character vector from m2}
+}
+\value{
+a list of all the best modules matched based on node membership
 }
 \description{
 Finds the best module matches between two sets of nodes

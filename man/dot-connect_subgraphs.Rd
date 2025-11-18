@@ -2,7 +2,7 @@
 % Please edit documentation in R/03.Multithreaded_DaC.R
 \name{.connect_subgraphs}
 \alias{.connect_subgraphs}
-\title{Connects the subgraphs output by}
+\title{Connects the subgraphs output based on overlapping nodes}
 \usage{
 .connect_subgraphs(sub.graphs, keep.all.edges = FALSE)
 }
@@ -11,7 +11,10 @@
 
 \item{keep.all.edges}{PLACEHOLDER}
 }
+\value{
+an igraph object comprised of the combine subgraphs
+}
 \description{
-Connects the subgraphs output by
+Connects the subgraphs output based on overlapping nodes
 }
 \keyword{internal}
