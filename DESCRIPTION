@@ -34,3 +34,6 @@ Imports:
     doParallel
 URL: https://github.com/LukeBerger/modularDAC
 BugReports: https://github.com/LukeBerger/modularDAC/issues
+Suggests: 
+    testthat (>= 3.0.0)
+Config/testthat/edition: 3
