@@ -306,14 +306,17 @@ sim_graph_data <- function(g, n.samples, mean.vec = NULL){
 }
 
 
-#' Plots a graph with nicely labled modules
-#' @param g an igrapgh object
+#' Plots a graph with nicely coloured modules
+#' @param g an igraph object
 #' @param module.name the name of the module value on each node
 #' @param subgraphs boolean indicating whether to use subgraphs
 #' @param subname the name of the subgraph value on each node
+
 #' @importFrom igraph as_edgelist V vertex.attributes
 #' @importFrom dplyr %>%
 #' @import visNetwork
+
+#' @export
 modular_plot <- function(g,
                          module.name = "module",
                          subgraphs = FALSE,
