@@ -141,11 +141,11 @@ test_all <- function(){
 
   #test function with BDgrapg learning
   dac <- divide_and_conquer(x, ef,
-                               graph.learning.func = .bdWrapper,
-                               arg.wrapping.func = .other_arg_wrapper,
+                               graph.learning.func = .bd_wrapper,
+                               arg.wrapping.func = .bd_arg_wrapper,
                                out.parsing.func = .default_output_parser,
                                packages.to.each = c("igraph", "BDgraph"),
-                               export.to.each = c(".bdWrapper")
+                               export.to.each = c(".bd_wrapper")
   )
   if(!igraph::is_igraph(dac$final.graph)){stop("divide_and_conquer failed to produce an igraph with bdgraph learning")}
   if(!all(unlist(lapply(dac$modular.subgraphs, igraph::is_igraph)))){stop("divide_and_conquer failed to produce a list of modular igraphs bdgraph learning")}
@@ -156,21 +156,7 @@ test_all <- function(){
   print("Package testing complete! modularDAC is fully functional!")
 }
 
-### Alternative functions for testing divide_and_conquer
-.other_arg_wrapper <- function(sub.x, n.bootstraps, sub.ratio){
-  lapply(sub.x, function(x){
-    list(
-      x = t(x)
-    )
-  })
-}
 
-.bdWrapper <- function(x){
-  bdFit <- BDgraph::bdgraph(x)
-  postProb <- BDgraph::plinks(bdFit)
-  adjMat <- BDgraph::select(postProb)
-  igraph::graph_from_adjacency_matrix(adjMat, mode = "undirected") # can change this if I want to test edge directional update for .connect_subgraphs
-}
 
 
 

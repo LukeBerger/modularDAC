@@ -292,6 +292,40 @@ divide_and_conquer <- function(x,
   )
 }
 
+
+### Alternative functions for running with BDgraph
+
+#' Arg Wrapper for BD graph
+#' @param sub.x subset of a large data matrix x defined based on modules
+
+#' @return a list containing the learned subgraphs data transformed
+
+#' @keywords internal
+.bd_arg_wrapper <- function(sub.x){
+  lapply(sub.x, function(x){
+    list(
+      x = t(x)
+    )
+  })
+}
+
+#' grapgh learning wrapper for BD graph
+#' @param x subset of a large data matrix x defined based on modules, transformed by arg wrapper
+
+#' @return a list containing the learned subgraphs data transformed
+
+#' @importFrom BDgraph bdgraph plinks select
+#' @importFrom igraph graph_from_adjacency_matrix
+
+#' @keywords internal
+.bd_wrapper <- function(x){
+  bdFit <- BDgraph::bdgraph(x)
+  postProb <- BDgraph::plinks(bdFit)
+  adjMat <- BDgraph::select(postProb)
+  igraph::graph_from_adjacency_matrix(adjMat, mode = "undirected") # can change this if I want to test edge directional update for .connect_subgraphs
+}
+
+
 ############
 ### TEST ###
 ############
