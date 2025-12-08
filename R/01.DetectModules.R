@@ -35,6 +35,73 @@ setClass("module",
 
 )
 
+#' Returns true modules from a simualted graph with V(g)$modules
+#' @param g a igraph object with values for each node in the V(g)$module field
+
+#' @return a module object
+
+#' @importFrom methods new
+#' @importFrom igraph V
+
+#' @keywords internal
+.true_modules <- function(g){
+  methods::new("module",
+                source = "True Modules",
+                overlapping = FALSE,
+                index.vector = igraph::V(g)$module,
+                index.list = split(1:length(g) , igraph::V(g)$module),
+                name.list = split(igraph::V(g)$name , igraph::V(g)$module)
+  )
+}
+
+
+#'Checks if a module object is properly formated and throws errors if not
+#' @param x data matrix used to learn the modules
+#' @param m a module object
+
+#' @return TRUE, if all checks passed
+
+#' @keywords internal
+.module_check <- function(x, m){
+  if(m@overlapping){
+    #check that overlaps exist between all modules
+    if(!all(
+      unlist(
+        lapply(seq_along(m@index.list), function(i){
+          any(unlist(m@index.list[i]) %in% unlist(m@index.list[-i]))
+        })
+      )
+    )){stop(paste(m@source, "has mules with incomplete overlaps"))}
+  }else{
+    #check feature number matches input data
+    if(length(m@index.vector) != nrow(x)){
+      stop(paste(m@source, "produced a index vector with the incorrect number of features"))
+    }
+    #check that there are no overlaps
+    if(any(
+      unlist(
+        lapply(seq_along(m@index.list), function(i){
+          any(unlist(m@index.list[i]) %in% unlist(m@index.list[-i]))
+        })
+      )
+    )){stop(paste(m@source, "has mules with overlaps"))}
+  }
+
+  #check that all feature names in modules come from the data
+  if(!all(unlist(m@name.list) %in% rownames(x))){
+    stop(paste(m@source, "feature names do not match input data"))
+  }
+  #check that each module has the same number of feature indexes and names
+  if(
+    !all(
+      unlist(
+        lapply(seq_along(m@index.list), function(i) length(m@index.list[[i]]) == length(m@name.list[[i]]))
+      )
+    )
+  ){stop(paste(m@source, "produced differnet length index and name lists"))}
+  return(TRUE)
+}
+
 #' Uses WGCNA to detect modules from a data matrix
 #' @param x a n x p matrix of features
 #' @param min.size an integer, the min size parameter for dynamicTreeCut
