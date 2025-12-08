@@ -35,7 +35,7 @@ setClass("module",
 
 )
 
-#' Returns true modules from a simualted graph with V(g)$modules
+#' Returns true modules from a simulated graph with V(g)$modules
 #' @param g a igraph object with values for each node in the V(g)$module field
 
 #' @return a module object
@@ -43,14 +43,44 @@ setClass("module",
 #' @importFrom methods new
 #' @importFrom igraph V
 
-#' @keywords internal
-.true_modules <- function(g){
+#' @export
+true_modules <- function(g){
   methods::new("module",
                 source = "True Modules",
                 overlapping = FALSE,
                 index.vector = igraph::V(g)$module,
                 index.list = split(1:length(g) , igraph::V(g)$module),
                 name.list = split(igraph::V(g)$name , igraph::V(g)$module)
+  )
+}
+
+#' Returns fuzzy moduls based on neighborhood in true graph
+#' @param m a module object
+#' @param g a igraph object with values for each node in the V(g)$module field
+
+#' @return a module object
+
+#' @importFrom methods new
+#' @importFrom igraph V neighborhood
+
+#' @export
+true_fuzzy <- function(m, g){
+  f.index.list <- lapply(m@index.list, function(x){
+    sort(unique(unlist(
+      igraph::neighborhood(
+        g,
+        order = 2,
+        nodes = igraph::V(g)[x],
+        mode = "all",
+        mindist = 0
+      )
+    )))
+  })
+  methods::new("module",
+               source = "True Module Fuzzy",
+               overlapping = TRUE,
+               index.list = f.index.list,
+               name.list = lapply(f.index.list, function(m) igraph::V(g)$name[m])
   )
 }
 

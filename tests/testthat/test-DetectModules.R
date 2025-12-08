@@ -4,7 +4,7 @@ test_that("Module Check", {
   x <- sim_graph_data(er, n.samples = 100)
 
   # true mods
-  t <- .true_modules(er)
+  t <- true_modules(er)
   expect_true(.module_check(x , t))
 
   # basic mods
@@ -18,6 +18,9 @@ test_that("Module Check", {
   expect_true(.module_check(x , p))
 
   # fuzzy mods
+  tf <- true_fuzzy(t, er)
+  expect_true(.module_check(x , tf))
+
   ef <- eigen_fuzzy_modules(x, p, 80)
   expect_true(.module_check(x , ef))
 
