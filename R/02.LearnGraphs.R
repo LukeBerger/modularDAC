@@ -347,8 +347,8 @@ calc_F1 <- function(g.true, g.pred) {
 
 #' @importFrom matrixStats rowMins rowMeans2
 
-#' @export
-halfmin_impute <- function(dat) {
+#' @keywords internal
+.halfmin_impute <- function(dat) {
   halfmin <- matrix(matrixStats::rowMins(dat, na.rm = TRUE) / 2,
                     nrow = nrow(dat), ncol = ncol(dat), dimnames = dimnames(dat)
   )
