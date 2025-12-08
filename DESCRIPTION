@@ -29,6 +29,7 @@ Imports:
     DescTools,
     SILGGM,
     MEGENA,
+    minet,
     foreach,
     parallel,
     doParallel
