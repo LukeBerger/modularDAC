@@ -2,7 +2,7 @@
 % Please edit documentation in R/00.SimulateGraphs.R
 \name{modular_plot}
 \alias{modular_plot}
-\title{Plots a graph with nicely labled modules}
+\title{Plots a graph with nicely coloured modules}
 \usage{
 modular_plot(
   g,
@@ -12,7 +12,7 @@ modular_plot(
 )
 }
 \arguments{
-\item{g}{an igrapgh object}
+\item{g}{an igraph object}
 
 \item{module.name}{the name of the module value on each node}
 
@@ -21,5 +21,5 @@ modular_plot(
 \item{subname}{the name of the subgraph value on each node}
 }
 \description{
-Plots a graph with nicely labled modules
+Plots a graph with nicely coloured modules
 }
