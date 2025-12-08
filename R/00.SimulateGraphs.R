@@ -613,17 +613,3 @@ modular_plot <- function(g,
   return(simulation)
 }
 
-
-############
-### TEST ###
-############
-
-# # make graphs
-# er <- make_modular_graph()
-# hybrid <- make_submodular_graph()
-#
-# #plot
-# modular_plot(er)
-#
-# # sim data
-# x <- sim_graph_data(er, n.samples = 10)

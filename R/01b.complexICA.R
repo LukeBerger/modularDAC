@@ -92,42 +92,6 @@ complex_ICA_modules <- function(x,n.comp, core.size = 5, starting.threshold = 0.
   return(cICA.mods)
 }
 
-##########
-###TEST###
-##########
-
-# source("/restricted/projectnb/agedisease/personal/lberger/modular_graph_learning/ModularDAC/modularDAC/R/00.SimulateGraphs.R")
-# source("/restricted/projectnb/agedisease/personal/lberger/modular_graph_learning/ModularDAC/modularDAC/R/01.DetectModules.R")
-#
-# er <- make_modular_graph()
-# x <- sim_graph_data(er, n.samples = 100)
-# mod <- complex_ICA_modules(x, 3)
-#
-# #############
-# ###TESTING###
-# #############
-#
-# #check feature number matches input data
-# if(length(mod@index.vector) != nrow(x)){
-#   stop(paste(mod@source, "produced a index vector with the incorrect number of features"))
-# }
-# #check that all feature names in modules come from the data
-# if(!all(unlist(mod@name.list) %in% rownames(x))){
-#   stop(paste(mod@source, "feature names do not match input data"))
-# }
-# #check that each module has the same number of feature indexes and names
-# if(
-#   !all(
-#     unlist(
-#       lapply(seq_along(mod@index.list), function(i) length(mod@index.list[[i]]) == length(mod@name.list[[i]]))
-#       )
-#     )
-# ){stop(paste(mod@source, "produced differnet length index and name lists"))}
-#
-
-
-
-
 
 ##################################################
 ###Alternative methods for defining core module###

@@ -673,31 +673,3 @@ create_overlap_modules <- function(x, input.modules, use.eigen = TRUE, best.pair
   return(overlap.modules)
 }
 
-
-###########
-## TEST ###
-###########
-
-# # make data
-# er <- make_modular_graph()
-# x <- sim_graph_data(er, n.samples =100)
-# true_modules <- methods::new("module",
-#                     source = "True Modules",
-#                     overlapping = FALSE,
-#                     index.vector = igraph::V(er)$module,
-#                     index.list = split(1:120 , igraph::V(er)$module),
-#                     name.list = split(igraph::V(er)$name , igraph::V(er)$module)
-# )
-#
-# # learn mods
-# w <- find_WGCNA_mods(t(x), cor.FN = "bicor")
-# i <- find_ICA_mods(x, 3)
-# p <- pragmatic_modules(x,n.mods = 3, max.size = 60)
-#
-# # fuzzy mods
-# ef <- eigen_fuzzy_modules(x, p, 80)
-# nf <- nodewise_fuzzy_modules(x, p, 80)
-#
-# # overlap mods
-# o <- create_overlap_modules(x, p)
-

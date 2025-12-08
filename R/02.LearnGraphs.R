@@ -360,16 +360,3 @@ calc_F1 <- function(g.true, g.pred) {
   dat[is.na(dat)] <- halfmin[is.na(dat)]
   return(dat)
 }
-
-
-###########
-## TEST ###
-###########
-
-# # make data
-# er <- make_modular_graph()
-# x <- sim_graph_data(er, n.samples = 100)
-#
-# # test silggm learning
-# s <- learn_SILGGM_graph(t(x))
-# calc_F1(er, s)
