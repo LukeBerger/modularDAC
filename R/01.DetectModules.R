@@ -268,6 +268,204 @@ find_ICA_mods <- function(x, #exprs(eset)
 }
 
 
+#' Uses WGCNA and ICA to indentify modules
+#' @param x a p x n  matrix of features
+#' @param min.size minimum size of output modules
+#' @param max.size maximum size of output modules
+#' @param min.sft an integer, the min sft used by the pickSoftThreshold function
+#' @param beta an integer, the power value used by WGCNA::adjacency
+#' @param cor.FN a character, the cor.options WGCNA::adjacency
+#' @param powers an integer vector, the powers vector used by WGCNA::pickSoftThreshold
+#' @param hclust.method a character, the method used by flashClust
+#' @param cut.height an integer between 0 and 1, the cut height used by cutreeDynamic
+#' @param core.size the size of the module cores determine by ICA
+#' @param starting.threshold the starting threshold for correlation to be added to a module
+#' @param min.threshold the minimun threshold for correlation, if set above zero will result in incomplete assignments
+
+#' @return a module object
+
+#' @importFrom WGCNA pickSoftThreshold adjacency TOMdist bicor
+#' @importFrom flashClust flashClust
+#' @importFrom stats as.dist
+#' @importFrom dynamicTreeCut cutreeDynamic
+#' @importFrom fastICA fastICA
+#' @importFrom methods new
+
+#' @export
+hybrid_modules <- function(
+    x,
+    min.size,
+    max.size,
+    min.sft=0.85,
+    beta=NULL,
+    cor.FN="bicor",
+    powers=c(seq(1, 10, by = 1), seq(12, 20, by = 2)),
+    hclust.method="average",
+    cut.height = NULL,
+    core.size = 10,
+    starting.threshold = 0.8,
+    min.threshold = 0
+){
+
+  ######################
+  ### Get Adj Matrix ###
+  ######################
+
+  # Correlation options
+  if (cor.FN == "cor") cor.options = list(use="p")
+  if (cor.FN == "bicor") cor.options = list(pearsonFallback="individual")
+
+  # Pick soft threshold via scale-free fit
+  if (is.null(beta)) {
+    sft <- WGCNA::pickSoftThreshold(data=t(x),
+                                    corFnc=cor.FN,
+                                    RsquaredCut=min.sft,
+                                    powerVector=powers)
+
+    # Check selected power
+    beta <- .sft_check(sft)
+  }
+
+  # Construct co-expression similarity
+  adj <- WGCNA::adjacency(datExpr=t(x),
+                          power=beta,
+                          corFnc=cor.FN,
+                          type="unsigned",
+                          corOptions=cor.options)
+
+  ##############################
+  ### Get Initial WGCNA Mods ###
+  ##############################
+
+  # Topological overlap dissimilarity transformation
+  dis <- WGCNA::TOMdist(adjMat=adj, TOMType="unsigned")
+
+  # Fast hierarchical clustering of dissimilarity
+  dendro <- flashClust::flashClust(d=stats::as.dist(dis), method=hclust.method)
+
+  # Module identification using dynamic tree cut algorithm
+  index.vector <- dynamicTreeCut::cutreeDynamic(dendro=dendro,
+                                                cutHeight = cut.height,
+                                                method="hybrid",
+                                                distM=dis,
+                                                deepSplit=4,
+                                                pamRespectsDendro=FALSE,
+                                                minClusterSize=min.size)
+
+  #####################################
+  ### Use ICA to Find Modular Cores ###
+  #####################################
+
+  # learn n comp from wgcna
+  n.comp <- length(unique(index.vector[index.vector!=0]))
+
+  # find cores using ICA
+  ICA.results <- fastICA::fastICA(X= x,
+                                  n.comp = n.comp,
+                                  verbose = 0
+  )
+
+
+  #get basic mods based on max component score of ICA
+  s.matrix <- abs(ICA.results$S)
+  basic.mods <- apply(s.matrix, 1, which.max) #modules named based on ICA column
+
+  #very stringent modules based on top 5 values
+  complex.mods <- basic.mods #probably a better way to this, may not need to define basic mods
+  top.5 <- apply(s.matrix, 2, function(col){
+    which(col %in% sort(col, decreasing = T)[1:core.size])
+  })
+  complex.mods[-top.5] <- 0
+
+  #######################################
+  ### Iterative Expansion Form Cores ###
+  #######################################
+
+  # zero diagonal of adj mat
+  diag(adj) <- 0
+
+  # iterative expansion by best neighbor with threshold
+  last.mods <- complex.mods
+  unassigned <- which(complex.mods == 0)
+  threshold = starting.threshold
+  while(length(unassigned) > 0){ #there might be a more efficient way to check this
+    #for each assigned node
+    assigned <- which(complex.mods != 0)
+    unassigned <- which(complex.mods == 0)
+    for(node in assigned){
+      #find its best neighbor based on wgcna adj
+      best <- unassigned[which.max(adj[node, unassigned])]
+      #if that adj is above the current threshold
+      if(length(best) !=0){
+        if(adj[node,best] > threshold){
+          #assign node
+          complex.mods[best] <- complex.mods[node]
+        }
+      }
+
+
+    }
+    #if no changes
+    if(all(last.mods == complex.mods)){
+      #and not at min threshold
+      if(threshold > min.threshold){
+        #lower threshold
+        threshold <- threshold - 0.05
+      }else{
+        #break if at min threshold and no longer changing
+        break
+      }
+    }
+    last.mods <- complex.mods
+  }
+
+  ##########################################
+  ### Trade Nodes to Get Within Max Size ###
+  ##########################################
+
+  # find modules which are two large
+  mod.sizes = table(complex.mods)
+  giving = which(mod.sizes > max.size)
+  receiving = which(mod.sizes < max.size)
+
+  # get all nodes from giving modules
+  giving.nodes <- which(complex.mods %in% giving)
+  receiving.nodes <- which(complex.mods %in% receiving)
+
+  while(length(giving) > 0){
+    # find the giving node with the highest adj in a receiving module
+    trade.scores <- adj[giving.nodes, -giving.nodes]
+    best.trade <- which.max( matrixStats::rowMaxs(trade.scores) )
+
+    # change the mode of the best giver
+    complex.mods[ giving.nodes[ best.trade ] ] <- complex.mods[ receiving.nodes[ best.trade ] ]
+
+    # update module status
+    mod.sizes = table(complex.mods)
+    giving = which(mod.sizes > max.size)
+    receiving = which(mod.sizes < max.size)
+    giving.nodes <- which(complex.mods %in% giving)
+    receiving.nodes <- which(complex.mods %in% receiving)
+  }
+
+  ##########################################
+  ### Return as Properly Formatted Module ###
+  ##########################################
+
+  # convert to module object and return
+  methods::new(
+    "module",
+    source = "hybrid",
+    data.dim = dim(x),
+    overlapping = FALSE,
+    index.vector = complex.mods,
+    score.vector = apply(abs(ICA.results$S), 1, max),
+    index.list =split(1:nrow(x) , complex.mods),
+    name.list = split(rownames(x), complex.mods)
+  )
+
+}
+
 #' Uses MCL to detect modules from a data matrix
 #' @param x a n x p matrix of features
 #' @param beta an integer, the power value for WGCNA::adjacency
