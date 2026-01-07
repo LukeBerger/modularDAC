@@ -13,7 +13,8 @@
 #' @importFrom methods new
 
 #' @export
-complex_ICA_modules <- function(x,n.comp, core.size = 5, starting.threshold = 0.5, min.threshold = 0){
+complex_ICA_modules <- function(x, n.comp, core.size = 5, starting.threshold = 0.5, min.threshold = 0){
+
   #########################
   ###Define core modules###
   #########################
