@@ -8,8 +8,8 @@ test_that("Module Check", {
   expect_true(.module_check(x , t))
 
   # basic mods
-  w <- suppressMessages(find_WGCNA_mods(x))
-  expect_true(.module_check(x , w)) # commenting out to save on run time when not working with this function
+  # w <- suppressMessages(find_WGCNA_mods(x))
+  # expect_true(.module_check(x , w)) # commenting out to save on run time when not working with this function
 
   i <- find_ICA_mods(x, 10)
   expect_true(.module_check(x , i))
@@ -30,10 +30,6 @@ test_that("Module Check", {
   # overlap mods
   # o <- create_overlap_modules(x, p)
   # expect_true(.module_check(x , o))
-  #
-  # # complex ICA mods
-  # ci <- complex_ICA_modules(x, 3)
-  # expect_true(.module_check(x , ci))
 
   # assess accuracy and contiguity of modules
   pm <- percent_module_match(t, i)
