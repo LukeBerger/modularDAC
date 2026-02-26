@@ -4,7 +4,7 @@
 \alias{eigen_fuzzy_modules}
 \title{Creates overlapping sets of fuzzy modules based on correlation of nodes outside the module with its eigen gene}
 \usage{
-eigen_fuzzy_modules(x, input.modules, max.size)
+eigen_fuzzy_modules(x, input.modules, max.size, n.pc = 2, ratio = 1.5)
 }
 \arguments{
 \item{x}{a p x n matrix of features}
@@ -12,6 +12,10 @@ eigen_fuzzy_modules(x, input.modules, max.size)
 \item{input.modules}{a module object}
 
 \item{max.size}{The maximum number of members in a data matrix}
+
+\item{n.pc}{number of principle componets use to define correlation of fuzzy nodes to the module}
+
+\item{ratio}{the ratio of original nodes in the module to nodes in the fuzzy module}
 }
 \value{
 a module object

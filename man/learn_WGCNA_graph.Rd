@@ -27,7 +27,7 @@ learn_WGCNA_graph(
 \item{threshold}{value to binarize adj matrix against}
 }
 \value{
-a igraph object object
+a igraph object
 }
 \description{
 Uses WGCNA to learn a graph

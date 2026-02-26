@@ -26,9 +26,9 @@ Imports:
     WGCNA,
     fastICA,
     MCL,
-    DescTools,
     SILGGM,
     MEGENA,
+    minet,
     foreach,
     parallel,
     doParallel

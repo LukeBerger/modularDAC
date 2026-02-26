@@ -35,7 +35,7 @@ setClass("module",
 
 )
 
-#' Returns true modules from a simualted graph with V(g)$modules
+#' Returns true modules from a simulated graph with V(g)$modules
 #' @param g a igraph object with values for each node in the V(g)$module field
 
 #' @return a module object
@@ -43,14 +43,44 @@ setClass("module",
 #' @importFrom methods new
 #' @importFrom igraph V
 
-#' @keywords internal
-.true_modules <- function(g){
+#' @export
+true_modules <- function(g){
   methods::new("module",
                 source = "True Modules",
                 overlapping = FALSE,
                 index.vector = igraph::V(g)$module,
                 index.list = split(1:length(g) , igraph::V(g)$module),
                 name.list = split(igraph::V(g)$name , igraph::V(g)$module)
+  )
+}
+
+#' Returns fuzzy moduls based on neighborhood in true graph
+#' @param m a module object
+#' @param g a igraph object with values for each node in the V(g)$module field
+
+#' @return a module object
+
+#' @importFrom methods new
+#' @importFrom igraph V neighborhood
+
+#' @export
+true_fuzzy <- function(m, g){
+  f.index.list <- lapply(m@index.list, function(x){
+    sort(unique(unlist(
+      igraph::neighborhood(
+        g,
+        order = 2,
+        nodes = igraph::V(g)[x],
+        mode = "all",
+        mindist = 0
+      )
+    )))
+  })
+  methods::new("module",
+               source = "True Module Fuzzy",
+               overlapping = TRUE,
+               index.list = f.index.list,
+               name.list = lapply(f.index.list, function(m) igraph::V(g)$name[m])
   )
 }
 
@@ -103,18 +133,21 @@ setClass("module",
 }
 
 #' Uses WGCNA to detect modules from a data matrix
-#' @param x a n x p matrix of features
-#' @param min.size an integer, the min size parameter for dynamicTreeCut
+#' @param x a p x n matrix of features
+#' @param min.size an integer, the min size of modules produced by dynamicTreeCut
+#' @param max.size an integer, the maximum size of modules
 #' @param min.sft an integer, the min sft used by the pickSoftThreshold function
 #' @param beta an integer, the power value used by WGCNA::adjacency
 #' @param cor.FN a character, the cor.options WGCNA::adjacency
 #' @param powers an integer vector, the powers vector used by WGCNA::pickSoftThreshold
 #' @param hclust.method a character, the method used by flashClust
 #' @param cut.height an integer between 0 and 1, the cut height used by cutreeDynamic
+#' @param merge a boolean, whether or not to attempt to merge modules using WGCNA::mergeCloseModules
+#' @param merging.cut a numeric between 0 and 1, the cutheight for WGCNA::mergeCloseModules
 
 #' @return a module object
 
-#' @importFrom WGCNA pickSoftThreshold adjacency TOMdist bicor
+#' @importFrom WGCNA pickSoftThreshold adjacency TOMdist bicor mergeCloseModules
 #' @importFrom flashClust flashClust
 #' @importFrom stats as.dist
 #' @importFrom dynamicTreeCut cutreeDynamic
@@ -123,12 +156,15 @@ setClass("module",
 #' @export
 find_WGCNA_mods <- function(x,
                             min.size=10,
+                            max.size=NULL,
                             min.sft=0.85,
                             beta=NULL,
                             cor.FN=c("bicor", "cor"),
                             powers=c(seq(1, 10, by = 1), seq(12, 20, by = 2)),
                             hclust.method="average",
-                            cut.height = NULL
+                            cut.height = NULL,
+                            merge = F,
+                            merging.cut = 0.2
 ) {
 
   # Handle arguments
@@ -140,7 +176,7 @@ find_WGCNA_mods <- function(x,
 
   # Pick soft threshold via scale-free fit
   if (is.null(beta)) {
-    sft <- WGCNA::pickSoftThreshold(data=x,
+    sft <- WGCNA::pickSoftThreshold(data=t(x),
                                     corFnc=cor.FN,
                                     RsquaredCut=min.sft,
                                     powerVector=powers)
@@ -149,8 +185,14 @@ find_WGCNA_mods <- function(x,
     beta <- .sft_check(sft)
   }
 
+  # If max size is constrained
+  if(!is.null(max.size)){
+    # Determine the minimum number of modules needed to fit all nodes
+    min.mods <- ceiling(nrow(x) / max.size)
+  }else{ min.mods <- 1}
+
   # Construct co-expression similarity
-  adj <- WGCNA::adjacency(datExpr=x,
+  adj <- WGCNA::adjacency(datExpr=t(x),
                           power=beta,
                           corFnc=cor.FN,
                           type="unsigned",
@@ -171,15 +213,121 @@ find_WGCNA_mods <- function(x,
                                            pamRespectsDendro=FALSE,
                                            minClusterSize=min.size)
 
-  #create module object holding the object
+
+  # if this produced less than the minimum number of mods
+  n.mods <- length(unique(index.vector[index.vector != 0]))
+  if( n.mods < min.mods ){
+    cat("Only ", n.mods, " modules produced in first cut. \n",
+        min.mods, " will be required with max.size == ", max.size, "\n",
+        "Lowering cut height... \n",
+        sep = "")
+
+    # if cut height is null
+    if(is.null(cut.height)){
+      # recalculate the default height used by cuttreeDynamic
+      qnt5 <-  quantile(dendro$heigh, probs= 0.05)
+      cut.height <- qnt5 + 0.99 * (max(dendro$height) - qnt5)
+    }
+
+    # lower height until the desired number of modules is met
+    while(n.mods < min.mods){
+      cut.height <- cut.height - 0.01
+      cat("Lowerin cut height to", cut.height, "and generating new modules... \n")
+      index.vector <- dynamicTreeCut::cutreeDynamic(dendro=dendro,
+                                                        cutHeight = cut.height,
+                                                        method="hybrid",
+                                                        distM=dis,
+                                                        deepSplit=4,
+                                                        pamRespectsDendro=FALSE,
+                                                        minClusterSize=min.size)
+      # if producing all unassigned
+      if(sum(index.vector == 0) == length(index.vector) && cut.height < 0.8){
+        cat("Cut height reached " , cut.height, " and is no longer to producing meaningful clusters. \n",
+            "Consider increasing max.size or using another method to generate modules. \n",
+            sep = "")
+        stop()
+      }
+      n.mods <- length(unique(index.vector[index.vector != 0]))
+    }
+    cat("Final cut height" , cut.height, "produced", n.mods, "modules. \n")
+  }
+
+  # If merging
+  if(merge){
+    # While there are at least min.mods modules and they are all bellow maxsize
+    while(n.mods > min.mods && all(table(index.vector < max.size )) ){
+      # Merge similar modules (single iteration)
+      merged <- WGCNA::mergeCloseModules(
+        exprData=t(x),
+        colors=index.vector,
+        # MEs= ifelse(exists("merged"), merged$newMEs, NULL),
+        unassdColor=0,
+        corFnc=cor.FN,
+        corOptions=cor.options,
+        cutHeight=merging.cut
+      )
+
+      # if nothing changes, break loop
+      if(all(index.vector == merged$colors)){
+        break
+      }
+      # else, use merged modules and restart
+      index.vector <- merged$colors
+      n.mods <- length(unique(index.vector[index.vector != 0]))
+    }
+
+  }
+
+  # Assign remaining unassigned nodes based on adj...
+  diag(adj) <- 0
+
+  # iterative expansion by best neighbor with threshold
+  last.mods <- index.vector
+  unassigned <- which(index.vector == 0)
+  threshold = 0.95
+  while(length(unassigned) > 0){ #there might be a more efficient way to check this
+    #for each assigned node
+    assigned <- which(index.vector != 0)
+    unassigned <- which(index.vector == 0)
+    for(node in assigned){
+      #find its best neighbor based on wgcna adj
+      best <- unassigned[which.max(adj[node, unassigned])]
+      #if that adj is above the current threshold
+      if(length(best) !=0){
+        if(adj[node,best] > threshold){
+          #assign node
+          index.vector[best] <- index.vector[node]
+        }
+      }
+    }
+    #if no changes
+    if(all(last.mods == index.vector)){
+      #and not at min threshold
+      if(threshold >= 0){
+        #lower threshold
+        threshold <- round(threshold - 0.05, 2)
+      }else{
+        #break if at min threshold and no longer changing
+        break
+      }
+    }
+    last.mods <- index.vector
+  }
+
+  # fit modules to max size via trading
+  index.vector <- .fit_to_max_size(index.vector = index.vector,
+                                   adj = adj,
+                                   max.size = max.size)
+
+  # Create module object
   index.vector = as.numeric(index.vector)
   WGCNA.mods  <- methods::new("module",
                      source = "find_WGCNA_mods",
-                     data.dim = dim(t(x)),
+                     data.dim = dim(x),
                      overlapping = FALSE,
                      index.vector = index.vector,
-                     index.list = split(1:ncol(x) , index.vector),
-                     name.list = split(colnames(x), index.vector)
+                     index.list = split(1:nrow(x) , index.vector),
+                     name.list = split(rownames(x), index.vector)
   )
 
   return(WGCNA.mods)
@@ -202,6 +350,54 @@ find_WGCNA_mods <- function(x,
   return(beta)
 }
 
+#' Helper to find_WGCNA_mods that forces all modules to be within some max size
+#' @param index.vector index vector defining a module for each node or 0 for unassigned
+#' @param adj adjacency matrix produced by WGCNA::adjacency
+#' @param max.size integer for max number of nodes in each module
+
+#' @return index vector with each module fitted to max size
+
+#' @keywords internal
+
+.fit_to_max_size <- function(
+    index.vector,
+    adj,
+    max.size
+
+){
+
+  # find modules which are two large
+  mod.size = table(index.vector)
+  if(any(mod.size > max.size)){
+    # determine which will give and receive nodes
+    giving = as.numeric(names(which(mod.size > max.size)))
+    receiving = as.numeric(names(which(mod.size < max.size)))
+
+    giving.nodes <- which(index.vector %in% giving)
+    receiving.nodes <- which(index.vector %in% receiving)
+
+    while(length(giving) > 0){
+      # find the giving node with the highest adj to a  receiving module
+      trade.scores <- adj[giving.nodes, receiving.nodes]
+      trade.giving <- giving.nodes[ which.max(matrixStats::rowMaxs(trade.scores)) ]
+      trade.receiving  <- receiving.nodes[ which.max( adj[trade.giving,receiving.nodes] ) ]
+
+      # set giving nodes module to receiving nods
+      index.vector[ trade.giving ] <- index.vector[ trade.receiving ]
+
+      # update module status
+      mod.size = table(index.vector)
+      giving = which(mod.size > max.size)
+      receiving = which(mod.size < max.size)
+      giving.nodes <- which(index.vector %in% giving)
+      receiving.nodes <- which(index.vector %in% receiving)
+    }
+
+  }
+  return(index.vector)
+}
+
+
 #' Uses ICA to detect modules from a data matrix
 #' @param x a p x n  matrix of features
 #' @param n.comp the number of components to search for in the data
@@ -213,10 +409,9 @@ find_WGCNA_mods <- function(x,
 #' @importFrom methods new
 
 #' @export
-find_ICA_mods <- function(x, #exprs(eset)
+find_ICA_mods <- function(x,
                           n.comp,
                           ...){
-  set.seed(123) #removes randomness of outputs
   ICA.results <- fastICA::fastICA(X= as.matrix(x),
                                   n.comp = n.comp,
                                   ...
@@ -236,7 +431,6 @@ find_ICA_mods <- function(x, #exprs(eset)
 
   return(ICA.mods)
 }
-
 
 #' Uses MCL to detect modules from a data matrix
 #' @param x a n x p matrix of features
@@ -469,6 +663,8 @@ pragmatic_modules <- function(x, max.size, n.mods = NULL){
 #' @param x a p x n matrix of features
 #' @param input.modules a module object
 #' @param max.size The maximum number of members in a data matrix
+#' @param n.pc number of principle componets use to define correlation of fuzzy nodes to the module
+#' @param ratio the ratio of original nodes in the module to nodes in the fuzzy module
 
 #' @return a module object
 
@@ -476,21 +672,39 @@ pragmatic_modules <- function(x, max.size, n.mods = NULL){
 #' @importFrom methods new
 
 #' @export
-eigen_fuzzy_modules <- function(x, input.modules, max.size){
-  index.list <- lapply(input.modules@index.list, function(mod){
+eigen_fuzzy_modules <- function(x, input.modules, max.size, n.pc = 2, ratio = 1.5){
+  index.list <- lapply(seq_along(input.modules@index.list), function(m){
+    mod <- input.modules@index.list[[m]]
     #get number of required fuzzy nodes
-    n.fuzzy.nodes <- max.size - length(mod)
+    f.size <- length(mod)*ratio
+    if(f.size > max.size){f.size <- max.size}
+    n.fuzzy.nodes <- f.size - length(mod)
     if(n.fuzzy.nodes < 1){
       stop("Warning, modules exist larger than max size")
     }
 
-    #get the modules eigen gene
+    #get the modules PC
     mod.PC <- stats::prcomp(t(x[mod,]), scale. = TRUE)
-    mod.eigen <- mod.PC$x[,1]
+    # var.exp <- lapply(1:n.pc, function(i){
+    #   (mod.PC$sdev[i] / sum(mod.PC$sdev))*100
+    # })
+    # cat(
+    #   "First", n.pc, "principle componets used to define fuzzy modules explain",
+    #   round(do.call(sum, var.exp)), "% variance in module", m,
+    #   "\n"
+    # )
 
-    #get genes outside the module the covary with the eigen gene
-    eigen.cor <- abs(apply(x[-mod,], 1, function(x) stats::cor(x, mod.eigen))) #correlation
-    corRank <- sort(eigen.cor, decreasing = TRUE) #ranked absolute covariance
+    # define eigen gene based on first n.pc principle components
+    mod.eigen <- lapply(1:n.pc, function(i){mod.PC$x[,i]})
+
+    #get genes outside the module the correlated with the eigen gene
+    eigen.cor <- lapply(mod.eigen, function(pc){
+      abs(apply(x[-mod,], 1, function(x) stats::cor(x, pc)))
+    })
+    eigen.cor <- Reduce('+', eigen.cor)
+
+
+    corRank <- sort(eigen.cor, decreasing = TRUE) #ranked absolute correlation
     fuzzy.nodes <- names(corRank[1:n.fuzzy.nodes]) #n.fuzzy.nodes nodes with the highest ranks
 
     #convert fuzzy nodes to numerics (stored naturally as names)
@@ -503,11 +717,11 @@ eigen_fuzzy_modules <- function(x, input.modules, max.size){
 
   # convert to module object and return
   fuzzy.mods <- methods::new("module",
-                           source = paste("eigen_fuzzy_modules", "generated from", input.modules@source),
-                           data.dim = dim(x),
-                           overlapping = TRUE,
-                           index.list = index.list,
-                           name.list = lapply(index.list, function(mod){rownames(x)[mod]})
+                             source = paste("eigen_fuzzy_modules", "generated from", input.modules@source),
+                             data.dim = dim(x),
+                             overlapping = TRUE,
+                             index.list = index.list,
+                             name.list = lapply(index.list, function(mod){rownames(x)[mod]})
   )
   return(fuzzy.mods)
 
@@ -581,7 +795,7 @@ create_overlap_modules <- function(x, input.modules, use.eigen = TRUE, best.pair
   # get absolute correlation matrix of all node (absolute only in the case of undirected graphs)
   cor.matrix <- abs(stats::cor(t(x)))
 
-  #create poteintial pairs list
+  #create potential pairs list
   p.pairs <- as.data.frame(t(utils::combn(length(input.indexes), 2)))
   if(use.eigen){
     # get eigen genes (first PC)
@@ -662,6 +876,9 @@ create_overlap_modules <- function(x, input.modules, use.eigen = TRUE, best.pair
     })
   )
 
+  # combine with initial mods
+  index.list <- append(input.modules@index.list, index.list)
+
   # convert to module object and return
   overlap.modules <- methods::new("module",
                        source = paste("create_overlap_modules", "generated from", input.modules@source),
@@ -673,31 +890,90 @@ create_overlap_modules <- function(x, input.modules, use.eigen = TRUE, best.pair
   return(overlap.modules)
 }
 
+#' Calculates the percentage of nodes assigned to the same module between to module sets, based on node index, not module name
+#' @param m1 a module object
+#' @param m2 another module object to compare to
 
-###########
-## TEST ###
-###########
+#' @return an integer between 0 and 100
 
-# # make data
-# er <- make_modular_graph()
-# x <- sim_graph_data(er, n.samples =100)
-# true_modules <- methods::new("module",
-#                     source = "True Modules",
-#                     overlapping = FALSE,
-#                     index.vector = igraph::V(er)$module,
-#                     index.list = split(1:120 , igraph::V(er)$module),
-#                     name.list = split(igraph::V(er)$name , igraph::V(er)$module)
-# )
-#
-# # learn mods
-# w <- find_WGCNA_mods(t(x), cor.FN = "bicor")
-# i <- find_ICA_mods(x, 3)
-# p <- pragmatic_modules(x,n.mods = 3, max.size = 60)
-#
-# # fuzzy mods
-# ef <- eigen_fuzzy_modules(x, p, 80)
-# nf <- nodewise_fuzzy_modules(x, p, 80)
-#
-# # overlap mods
-# o <- create_overlap_modules(x, p)
+#' @export
+percent_module_match <- function(m1, m2){
+  #get matched sets
+  matches <- .match_modules(m1@index.list, m2@index.list, m1@name.list, m2@name.list)
+  #count total matches and total nodes in modules
+  matched.nodes <- 0
+  n.nodes <- min(c(length(unlist(m1@index.vector)), length(m2@index.vector)))
+  for (match in matches) {
+    matched.nodes = matched.nodes + as.numeric(match[5])
+  }
+  return((matched.nodes / n.nodes) * 100)
+}
+
+#' Finds the best module matches between two sets of nodes
+#' @param m1.nodes Node index vector from m1
+#' @param m2.nodes Node index vector from m2
+#' @param m1.names Node character vector from m1
+#' @param m2.names Node character vector from m2
+
+#' @return a list of all the best modules matched based on node membership
+
+#' @keywords internal
+.match_modules <- function(m1.nodes, m2.nodes, m1.names, m2.names){
+  matches <- vector(mode = "list",
+                    length = min(length(m1.nodes), length(m2.nodes)))
+  n.matched <- 0
+  matched1 <- rep(10^10, length(m1.nodes)) #wont have effect until replaced with actual matches
+  matched2 <- rep(10^10, length(m2.nodes))
+
+  while((length(m1.nodes) > n.matched) && (length(m2.nodes) > n.matched)){
+    #find the best match
+    max.overlap <- -1
+    best <- list(NULL, NULL)
+    for (i in (1:length(m1.nodes))[-as.numeric(matched1)]) { #iterate through both sets of nodes
+      for (j in (1:length(m2.nodes))[-as.numeric(matched2)]) {
+        overlap <- length(
+          intersect(
+            as.numeric(m1.nodes[[i]]),as.numeric(m2.nodes[[j]])
+          ) #recording overlap
+        )
+        if (overlap > max.overlap) {
+          max.overlap <- overlap
+          best <- c(i, j, m1.names[i], m2.names[j], overlap) #index from set 1, set2, name set 1, set 2, overlap
+        }
+      }
+    } #after finishing iteration, current best match is kept
+
+    matches[[n.matched+1]] <- best
+    matched1[n.matched+1] <- best[1] #removes from future consideration
+    matched2[n.matched+1] <- best[2]
+    n.matched <- n.matched + 1
+  }
+  return(matches)
+}
+
+#' Calculate the percentage of nodes with more edges within their module then outside of it
+#' @param g an igraph object
+#' @param test.module a module to test for contiguity, whose nodes indexs and names must match the graph
+
+#' @return an integer between 0 and 100
+
+#' @importFrom igraph as_adjacency_matrix
+
+#' @export
+module_contiguity <- function(g, test.module){
+  #get module assignments
+  index.vector <- test.module@index.vector
+  adj <- as.matrix(igraph::as_adjacency_matrix(g))
+
+  #get number nodes with more neighbors within module than between modules
+  more.within <- length(which(unlist(
+    lapply(1:nrow(adj), function(row){
+      node.mod <- index.vector[row]
+      edge.mod <- index.vector[which(adj[row,] == 1)]
+      length(which(edge.mod == node.mod)) > length(which(edge.mod != node.mod))
+    })
+  )))
+  return(round((more.within / length(g)) * 100, 4))
+}
+
 

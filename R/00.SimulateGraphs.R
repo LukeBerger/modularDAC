@@ -380,7 +380,6 @@ modular_plot <- function(g,
 
 
 
-
 ## bdgraph function with two lines removed which caused a bug when using a
 ## adjency matrix as the graph parameter
 .mod.bdgraph.sim <- function (p = 10, graph = "random", n = 0, type = "Gaussian",
@@ -613,17 +612,3 @@ modular_plot <- function(g,
   return(simulation)
 }
 
-
-############
-### TEST ###
-############
-
-# # make graphs
-# er <- make_modular_graph()
-# hybrid <- make_submodular_graph()
-#
-# #plot
-# modular_plot(er)
-#
-# # sim data
-# x <- sim_graph_data(er, n.samples = 10)

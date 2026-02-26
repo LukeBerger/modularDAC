@@ -233,7 +233,7 @@ learn_SILGGM_graph <- function(x,
 #' @param powers an integer vector, the powers vector used by WGCNA::pickSoftThreshold
 #' @param threshold value to binarize adj matrix against
 
-#' @return a igraph object object
+#' @return a igraph object
 
 #' @importFrom WGCNA pickSoftThreshold adjacency bicor
 #' @importFrom igraph graph_from_adjacency_matrix
@@ -283,7 +283,28 @@ learn_WGCNA_graph <- function(x,
   return(igraph::graph_from_adjacency_matrix(binary.adj, mode = "undirected"))
 }
 
+#' Uses ARACNE algorithm to learn a graph
+#' @param x an n x p matrix of features
+#' @param threshold threshold value to convert mutial information to graphs
+#' @param eps numeric value indicating the threshold used when removing an edge
 
+#' @return a igraph object
+
+#' @importFrom minet build.mim aracne
+#' @importFrom igraph graph_from_adjacency_matrix
+
+#' @export
+learn_ARACNE_graph <- function(x, eps=0, threshold = 0.05) {
+
+  # Build mutual information matrix
+  mim <- minet::build.mim(dataset = x)
+
+  # Apply ARANCE alogrithm
+  aracne.mat <- minet::aracne(mim, eps=eps)
+
+  # Binarize and convert to graph object
+  return(igraph::graph_from_adjacency_matrix((aracne.mat > threshold ) * 1, mode = "undirected"))
+}
 
 ####################
 ###Compare Graphs###
@@ -360,16 +381,3 @@ calc_F1 <- function(g.true, g.pred) {
   dat[is.na(dat)] <- halfmin[is.na(dat)]
   return(dat)
 }
-
-
-###########
-## TEST ###
-###########
-
-# # make data
-# er <- make_modular_graph()
-# x <- sim_graph_data(er, n.samples = 100)
-#
-# # test silggm learning
-# s <- learn_SILGGM_graph(t(x))
-# calc_F1(er, s)

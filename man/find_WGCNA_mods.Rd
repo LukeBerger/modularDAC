@@ -7,18 +7,23 @@
 find_WGCNA_mods(
   x,
   min.size = 10,
+  max.size = NULL,
   min.sft = 0.85,
   beta = NULL,
   cor.FN = c("bicor", "cor"),
   powers = c(seq(1, 10, by = 1), seq(12, 20, by = 2)),
   hclust.method = "average",
-  cut.height = NULL
+  cut.height = NULL,
+  merge = F,
+  merging.cut = 0.2
 )
 }
 \arguments{
-\item{x}{a n x p matrix of features}
+\item{x}{a p x n matrix of features}
 
-\item{min.size}{an integer, the min size parameter for dynamicTreeCut}
+\item{min.size}{an integer, the min size of modules produced by dynamicTreeCut}
+
+\item{max.size}{an integer, the maximum size of modules}
 
 \item{min.sft}{an integer, the min sft used by the pickSoftThreshold function}
 
@@ -31,6 +36,10 @@ find_WGCNA_mods(
 \item{hclust.method}{a character, the method used by flashClust}
 
 \item{cut.height}{an integer between 0 and 1, the cut height used by cutreeDynamic}
+
+\item{merge}{a boolean, whether or not to attempt to merge modules using WGCNA::mergeCloseModules}
+
+\item{merging.cut}{a numeric between 0 and 1, the cutheight for WGCNA::mergeCloseModules}
 }
 \value{
 a module object
