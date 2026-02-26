@@ -286,7 +286,7 @@ learn_WGCNA_graph <- function(x,
 #' Uses ARACNE algorithm to learn a graph
 #' @param x an n x p matrix of features
 #' @param threshold threshold value to convert mutial information to graphs
-
+#' @param eps numeric value indicating the threshold used when removing an edge
 #' @return a igraph object
 
 #' @importFrom minet build.mim aracne
