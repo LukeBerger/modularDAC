@@ -4,10 +4,12 @@
 \alias{learn_ARACNE_graph}
 \title{Uses ARACNE algorithm to learn a graph}
 \usage{
-learn_ARACNE_graph(x, threshold = 0)
+learn_ARACNE_graph(x, eps = 0, threshold = 0.05)
 }
 \arguments{
 \item{x}{an n x p matrix of features}
+
+\item{eps}{numeric value indicating the threshold used when removing an edge}
 
 \item{threshold}{threshold value to convert mutial information to graphs}
 }
