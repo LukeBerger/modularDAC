@@ -293,13 +293,13 @@ learn_WGCNA_graph <- function(x,
 #' @importFrom igraph graph_from_adjacency_matrix
 
 #' @export
-learn_ARACNE_graph <- function(x, threshold = 0) {
+learn_ARACNE_graph <- function(x, eps=0, threshold = 0.05) {
 
   # Build mutual information matrix
   mim <- minet::build.mim(dataset = x)
 
   # Apply ARANCE alogrithm
-  aracne.mat <- minet::aracne(mim)
+  aracne.mat <- minet::aracne(mim, eps=eps)
 
   # Binarize and convert to graph object
   return(igraph::graph_from_adjacency_matrix((aracne.mat > threshold ) * 1, mode = "undirected"))
