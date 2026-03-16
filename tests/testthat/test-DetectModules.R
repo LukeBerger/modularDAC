@@ -8,8 +8,9 @@ test_that("Module Check", {
   expect_true(.module_check(x , t))
 
   # basic mods
-  # w <- suppressMessages(find_WGCNA_mods(x))
-  # expect_true(.module_check(x , w)) # commenting out to save on run time when not working with this function
+  w <- suppressMessages(find_WGCNA_mods(x))
+  expect_true(.module_check(x , w$initial.mods))
+  expect_true(.module_check(x , w$traded.mods)) # commenting out to save on run time when not working with this function
 
   i <- find_ICA_mods(x, 10)
   expect_true(.module_check(x , i))

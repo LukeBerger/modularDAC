@@ -205,7 +205,8 @@ find_WGCNA_mods <- function(x,
   dendro <- flashClust::flashClust(d=stats::as.dist(dis), method=hclust.method)
 
   # Module identification using dynamic tree cut algorithm
-  index.vector <- dynamicTreeCut::cutreeDynamic(dendro=dendro,
+  cat("Generating initial modules... \n")
+  initial.index.vector <- dynamicTreeCut::cutreeDynamic(dendro=dendro,
                                            cutHeight = cut.height,
                                            method="hybrid",
                                            distM=dis,
@@ -215,7 +216,7 @@ find_WGCNA_mods <- function(x,
 
 
   # if this produced less than the minimum number of mods
-  n.mods <- length(unique(index.vector[index.vector != 0]))
+  n.mods <- length(unique(initial.index.vector[initial.index.vector != 0]))
   if( n.mods < min.mods ){
     cat("Only ", n.mods, " modules produced in first cut. \n",
         min.mods, " will be required with max.size == ", max.size, "\n",
@@ -233,7 +234,7 @@ find_WGCNA_mods <- function(x,
     while(n.mods < min.mods){
       cut.height <- cut.height - 0.01
       cat("Lowerin cut height to", cut.height, "and generating new modules... \n")
-      index.vector <- dynamicTreeCut::cutreeDynamic(dendro=dendro,
+      initial.index.vector <- dynamicTreeCut::cutreeDynamic(dendro=dendro,
                                                         cutHeight = cut.height,
                                                         method="hybrid",
                                                         distM=dis,
@@ -241,25 +242,30 @@ find_WGCNA_mods <- function(x,
                                                         pamRespectsDendro=FALSE,
                                                         minClusterSize=min.size)
       # if producing all unassigned
-      if(sum(index.vector == 0) == length(index.vector) && cut.height < 0.8){
+      if(sum(initial.index.vector == 0) == length(initial.index.vector) && cut.height < 0.8){
         cat("Cut height reached " , cut.height, " and is no longer to producing meaningful clusters. \n",
             "Consider increasing max.size or using another method to generate modules. \n",
             sep = "")
         stop()
       }
-      n.mods <- length(unique(index.vector[index.vector != 0]))
+      n.mods <- length(unique(initial.index.vector[initial.index.vector != 0]))
     }
     cat("Final cut height" , cut.height, "produced", n.mods, "modules. \n")
+  }else{
+      cat("Initial WGCNA call produced", n.mods, "\n")
   }
+
 
   # If merging
   if(merge){
+    cat("Merging modules based on eigen gene similarity... \n")
+    n.merges <- 0
     # While there are at least min.mods modules and they are all bellow maxsize
-    while(n.mods > min.mods && all(table(index.vector < max.size )) ){
+    while(n.mods > min.mods && all(table(initial.index.vector < max.size )) ){
       # Merge similar modules (single iteration)
       merged <- WGCNA::mergeCloseModules(
         exprData=t(x),
-        colors=index.vector,
+        colors=initial.index.vector,
         # MEs= ifelse(exists("merged"), merged$newMEs, NULL),
         unassdColor=0,
         corFnc=cor.FN,
@@ -268,27 +274,35 @@ find_WGCNA_mods <- function(x,
       )
 
       # if nothing changes, break loop
-      if(all(index.vector == merged$colors)){
+      if(all(initial.index.vector == merged$colors)){
         break
       }
       # else, use merged modules and restart
-      index.vector <- merged$colors
-      n.mods <- length(unique(index.vector[index.vector != 0]))
+      initial.index.vector <- merged$colors
+      n.mods <- length(unique(initial.index.vector[initial.index.vector != 0]))
+      n.merges <- n.merges + 1
+    }
+    if(n.merges == 0){
+      cat("No modules were similiar enough to merge, using initial modules... \n")
+    }else{
+      cat("Merged" , n.merges, "modules, resulting in", n.mods, "new modules. \n")
     }
 
   }
 
   # Assign remaining unassigned nodes based on adj...
+  cat("Assinging unassinged nodes based on WGNCA adjacency... \n")
   diag(adj) <- 0
 
   # iterative expansion by best neighbor with threshold
-  last.mods <- index.vector
-  unassigned <- which(index.vector == 0)
+  modified.index.vector <- initial.index.vector
+  last.mods <- modified.index.vector
+  unassigned <- which(modified.index.vector == 0)
   threshold = 0.95
   while(length(unassigned) > 0){ #there might be a more efficient way to check this
     #for each assigned node
-    assigned <- which(index.vector != 0)
-    unassigned <- which(index.vector == 0)
+    assigned <- which(modified.index.vector != 0)
+    unassigned <- which(modified.index.vector == 0)
     for(node in assigned){
       #find its best neighbor based on wgcna adj
       best <- unassigned[which.max(adj[node, unassigned])]
@@ -296,12 +310,12 @@ find_WGCNA_mods <- function(x,
       if(length(best) !=0){
         if(adj[node,best] > threshold){
           #assign node
-          index.vector[best] <- index.vector[node]
+          modified.index.vector[best] <- modified.index.vector[node]
         }
       }
     }
     #if no changes
-    if(all(last.mods == index.vector)){
+    if(all(last.mods == modified.index.vector)){
       #and not at min threshold
       if(threshold >= 0){
         #lower threshold
@@ -311,26 +325,44 @@ find_WGCNA_mods <- function(x,
         break
       }
     }
-    last.mods <- index.vector
+    last.mods <- modified.index.vector
   }
 
   # fit modules to max size via trading
-  index.vector <- .fit_to_max_size(index.vector = index.vector,
-                                   adj = adj,
-                                   max.size = max.size)
+  to.big  <- sum(table(modified.index.vector) > max.size)
+  if(to.big){
+    cat(to.big, "modules are larged than", max.size, "nodes. Preforming node trading based on adjacency... \n")
+    modified.index.vector <- .fit_to_max_size(
+      index.vector = modified.index.vector,
+      adj = adj,
+      max.size = max.size)
+  }
 
   # Create module object
-  index.vector = as.numeric(index.vector)
-  WGCNA.mods  <- methods::new("module",
-                     source = "find_WGCNA_mods",
+  initial.index.vector <- as.numeric(initial.index.vector)
+  modified.index.vector <- as.numeric(modified.index.vector)
+  initial.mods  <- methods::new("module",
+                     source = "find_WGCNA_mods initial mods",
                      data.dim = dim(x),
                      overlapping = FALSE,
-                     index.vector = index.vector,
-                     index.list = split(1:nrow(x) , index.vector),
-                     name.list = split(rownames(x), index.vector)
+                     index.vector = initial.index.vector,
+                     index.list = split(1:nrow(x) , initial.index.vector),
+                     name.list = split(rownames(x), initial.index.vector)
+  )
+  traded.mods  <- methods::new("module",
+                                source = "find_WGCNA_mods traded mods",
+                                data.dim = dim(x),
+                                overlapping = FALSE,
+                                index.vector = modified.index.vector,
+                                index.list = split(1:nrow(x) , modified.index.vector),
+                                name.list = split(rownames(x), modified.index.vector)
   )
 
-  return(WGCNA.mods)
+  return(list(
+    wgcna.adj = adj,
+    initial.mods = initial.mods,
+    traded.mods = traded.mods
+  ))
 }
 
 #' Helper to WGCNA calling functions to select soft thresholding power in WGCNA::adjacency
@@ -367,7 +399,7 @@ find_WGCNA_mods <- function(x,
 ){
 
   # find modules which are two large
-  mod.size = table(index.vector)
+  mod.size <- table(index.vector)
   if(any(mod.size > max.size)){
     # determine which will give and receive nodes
     giving = as.numeric(names(which(mod.size > max.size)))
@@ -375,6 +407,8 @@ find_WGCNA_mods <- function(x,
 
     giving.nodes <- which(index.vector %in% giving)
     receiving.nodes <- which(index.vector %in% receiving)
+
+    n.trades <- 0
 
     while(length(giving) > 0){
       # find the giving node with the highest adj to a  receiving module
@@ -391,9 +425,11 @@ find_WGCNA_mods <- function(x,
       receiving = which(mod.size < max.size)
       giving.nodes <- which(index.vector %in% giving)
       receiving.nodes <- which(index.vector %in% receiving)
+      n.trades <- n.trades + 1
     }
-
+    cat("All modules fit within max size after",  n.trades, "trades. \n")
   }
+
   return(index.vector)
 }
 
