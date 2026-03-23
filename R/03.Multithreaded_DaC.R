@@ -114,6 +114,7 @@ divide_and_conquer <- function(x,
   graph.learning.outputs <- foreach::foreach(i = seq_along(args),
                                              .combine = 'list',
                                              .multicombine = TRUE,
+                                             .maxcombine = length(args),
                                              .packages = packages.to.each,
                                              .export = export.to.each
   ) %dopar% {
@@ -295,10 +296,10 @@ divide_and_conquer <- function(x,
 
 ### Alternative functions for running with BDgraph
 
-#' Arg Wrapper for BD graph
+#' arg wrapper for BD graph
 #' @param sub.x subset of a large data matrix x defined based on modules
 
-#' @return a list containing the learned subgraphs data transformed
+#' @return a list containing the learned subgraphs data transformed for bdgraph
 
 #' @keywords internal
 .bd_arg_wrapper <- function(sub.x){
@@ -309,7 +310,7 @@ divide_and_conquer <- function(x,
   })
 }
 
-#' grapgh learning wrapper for BD graph
+#' graph learning wrapper for BD graph
 #' @param x subset of a large data matrix x defined based on modules, transformed by arg wrapper
 
 #' @return a list containing the learned subgraphs data transformed
@@ -323,5 +324,129 @@ divide_and_conquer <- function(x,
   postProb <- BDgraph::plinks(bdFit)
   adjMat <- BDgraph::select(postProb)
   igraph::graph_from_adjacency_matrix(adjMat, mode = "undirected") # can change this if I want to test edge directional update for .connect_subgraphs
+}
+
+
+### Alternative function for running with RSNet
+
+#' arg wrapper for RSNet conc networks
+#' @param sub.x subset of a large data matrix x defined based on modules
+#' @param num_iteration Number of iterations to perform. Defaults to 1.
+#' @param boot Logical; whether to use bootstrap resampling. Defaults to FALSE.
+#' @param sub_ratio Numeric; subsampling ratio. Defaults to 1.
+#' @param sample_class Character or NULL; class label(s) for samples to include in analysis.
+#' @param correlated Logical; whether to account for correlated features. Defaults to FALSE.
+#' @param cluster_ratio Numeric; clustering ratio. Defaults to 1.
+#' @param estimate_CI Logical; whether to estimate confidence intervals. Defaults to TRUE.
+#' @param method Character; method for network analysis. Defaults to "B_NW_SL".
+#' @param n_cores Integer or NULL; number of cores for parallel processing. If NULL, uses single core.
+#' @param CI Numeric; confidence level for interval estimation (between 0 and 1). Defaults to 0.95.
+#' @param filter Character; filtering criterion to apply. Defaults to "pval" (p-value).
+#' @param threshold Numeric; threshold value for filtering. Defaults to 0.005.
+
+#' @return a list containing the args for rsnet learning
+
+#' @keywords internal
+.RSNet_arg_wrapper <- function(sub.x,
+                               num_iteration  = 1,
+                               boot = FALSE,
+                               sub_ratio = 1,
+                               sample_class = NULL,
+                               correlated = FALSE,
+                               cluster_ratio = 1,
+                               estimate_CI = TRUE,
+                               method = "B_NW_SL",
+                               n_cores =NULL,
+                               CI = 0.95,
+                               filter = "pval",
+                               threshold = 0.005){
+
+  #return a list of packaged args,
+  lapply(sub.x, function(x){
+    list(dat = t(x), # transform to fit n x p matrix required by silggm
+         num_iteration = 1,
+         boot = FALSE,
+         sub_ratio = 1,
+         sample_class = NULL,
+         correlated = FALSE,
+         cluster_ratio = 1,
+         estimate_CI = TRUE,
+         method = "B_NW_SL",
+         n_cores =NULL,
+         CI = 0.95,
+         filter = "pval",
+         threshold = 0.005)
+  })
+}
+
+#' wrapper function to generate ensemble and conc networks from sub matrix data
+#' @param dat subset of a large data matrix x defined based on modules
+#' @param num_iteration Number of iterations to perform. Defaults to 1.
+#' @param boot Logical; whether to use bootstrap resampling. Defaults to FALSE.
+#' @param sub_ratio Numeric; subsampling ratio. Defaults to 1.
+#' @param sample_class Character or NULL; class label(s) for samples to include in analysis.
+#' @param correlated Logical; whether to account for correlated features. Defaults to FALSE.
+#' @param cluster_ratio Numeric; clustering ratio. Defaults to 1.
+#' @param estimate_CI Logical; whether to estimate confidence intervals. Defaults to TRUE.
+#' @param method Character; method for network analysis. Defaults to "B_NW_SL".
+#' @param n_cores Integer or NULL; number of cores for parallel processing. If NULL, uses single core.
+#' @param CI Numeric; confidence level for interval estimation (between 0 and 1). Defaults to 0.95.
+#' @param filter Character; filtering criterion to apply. Defaults to "pval" (p-value).
+#' @param threshold Numeric; threshold value for filtering. Defaults to 0.005.
+
+#' @importFrom RSNet capture_all ensemble_ggm consensus_net_ggm
+
+#' @return a list of learned graphs (and other consensus_net_ggm outputs)
+
+#' @keywords internal
+.RSNet_full_learning <- function(dat,
+                                 num_iteration = 1,
+                                 boot = FALSE,
+                                 sub_ratio = 1,
+                                 sample_class = NULL,
+                                 correlated = FALSE,
+                                 cluster_ratio = 1,
+                                 estimate_CI = TRUE,
+                                 method = "B_NW_SL",
+                                 n_cores =NULL,
+                                 CI = 0.95,
+                                 filter = "pval",
+                                 threshold = 0.05){
+
+  ens.net <- RSNet::capture_all(RSNet::ensemble_ggm(dat,
+                                 num_iteration,
+                                 boot,
+                                 sub_ratio,
+                                 sample_class,
+                                 correlated,
+                                 cluster_ratio,
+                                 estimate_CI,
+                                 method,
+                                 n_cores
+  ))
+  conc.nets <-  RSNet::capture_all(RSNet::consensus_net_ggm(ggm_networks = ens.net,
+                                        CI = CI,
+                                        filter = filter,
+                                        threshold = threshold
+
+  ))
+  return(conc.nets)
+}
+
+#' Output parser for RSNet learning
+#' @param graph.learning.outputs list of outputs from each graph learning call on a subgraph
+
+#' @return a list containing the learned subgraphs and any other outputs of graph learning
+
+#' @keywords internal
+.RSNet_output_parser <- function(graph.learning.outputs){
+  nets <- lapply(graph.learning.outputs, function(o) o$consensus_network)
+  other <- lapply(graph.learning.outputs, function(o) o[-1])
+  return(
+    list(
+      learned.graphs = nets,
+      other.outputs = other
+    )
+  )
 }
 
