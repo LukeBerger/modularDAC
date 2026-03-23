@@ -246,7 +246,7 @@ find_WGCNA_mods <- function(x,
         cat("Cut height reached " , cut.height, " and is no longer to producing meaningful clusters. \n",
             "Consider increasing max.size or using another method to generate modules. \n",
             sep = "")
-        stop()
+        stop("No modules found after lowering cut height")
       }
       n.mods <- length(unique(initial.index.vector[initial.index.vector != 0]))
     }
@@ -412,9 +412,11 @@ find_WGCNA_mods <- function(x,
 
     while(length(giving) > 0){
       # find the giving node with the highest adj to a  receiving module
-      trade.scores <- adj[giving.nodes, receiving.nodes]
+      trade.scores <- adj[giving.nodes, receiving.nodes, drop = FALSE]
       trade.giving <- giving.nodes[ which.max(matrixStats::rowMaxs(trade.scores)) ]
-      trade.receiving  <- receiving.nodes[ which.max( adj[trade.giving,receiving.nodes] ) ]
+      trade.receiving  <- receiving.nodes[
+        which.max( adj[trade.giving,receiving.nodes, , drop = FALSE] )
+        ]
 
       # set giving nodes module to receiving nods
       index.vector[ trade.giving ] <- index.vector[ trade.receiving ]
