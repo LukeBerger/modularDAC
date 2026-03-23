@@ -31,7 +31,8 @@ Imports:
     minet,
     foreach,
     parallel,
-    doParallel
+    doParallel,
+    RSNet
 URL: https://github.com/LukeBerger/modularDAC
 BugReports: https://github.com/LukeBerger/modularDAC/issues
 Suggests: 
