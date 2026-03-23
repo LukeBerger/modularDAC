@@ -2,7 +2,7 @@
 % Please edit documentation in R/03.Multithreaded_DaC.R
 \name{.bd_arg_wrapper}
 \alias{.bd_arg_wrapper}
-\title{Arg Wrapper for BD graph}
+\title{arg wrapper for BD graph}
 \usage{
 .bd_arg_wrapper(sub.x)
 }
@@ -10,9 +10,9 @@
 \item{sub.x}{subset of a large data matrix x defined based on modules}
 }
 \value{
-a list containing the learned subgraphs data transformed
+a list containing the learned subgraphs data transformed for bdgraph
 }
 \description{
-Arg Wrapper for BD graph
+arg wrapper for BD graph
 }
 \keyword{internal}

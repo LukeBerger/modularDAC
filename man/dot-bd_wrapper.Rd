@@ -2,7 +2,7 @@
 % Please edit documentation in R/03.Multithreaded_DaC.R
 \name{.bd_wrapper}
 \alias{.bd_wrapper}
-\title{grapgh learning wrapper for BD graph}
+\title{graph learning wrapper for BD graph}
 \usage{
 .bd_wrapper(x)
 }
@@ -13,6 +13,6 @@
 a list containing the learned subgraphs data transformed
 }
 \description{
-grapgh learning wrapper for BD graph
+graph learning wrapper for BD graph
 }
 \keyword{internal}
