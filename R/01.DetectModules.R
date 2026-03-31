@@ -147,6 +147,7 @@ true_fuzzy <- function(m, g){
 
 #' @return a module object
 
+#' @importFrom MatrixGenerics rowVars
 #' @importFrom WGCNA pickSoftThreshold adjacency TOMdist bicor mergeCloseModules
 #' @importFrom flashClust flashClust
 #' @importFrom stats as.dist
