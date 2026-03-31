@@ -414,8 +414,8 @@ find_WGCNA_mods <- function(x,
       # find the giving node with the highest adj to a  receiving module
       trade.scores <- adj[giving.nodes, receiving.nodes, drop = FALSE]
       trade.giving <- giving.nodes[ which.max(matrixStats::rowMaxs(trade.scores)) ]
-      trade.receiving  <- receiving.nodes[
-        which.max( adj[trade.giving,receiving.nodes, , drop = FALSE] )
+      trade.receiving  <-  receiving.nodes[
+        which.max( adj[trade.giving,receiving.nodes] )
         ]
 
       # set giving nodes module to receiving nods
@@ -711,15 +711,18 @@ pragmatic_modules <- function(x, max.size, n.mods = NULL){
 
 #' @export
 eigen_fuzzy_modules <- function(x, input.modules, max.size, n.pc = 2, ratio = 1.5){
+  # check if any modules are to large
+  if (any(lapply(input.modules@index.list, length) > max.size)) {
+    stop("Some modules are to large, increase maxsize.")
+  }
+
+
   index.list <- lapply(seq_along(input.modules@index.list), function(m){
     mod <- input.modules@index.list[[m]]
     #get number of required fuzzy nodes
     f.size <- length(mod)*ratio
     if(f.size > max.size){f.size <- max.size}
     n.fuzzy.nodes <- f.size - length(mod)
-    if(n.fuzzy.nodes < 1){
-      stop("Warning, modules exist larger than max size")
-    }
 
     #get the modules PC
     mod.PC <- stats::prcomp(t(x[mod,]), scale. = TRUE)
