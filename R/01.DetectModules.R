@@ -174,6 +174,15 @@ find_WGCNA_mods <- function(x,
   if (cor.FN == "cor") cor.options = list(use="p")
   if (cor.FN == "bicor") cor.options = list(pearsonFallback="individual")
 
+  # Check that all rows have variance
+  rv <- MatrixGenerics::rowVars(x)
+  if(any(rv == 0)){
+    warning("Warning: some matrix elements have zero variance. Removing them from data as they will not have any edges")
+    rm.r <- which(rv == 0)
+    cat("Removed rows: ", rm.r  )
+    x <- x[-rm.r, , drop = FALSE]
+  }
+
   # Pick soft threshold via scale-free fit
   if (is.null(beta)) {
     sft <- WGCNA::pickSoftThreshold(data=t(x),
