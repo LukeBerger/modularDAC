@@ -4,7 +4,7 @@
 \alias{.fit_to_max_size}
 \title{Helper to find_WGCNA_mods that forces all modules to be within some max size}
 \usage{
-.fit_to_max_size(index.vector, adj, max.size)
+.fit_to_max_size(index.vector, adj, max.size, verbose = F)
 }
 \arguments{
 \item{index.vector}{index vector defining a module for each node or 0 for unassigned}
@@ -12,6 +12,8 @@
 \item{adj}{adjacency matrix produced by WGCNA::adjacency}
 
 \item{max.size}{integer for max number of nodes in each module}
+
+\item{verbose}{bool to declare each trade (mostly for debugging)}
 }
 \value{
 index vector with each module fitted to max size

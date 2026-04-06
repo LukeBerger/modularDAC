@@ -262,7 +262,7 @@ find_WGCNA_mods <- function(x,
     }
     cat("Final cut height" , cut.height, "produced", n.mods, "modules. \n")
   }else{
-      cat("Initial WGCNA call produced", n.mods, "\n")
+      cat("Initial WGCNA call produced", n.mods, "modules \n")
   }
 
 
@@ -284,7 +284,7 @@ find_WGCNA_mods <- function(x,
       )
 
       # if nothing changes, break loop
-      if(all(initial.index.vector == merged$colors)){
+      if(all(initial.index.vector == merged$colors)){ # this section of code is outdate, need to revise in later
         break
       }
       # else, use merged modules and restart
@@ -396,6 +396,7 @@ find_WGCNA_mods <- function(x,
 #' @param index.vector index vector defining a module for each node or 0 for unassigned
 #' @param adj adjacency matrix produced by WGCNA::adjacency
 #' @param max.size integer for max number of nodes in each module
+#' @param verbose bool to declare each trade (mostly for debugging)
 
 #' @return index vector with each module fitted to max size
 
@@ -404,43 +405,46 @@ find_WGCNA_mods <- function(x,
 .fit_to_max_size <- function(
     index.vector,
     adj,
-    max.size
+    max.size,
+    verbose = F
 
 ){
-
-  # find modules which are two large
+  # determine which modules will give and receive nodes
   mod.size <- table(index.vector)
-  if(any(mod.size > max.size)){
-    # determine which will give and receive nodes
-    giving = as.numeric(names(which(mod.size > max.size)))
-    receiving = as.numeric(names(which(mod.size < max.size)))
+
+  giving <- as.numeric(names(which(mod.size > max.size)))
+  receiving <- as.numeric(names(which(mod.size < max.size)))
+
+  giving.nodes <- which(index.vector %in% giving)
+  receiving.nodes <- which(index.vector %in% receiving)
+
+  n.trades <- 0
+
+  while(length(giving) > 0){
+    # find the giving node with the highest adj to a  receiving module
+    trade.scores <- adj[giving.nodes, receiving.nodes, drop = FALSE]
+    trade.giving <- giving.nodes[ which.max(matrixStats::rowMaxs(trade.scores)) ]
+    trade.receiving  <-  receiving.nodes[
+      which.max( adj[trade.giving,receiving.nodes] )
+      ]
+
+    # set giving nodes module to receiving module
+    if(verbose){cat("Trading", trade.giving, "to module", index.vector[ trade.receiving ], "\n" )}
+    index.vector[ trade.giving ] <- index.vector[ trade.receiving ]
+
+    # update module status
+    mod.size <- table(index.vector)
+
+    giving <- as.numeric(names(which(mod.size > max.size)))
+    receiving <- as.numeric(names(which(mod.size < max.size)))
 
     giving.nodes <- which(index.vector %in% giving)
     receiving.nodes <- which(index.vector %in% receiving)
 
-    n.trades <- 0
-
-    while(length(giving) > 0){
-      # find the giving node with the highest adj to a  receiving module
-      trade.scores <- adj[giving.nodes, receiving.nodes, drop = FALSE]
-      trade.giving <- giving.nodes[ which.max(matrixStats::rowMaxs(trade.scores)) ]
-      trade.receiving  <-  receiving.nodes[
-        which.max( adj[trade.giving,receiving.nodes] )
-        ]
-
-      # set giving nodes module to receiving nods
-      index.vector[ trade.giving ] <- index.vector[ trade.receiving ]
-
-      # update module status
-      mod.size = table(index.vector)
-      giving = which(mod.size > max.size)
-      receiving = which(mod.size < max.size)
-      giving.nodes <- which(index.vector %in% giving)
-      receiving.nodes <- which(index.vector %in% receiving)
-      n.trades <- n.trades + 1
-    }
-    cat("All modules fit within max size after",  n.trades, "trades. \n")
+    n.trades <- n.trades + 1
   }
+  cat("All modules fit within max size after",  n.trades, "trades. \n")
+
 
   return(index.vector)
 }
