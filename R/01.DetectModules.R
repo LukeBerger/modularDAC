@@ -851,6 +851,7 @@ eigen_fuzzy_modules <- function(x, input.modules, max.size, n.pc = 2, ratio = 1.
 }
 
 #' Creates overlapping sets of fuzzy modules based on thresholded adj matrix from WGCNA
+#' @param x a p x n matrix of features
 #' @param adj the thresholded adjacency matrix from WGCNA
 #' @param input.modules a module object
 #' @param max.size the max size of fuzzy modules
@@ -861,7 +862,7 @@ eigen_fuzzy_modules <- function(x, input.modules, max.size, n.pc = 2, ratio = 1.
 #' @importFrom methods new
 
 #' @export
-adj_fuzzy_modules <- function(adj, input.modules, max.size, ratio){
+adj_fuzzy_modules <- function(x, adj, input.modules, max.size, ratio){
   # check if any modules are to large
   if (any(lapply(input.modules@index.list, length) > max.size)) {
     stop("Some modules are to large, increase maxsize.")
