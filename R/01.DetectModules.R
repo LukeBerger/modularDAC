@@ -144,6 +144,7 @@ true_fuzzy <- function(m, g){
 #' @param cut.height an integer between 0 and 1, the cut height used by cutreeDynamic
 #' @param merge a boolean, whether or not to attempt to merge modules using WGCNA::mergeCloseModules
 #' @param merging.cut a numeric between 0 and 1, the cutheight for WGCNA::mergeCloseModules
+#' @param iterate boolean, whether to run module detection iteratively to break up large modules
 
 #' @return a module object
 
