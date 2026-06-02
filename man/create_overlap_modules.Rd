@@ -2,7 +2,7 @@
 % Please edit documentation in R/01.DetectModules.R
 \name{create_overlap_modules}
 \alias{create_overlap_modules}
-\title{Create a set of overlapping modules from data matrix and strict, none overlapping modules}
+\title{Create a set of overlapping modules from data matrix and strict, nonverlapping modules}
 \usage{
 create_overlap_modules(x, input.modules, use.eigen = TRUE, best.pairs = TRUE)
 }
@@ -19,5 +19,5 @@ create_overlap_modules(x, input.modules, use.eigen = TRUE, best.pairs = TRUE)
 a module object
 }
 \description{
-Create a set of overlapping modules from data matrix and strict, none overlapping modules
+Create a set of overlapping modules from data matrix and strict, nonverlapping modules
 }

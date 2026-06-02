@@ -11,7 +11,7 @@ eigen_fuzzy_modules(x, input.modules, max.size, n.pc = 2, ratio = 1.5)
 
 \item{input.modules}{a module object}
 
-\item{max.size}{The maximum number of members in a data matrix}
+\item{max.size}{the maxsize of fuzzy modules}
 
 \item{n.pc}{number of principle componets use to define correlation of fuzzy nodes to the module}
 

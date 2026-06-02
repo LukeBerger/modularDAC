@@ -9,7 +9,7 @@ pragmatic_modules(x, max.size, n.mods = NULL)
 \arguments{
 \item{x}{a p x n matrix of features}
 
-\item{max.size}{the maximum number of members in a data matrix}
+\item{max.size}{the maxsize of modules}
 
 \item{n.mods}{the number of modules to search for in the data}
 }
