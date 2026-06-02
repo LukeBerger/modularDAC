@@ -133,7 +133,7 @@ true_fuzzy <- function(m, g){
 }
 
 #' Uses WGCNA to detect modules from a data matrix
-#' @param x a p x n matrix of features
+#' @param x a P x N matrix of features
 #' @param min.size an integer, the min size of modules produced by dynamicTreeCut
 #' @param max.size an integer, the maximum size of modules
 #' @param min.sft an integer, the min sft used by the pickSoftThreshold function
@@ -208,10 +208,10 @@ find_WGCNA_mods <- function(x,
                           type="unsigned",
                           corOptions=cor.options)
 
-  # Topological overlap dissimilarity transformation
+  # Topological overlap distance transformation
   dis <- WGCNA::TOMdist(adjMat=adj, TOMType="unsigned")
 
-  # Fast hierarchical clustering of dissimilarity
+  # Fast hierarchical clustering of distance
   dendro <- flashClust::flashClust(d=stats::as.dist(dis), method=hclust.method)
 
   # Module identification using dynamic tree cut algorithm
@@ -271,7 +271,7 @@ find_WGCNA_mods <- function(x,
     cat("Merging modules based on eigen gene similarity... \n")
     n.merges <- 0
     # While there are at least min.mods modules and they are all bellow maxsize
-    while(n.mods > min.mods && all(table(initial.index.vector < max.size )) ){
+    while(n.mods > min.mods && all(table(initial.index.vector  ) < max.size ) ){
       # Merge similar modules (single iteration)
       merged <- WGCNA::mergeCloseModules(
         exprData=t(x),
@@ -293,7 +293,7 @@ find_WGCNA_mods <- function(x,
       n.merges <- n.merges + 1
     }
     if(n.merges == 0){
-      cat("No modules were similiar enough to merge, using initial modules... \n")
+      cat("No modules were small/similiar enough to merge, using initial modules... \n")
     }else{
       cat("Merged" , n.merges, "modules, resulting in", n.mods, "new modules. \n")
     }
