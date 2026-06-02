@@ -851,14 +851,13 @@ eigen_fuzzy_modules <- function(x, input.modules, max.size, n.pc = 2, ratio = 1.
 }
 
 #' Creates overlapping sets of fuzzy modules based on thresholded adj matrix from WGCNA
-#' @param x a p x n matrix of features
+#' @param adj the thresholded adjacency matrix from WGCNA
 #' @param input.modules a module object
-#' @param max.size the maxsize of fuzzy modules
+#' @param max.size the max size of fuzzy modules
 #' @param ratio the ratio of original nodes in the module to nodes in the fuzzy module
 
 #' @return a module object
 
-#' @importFrom stats prcomp cor
 #' @importFrom methods new
 
 #' @export
