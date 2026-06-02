@@ -688,7 +688,7 @@ find_megena_mods <- function(x,
 
 #' Uses ICA to detect modules from a data matrix then reassigned nodes to fit all modules to a max size
 #' @param x  a p x n matrix of features
-#' @param max.size the maximum number of members in a data matrix
+#' @param max.size the maxsize of modules
 #' @param n.mods the number of modules to search for in the data
 
 #' @return a module object
@@ -768,10 +768,21 @@ pragmatic_modules <- function(x, max.size, n.mods = NULL){
   return(prag.mods)
 }
 
+
+
+
+
+
+
+
+
+
+
+
 #' Creates overlapping sets of fuzzy modules based on correlation of nodes outside the module with its eigen gene
 #' @param x a p x n matrix of features
 #' @param input.modules a module object
-#' @param max.size The maximum number of members in a data matrix
+#' @param max.size the maxsize of fuzzy modules
 #' @param n.pc number of principle componets use to define correlation of fuzzy nodes to the module
 #' @param ratio the ratio of original nodes in the module to nodes in the fuzzy module
 
@@ -787,16 +798,16 @@ eigen_fuzzy_modules <- function(x, input.modules, max.size, n.pc = 2, ratio = 1.
     stop("Some modules are to large, increase maxsize.")
   }
 
-
+  # create new index list (list of nodes in each fuzzy module by index)
   index.list <- lapply(seq_along(input.modules@index.list), function(m){
-    mod <- input.modules@index.list[[m]]
+    mod.nodes <- input.modules@index.list[[m]]
     #get number of required fuzzy nodes
-    f.size <- length(mod)*ratio
+    f.size <- length(mod.nodes)*ratio
     if(f.size > max.size){f.size <- max.size}
-    n.fuzzy.nodes <- f.size - length(mod)
+    n.fuzzy.nodes <- f.size - length(mod.nodes)
 
     #get the modules PC
-    mod.PC <- stats::prcomp(t(x[mod,]), scale. = TRUE)
+    mod.PC <- stats::prcomp(t(x[mod.nodes,]), scale. = TRUE)
     # var.exp <- lapply(1:n.pc, function(i){
     #   (mod.PC$sdev[i] / sum(mod.PC$sdev))*100
     # })
@@ -811,7 +822,7 @@ eigen_fuzzy_modules <- function(x, input.modules, max.size, n.pc = 2, ratio = 1.
 
     #get genes outside the module the correlated with the eigen gene
     eigen.cor <- lapply(mod.eigen, function(pc){
-      abs(apply(x[-mod,], 1, function(x) stats::cor(x, pc)))
+      abs(apply(x[-mod.nodes,], 1, function(x) stats::cor(x, pc)))
     })
     eigen.cor <- Reduce('+', eigen.cor)
 
@@ -824,7 +835,7 @@ eigen_fuzzy_modules <- function(x, input.modules, max.size, n.pc = 2, ratio = 1.
     names(fuzzy.nodes) <- rownames(x[fuzzy.nodes,])
 
     #return fuzzy module combining original and fuzzy nodes
-    sort(c(mod, fuzzy.nodes))
+    sort(c(mod.nodes, fuzzy.nodes))
   })
 
   # convert to module object and return
@@ -833,61 +844,68 @@ eigen_fuzzy_modules <- function(x, input.modules, max.size, n.pc = 2, ratio = 1.
                              data.dim = dim(x),
                              overlapping = TRUE,
                              index.list = index.list,
-                             name.list = lapply(index.list, function(mod){rownames(x)[mod]})
+                             name.list = lapply(index.list, function(m){rownames(x)[m]})
   )
   return(fuzzy.mods)
 
 }
 
-#' Creates overlapping sets of fuzzy modules based on nodewise correlation of nodes outside the module with any of the nodes within it
+#' Creates overlapping sets of fuzzy modules based on thresholded adj matrix from WGCNA
 #' @param x a p x n matrix of features
 #' @param input.modules a module object
-#' @param max.size The maximum number of members in a data matrix
+#' @param max.size the maxsize of fuzzy modules
+#' @param ratio the ratio of original nodes in the module to nodes in the fuzzy module
 
 #' @return a module object
 
-#' @importFrom stats cor
+#' @importFrom stats prcomp cor
 #' @importFrom methods new
 
 #' @export
-nodewise_fuzzy_modules <- function(x, input.modules, max.size){
-  #get cor matrix
-  cor.matrix <- abs(stats::cor(t(x)))
+adj_fuzzy_modules <- function(adj, input.modules, max.size, ratio){
+  # check if any modules are to large
+  if (any(lapply(input.modules@index.list, length) > max.size)) {
+    stop("Some modules are to large, increase maxsize.")
+  }
 
-  #create fuzzy modules
-  modules <- lapply(input.modules@index.list, function(mod){
+  # create new index list (list of nodes in each fuzzy module by index)
+  index.list <- lapply(seq_along(input.modules@index.list), function(m){
+    mod.nodes <- input.modules@index.list[[m]]
     #get number of required fuzzy nodes
-    n.fuzzy.nodes <- max.size - length(mod)
+    f.size <- length(mod.nodes)*ratio
+    if(f.size > max.size){f.size <- max.size}
+    n.fuzzy.nodes <- f.size - length(mod.nodes)
 
-    #get only covariance of genes in the module with genes not in the module
-    cor.sub.matrix <- cor.matrix[mod,-mod] #mod-genes by not-mod-genes matrix
+    # get matrix of nodes in module adj with nodes outside module
+    in.out.adj <- adj[mod.nodes, -mod.nodes]
 
-    #get column maxes for absolute covariance and use them to select fuzzy nodes
-    column.maxes <- apply(cor.sub.matrix,2 ,max)
-    corRank <- order(column.maxes, decreasing = TRUE)
-    fuzzy.nodes <- colnames(cor.sub.matrix)[corRank[1:n.fuzzy.nodes]]
+    # get max adj of node outside module with node inside module
+    out.max <- apply(in.out.adj,2 ,max)
+
+    # rank and select fuzzy nodes based on adj
+    adj.rank <- order(out.max, decreasing = TRUE)
+    fuzzy.nodes <- colnames(in.out.adj)[adj.rank[1:n.fuzzy.nodes]]
 
     #convert fuzzy nodes to numerics (stored naturally as names)
     fuzzy.nodes <- which(rownames(x) %in% fuzzy.nodes)
     names(fuzzy.nodes) <- rownames(x[fuzzy.nodes,])
 
     #return fuzzy module combining original and fuzzy nodes
-    sort(c(mod, fuzzy.nodes))
-
+    sort(c(mod.nodes, fuzzy.nodes))
   })
 
   # convert to module object and return
-  fuzzy_modules <- methods::new("module",
-                       source = paste("nodewise_fuzzy_modules", "generated from", input.modules@source),
-                       data.dim = dim(x),
-                       overlapping = TRUE,
-                       index.list = modules,
-                       name.list = lapply(modules, function(mod){rownames(x)[mod]})
+  fuzzy.mods <- methods::new("module",
+                             source = paste("adj_fuzzy_modules", "generated from", input.modules@source),
+                             data.dim = dim(x),
+                             overlapping = TRUE,
+                             index.list = index.list,
+                             name.list = lapply(index.list, function(m){rownames(x)[m]})
   )
-  return(fuzzy_modules)
+  return(fuzzy.mods)
 }
 
-#' Create a set of overlapping modules from data matrix and strict, none overlapping modules
+#' Create a set of overlapping modules from data matrix and strict, nonverlapping modules
 #' @param x a p x n matrix of features
 #' @param input.modules a module object
 #' @param use.eigen whether or not to use the eigen gene to determine overlaps, otherwise nodewise correlation is used
