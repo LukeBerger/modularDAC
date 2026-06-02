@@ -173,6 +173,11 @@ find_WGCNA_mods <- function(x,
   # Handle arguments
   cor.FN <- match.arg(cor.FN)
 
+  # merge / iterate relationship
+  if(merge & iterate){
+    cat("Note: Using both the 'merge' and 'iterate' options, may result in some modules being merged then immediately split, use with caution. \n ")
+  }
+
   # Correlation options
   if (cor.FN == "cor") cor.options = list(use="p")
   if (cor.FN == "bicor") cor.options = list(pearsonFallback="individual")
@@ -180,7 +185,7 @@ find_WGCNA_mods <- function(x,
   # Check that all rows have variance
   rv <- MatrixGenerics::rowVars(x)
   if(any(rv == 0)){
-    warning("Warning: some matrix elements have zero variance. Removing them from data as they will not have any edges")
+    warning("Warning: some matrix elements have zero variance. They will be removed from consideration as they would not be placed in any module")
     rm.r <- which(rv == 0)
     cat("Removed rows: ", rm.r  )
     x <- x[-rm.r, , drop = FALSE]
@@ -267,7 +272,6 @@ find_WGCNA_mods <- function(x,
       cat("Initial WGCNA call produced", n.mods, "modules \n")
   }
 
-
   # If merging
   if(merge){
     cat("Merging modules based on eigen gene similarity... \n")
@@ -304,7 +308,7 @@ find_WGCNA_mods <- function(x,
 
   # If iterating
   if(iterate){
-    # find modules that are two large
+    # find modules that are too large
     to.big <- as.numeric(names(which(table(initial.index.vector) > max.size)))
     to.big <- to.big[to.big!=0]
 
