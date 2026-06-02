@@ -15,11 +15,12 @@ find_WGCNA_mods(
   hclust.method = "average",
   cut.height = NULL,
   merge = F,
-  merging.cut = 0.2
+  merging.cut = 0.2,
+  iterate = T
 )
 }
 \arguments{
-\item{x}{a p x n matrix of features}
+\item{x}{a P x N matrix of features}
 
 \item{min.size}{an integer, the min size of modules produced by dynamicTreeCut}
 
@@ -40,6 +41,8 @@ find_WGCNA_mods(
 \item{merge}{a boolean, whether or not to attempt to merge modules using WGCNA::mergeCloseModules}
 
 \item{merging.cut}{a numeric between 0 and 1, the cutheight for WGCNA::mergeCloseModules}
+
+\item{iterate}{boolean, whether to run module detection iteratively to break up large modules}
 }
 \value{
 a module object
