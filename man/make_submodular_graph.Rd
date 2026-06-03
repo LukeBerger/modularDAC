@@ -2,10 +2,10 @@
 % Please edit documentation in R/00.SimulateGraphs.R
 \name{make_submodular_graph}
 \alias{make_submodular_graph}
-\title{Create graph comprised of multiple subgraphs each of which is comprised of multi modules}
+\title{Create graph comprised of multiple subgraphs each of which is comprised of multiple modules, see create modular graph for details}
 \usage{
 make_submodular_graph(
-  g.type = "er",
+  g.type = c("er", "sf"),
   n.mods = 3,
   n.mod.links = 3,
   n.sg = 3,
@@ -48,5 +48,5 @@ make_submodular_graph(
 an igraph object
 }
 \description{
-Create graph comprised of multiple subgraphs each of which is comprised of multi modules
+Create graph comprised of multiple subgraphs each of which is comprised of multiple modules, see create modular graph for details
 }

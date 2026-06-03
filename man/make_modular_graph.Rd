@@ -2,10 +2,10 @@
 % Please edit documentation in R/00.SimulateGraphs.R
 \name{make_modular_graph}
 \alias{make_modular_graph}
-\title{Create graph comprised of multiple modules}
+\title{Create graph comprised of multiple modules: using either Erdős–Rényi of scale-free structures within modules}
 \usage{
 make_modular_graph(
-  g.type = "er",
+  g.type = c("er", "sf"),
   n.mods = 3,
   n.nodes = 120,
   n.mod.links = 3,
@@ -42,5 +42,5 @@ make_modular_graph(
 an igraph object
 }
 \description{
-Create graph comprised of multiple modules
+Create graph comprised of multiple modules: using either Erdős–Rényi of scale-free structures within modules
 }
