@@ -1,4 +1,4 @@
-#' Create graph comprised of multiple modules
+#' Create graph comprised of multiple modules: using either Erdős–Rényi of scale-free structures within modules
 #' @param g.type a character determining graph type graph type, er for Erdos Renyi or sf for scale free
 #' @param n.mods an integer determining the number of modules in output graph
 #' @param n.nodes an integer determining the number of features/nodes in the graph
@@ -15,7 +15,7 @@
 #' @importFrom igraph sample_gnp sample_pa V add_edges simplify
 
 #' @export
-make_modular_graph <- function(g.type="er",
+make_modular_graph <- function(g.type=c("er", "sf"),
                                n.mods=3, n.nodes=120, n.mod.links=3,
                                no.uncon =T, link.all = T,
                                p.edge = 0.05, power=1, z.appeal=1, ...){
@@ -107,7 +107,7 @@ make_modular_graph <- function(g.type="er",
   return(mg)
 }
 
-#' Create graph comprised of multiple subgraphs each of which is comprised of multi modules
+#' Create graph comprised of multiple subgraphs each of which is comprised of multiple modules, see create modular graph for details
 #' @param g.type a character, graph type graph type, er for Erdos Renyi or sf for scale free
 #' @param n.mods an integer, the number of modules in output graph
 #' @param n.mod.links an integer, the number of edges between each module in the graph
@@ -377,7 +377,6 @@ modular_plot <- function(g,
       visNetwork::visLayout(randomSeed = 123)
   }
 }
-
 
 
 ## bdgraph function with two lines removed which caused a bug when using a
