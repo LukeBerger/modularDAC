@@ -19,6 +19,10 @@ make_modular_graph <- function(g.type=c("er", "sf"),
                                n.mods=3, n.nodes=120, n.mod.links=3,
                                no.uncon =T, link.all = T,
                                p.edge = 0.05, power=1, z.appeal=1, ...){
+
+  # match args
+  g.type <- match.arg(g.type)
+
   #calculate the number of nodes per module
   n.nodes <- round(n.nodes / n.mods)
 
@@ -126,11 +130,15 @@ make_modular_graph <- function(g.type=c("er", "sf"),
 #' @importFrom igraph sample_gnp sample_pa V add_edges simplify
 
 #' @export
-make_submodular_graph <- function(g.type="er",
+make_submodular_graph <- function(g.type=c("er", "sf"),
                                   n.mods=3, n.mod.links=3,
                                   n.sg=3, n.sg.nodes=120, n.sg.links=1,
                                   no.uncon =T, link.all = T,
                                   p.edge = 0.05, power=1, z.appeal=1, ...){
+
+  # match args
+  g.type <- match.arg(g.type)
+
   #initialize and empty list of subgraphs
   subgraphs <- vector(mode = "list", length = n.sg)
 
