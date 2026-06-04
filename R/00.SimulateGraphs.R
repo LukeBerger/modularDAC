@@ -259,6 +259,9 @@ make_lfr <- function(n = 120,
                      max.degree = 10,
                      min.community = 30,
                      max.community = 50){
+  if (!requireNamespace("netUtils", quietly = TRUE)) {
+    stop("Package netUtils is required. Install with: install.packages('netUtils')", call. = FALSE)
+  }
   # generate LFR benchmark graph
   g <- netUtils::sample_lfr(
     n = n,
@@ -294,6 +297,12 @@ make_lfr <- function(n = 120,
 
 #' @export
 sim_graph_data <- function(g, n.samples, mean.vec = NULL){
+  if (!requireNamespace("BDgraph", quietly = TRUE)) {
+    stop("Package BDgraph is required. Install with: install.packages('BDgraph')", call. = FALSE)
+  }
+  if (!requireNamespace("MASS", quietly = TRUE)) {
+    stop("Package MASS is required. Install with: install.packages('MASS')", call. = FALSE)
+  }
   # if mean.vec is not set, default to a zero vector
   if(is.null(mean.vec)){
     # zero mean for all features
@@ -335,6 +344,9 @@ modular_plot <- function(g,
                          module.name = "module",
                          subgraphs = FALSE,
                          subname = "subgraph"){
+  if (!requireNamespace("visNetwork", quietly = TRUE)) {
+    stop("Package visNetwork is required. Install with: install.packages('visNetwork')", call. = FALSE)
+  }
   # get edges matrix
   edge.list <- igraph::as_edgelist(g)
   edges <- data.frame(

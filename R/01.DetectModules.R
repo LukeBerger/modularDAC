@@ -175,6 +175,21 @@ find_WGCNA_mods <- function(x,
                             merging.cut = 0.2,
                             iterate = T
 ) {
+  if (!requireNamespace("WGCNA", quietly = TRUE)) {
+    stop("Package WGCNA is required. Install with: install.packages('WGCNA')", call. = FALSE)
+  }
+  if (!requireNamespace("flashClust", quietly = TRUE)) {
+    stop("Package flashClust is required. Install with: install.packages('flashClust')", call. = FALSE)
+  }
+  if (!requireNamespace("dynamicTreeCut", quietly = TRUE)) {
+    stop("Package dynamicTreeCut is required. Install with: install.packages('dynamicTreeCut')", call. = FALSE)
+  }
+  if (!requireNamespace("MatrixGenerics", quietly = TRUE)) {
+    stop("Package MatrixGenerics is required. Install with: install.packages('MatrixGenerics')", call. = FALSE)
+  }
+  if (!requireNamespace("matrixStats", quietly = TRUE)) {
+    stop("Package matrixStats is required. Install with: install.packages('matrixStats')", call. = FALSE)
+  }
 
   # handle arguments
   cor.FN <- match.arg(cor.FN)
@@ -523,6 +538,9 @@ find_WGCNA_mods <- function(x,
 find_ICA_mods <- function(x,
                           n.comp,
                           ...){
+  if (!requireNamespace("fastICA", quietly = TRUE)) {
+    stop("Package fastICA is required. Install with: install.packages('fastICA')", call. = FALSE)
+  }
   # run ica to decompose features into independent components
   ICA.results <- fastICA::fastICA(X= as.matrix(x),
                                   n.comp = n.comp,
@@ -565,6 +583,12 @@ find_mcl_mods <- function(x,
                           inflation=1,
                           cor.fn="cor",
                           iter=1000){
+  if (!requireNamespace("WGCNA", quietly = TRUE)) {
+    stop("Package WGCNA is required. Install with: install.packages('WGCNA')", call. = FALSE)
+  }
+  if (!requireNamespace("MCL", quietly = TRUE)) {
+    stop("Package MCL is required. Install with: install.packages('MCL')", call. = FALSE)
+  }
   # compute unsigned and scaled correlation matrix
   mat <- WGCNA::adjacency(datExpr=x,
                           power=beta,
@@ -630,6 +654,9 @@ find_megena_mods <- function(x,
                              is.signed=FALSE,
                              n.cores = 1
                              ){
+  if (!requireNamespace("MEGENA", quietly = TRUE)) {
+    stop("Package MEGENA is required. Install with: install.packages('MEGENA')", call. = FALSE)
+  }
 
   # if given access to multiple cores...
   do.par <- n.cores > 1
@@ -696,6 +723,9 @@ find_megena_mods <- function(x,
 
 #' @export
 pragmatic_modules <- function(x, max.size, n.mods = NULL){
+  if (!requireNamespace("fastICA", quietly = TRUE)) {
+    stop("Package fastICA is required. Install with: install.packages('fastICA')", call. = FALSE)
+  }
   # perform ICA
   # n initial modules of max size will cover the entire network
   n.comp <- ifelse(is.null(n.mods),

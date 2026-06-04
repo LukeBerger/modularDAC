@@ -316,6 +316,9 @@ divide_and_conquer <- function(x,
 
 #' @keywords internal
 .bd_wrapper <- function(x){
+  if (!requireNamespace("BDgraph", quietly = TRUE)) {
+    stop("Package BDgraph is required. Install with: install.packages('BDgraph')", call. = FALSE)
+  }
   bdFit <- BDgraph::bdgraph(x)
   postProb <- BDgraph::plinks(bdFit)
   adjMat <- BDgraph::select(postProb)
@@ -404,6 +407,9 @@ divide_and_conquer <- function(x,
                                  CI = 0.95,
                                  filter = "pval",
                                  threshold = 0.05){
+  if (!requireNamespace("RSNet", quietly = TRUE)) {
+    stop("Package RSNet is required. Install with: install.packages('RSNet')", call. = FALSE)
+  }
 
   ens.net <- RSNet::capture_all(RSNet::ensemble_ggm(dat,
                                  num_iteration,

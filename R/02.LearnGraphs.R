@@ -36,6 +36,9 @@ learn_SILGGM_graph <- function(x,
                                pos.cut = 0,
                                neg.cut = 0,
                                ...){
+  if (!requireNamespace("SILGGM", quietly = TRUE)) {
+    stop("Package SILGGM is required. Install with: install.packages('SILGGM')", call. = FALSE)
+  }
 
   # run silggm
   silggm.output <- suppressMessages(
@@ -243,6 +246,12 @@ learn_WGCNA_graph <- function(x,
                               powers=c(seq(1, 10, by = 1), seq(12, 20, by = 2)),
                               threshold = NULL
 ) {
+  if (!requireNamespace("WGCNA", quietly = TRUE)) {
+    stop("Package WGCNA is required. Install with: install.packages('WGCNA')", call. = FALSE)
+  }
+  if (!requireNamespace("matrixStats", quietly = TRUE)) {
+    stop("Package matrixStats is required. Install with: install.packages('matrixStats')", call. = FALSE)
+  }
   # handle arguments
   cor.FN <- match.arg(cor.FN)
 
@@ -290,6 +299,9 @@ learn_WGCNA_graph <- function(x,
 
 #' @export
 learn_ARACNE_graph <- function(x, eps=0, threshold = 0.05) {
+  if (!requireNamespace("minet", quietly = TRUE)) {
+    stop("Package minet is required. Install with: install.packages('minet')", call. = FALSE)
+  }
 
   # build mutual information matrix
   mim <- minet::build.mim(dataset = x)
