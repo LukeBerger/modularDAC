@@ -2,20 +2,20 @@
 % Please edit documentation in R/02.LearnGraphs.R
 \name{learn_ARACNE_graph}
 \alias{learn_ARACNE_graph}
-\title{Uses ARACNE algorithm to learn a graph}
+\title{Learn a gene co-expression graph from a data matrix using the ARACNE algorithm}
 \usage{
 learn_ARACNE_graph(x, eps = 0, threshold = 0.05)
 }
 \arguments{
-\item{x}{an n x p matrix of features}
+\item{x}{a numeric matrix with p features (rows) and n samples (columns)}
 
-\item{eps}{numeric value indicating the threshold used when removing an edge}
+\item{eps}{a numeric, the data processing inequality threshold used by ARACNE to remove indirect edges}
 
-\item{threshold}{threshold value to convert mutial information to graphs}
+\item{threshold}{a numeric, the mutual information value above which an edge is retained}
 }
 \value{
-a igraph object
+an igraph object
 }
 \description{
-Uses ARACNE algorithm to learn a graph
+Learn a gene co-expression graph from a data matrix using the ARACNE algorithm
 }

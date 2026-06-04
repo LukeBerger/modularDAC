@@ -2,7 +2,7 @@
 % Please edit documentation in R/01.DetectModules.R
 \name{find_mcl_mods}
 \alias{find_mcl_mods}
-\title{Uses MCL to detect modules from a data matrix}
+\title{Detect co-expression modules from a data matrix using Markov Clustering (MCL)}
 \usage{
 find_mcl_mods(
   x,
@@ -15,23 +15,23 @@ find_mcl_mods(
 )
 }
 \arguments{
-\item{x}{a n x p matrix of features}
+\item{x}{a numeric matrix with p features (rows) and n samples (columns)}
 
-\item{beta}{an integer, the power value for WGCNA::adjacency}
+\item{beta}{an integer, the soft-thresholding power for WGCNA::adjacency}
 
-\item{cut}{a numeric < 1, the cut threshold for converting from correlation to binary adjacency}
+\item{cut}{a numeric between 0 and 1, the adjacency threshold used to binarize the weighted adjacency matrix}
 
-\item{expansion}{an integer, the expansion value of the mcl function}
+\item{expansion}{an integer, the expansion parameter of the MCL algorithm}
 
-\item{inflation}{an integer, the inflation value of the mcl function}
+\item{inflation}{an integer, the inflation parameter of the MCL algorithm}
 
-\item{cor.fn}{the correlation function to use in WGCNA::adjacency}
+\item{cor.fn}{a character, the correlation function to use in WGCNA::adjacency; either 'bicor' or 'cor'}
 
-\item{iter}{an integer, the maximum number of iterations in the mcl function}
+\item{iter}{an integer, the maximum number of iterations for the MCL algorithm}
 }
 \value{
 a module object
 }
 \description{
-Uses MCL to detect modules from a data matrix
+Detect co-expression modules from a data matrix using Markov Clustering (MCL)
 }

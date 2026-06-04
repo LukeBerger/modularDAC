@@ -2,17 +2,17 @@
 % Please edit documentation in R/02.LearnGraphs.R
 \name{.halfmin_impute}
 \alias{.halfmin_impute}
-\title{Preforms halfmin imputation to fill NAs in matrix missing values, useful for filling NAs in matrix before graph learning}
+\title{Impute missing values in a data matrix using half the row minimum}
 \usage{
 .halfmin_impute(dat)
 }
 \arguments{
-\item{dat}{data matrix of numeric values}
+\item{dat}{a numeric matrix with p features (rows) and n samples (columns)}
 }
 \value{
 the data matrix with NAs filled
 }
 \description{
-Preforms halfmin imputation to fill NAs in matrix missing values, useful for filling NAs in matrix before graph learning
+Impute missing values in a data matrix using half the row minimum
 }
 \keyword{internal}

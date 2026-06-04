@@ -2,17 +2,17 @@
 % Please edit documentation in R/03.Multithreaded_DaC.R
 \name{.bd_arg_wrapper}
 \alias{.bd_arg_wrapper}
-\title{arg wrapper for BD graph}
+\title{Argument wrapper for BDgraph: transposes each module data subset for use with BDgraph::bdgraph}
 \usage{
 .bd_arg_wrapper(sub.x)
 }
 \arguments{
-\item{sub.x}{subset of a large data matrix x defined based on modules}
+\item{sub.x}{a list of numeric matrices, each being a p_i x n subset of x for one module (features as rows)}
 }
 \value{
 a list containing the learned subgraphs data transformed for bdgraph
 }
 \description{
-arg wrapper for BD graph
+Argument wrapper for BDgraph: transposes each module data subset for use with BDgraph::bdgraph
 }
 \keyword{internal}

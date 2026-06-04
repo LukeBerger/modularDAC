@@ -2,7 +2,7 @@
 % Please edit documentation in R/02.LearnGraphs.R
 \name{learn_WGCNA_graph}
 \alias{learn_WGCNA_graph}
-\title{Uses WGCNA to learn a graph}
+\title{Learn a gene co-expression graph from a data matrix using WGCNA}
 \usage{
 learn_WGCNA_graph(
   x,
@@ -14,21 +14,21 @@ learn_WGCNA_graph(
 )
 }
 \arguments{
-\item{x}{a n x p matrix of features}
+\item{x}{a numeric matrix with p features (rows) and n samples (columns)}
 
-\item{min.sft}{an integer, the min sft used by the pickSoftThreshold function}
+\item{min.sft}{a numeric between 0 and 1, the minimum R-squared threshold for soft-thresholding power selection}
 
-\item{beta}{an integer, the power value used by WGCNA::adjacency}
+\item{beta}{an integer, the soft-thresholding power for WGCNA::adjacency; if NULL it is selected automatically via pickSoftThreshold}
 
-\item{cor.FN}{a character, the cor.options WGCNA::adjacency}
+\item{cor.FN}{a character, the correlation function to use in WGCNA::adjacency; either 'bicor' or 'cor'}
 
-\item{powers}{an integer vector, the powers vector used by WGCNA::pickSoftThreshold}
+\item{powers}{an integer vector, candidate soft-thresholding powers evaluated by WGCNA::pickSoftThreshold}
 
-\item{threshold}{value to binarize adj matrix against}
+\item{threshold}{a numeric, the adjacency value above which an edge is retained; if NULL the 99.9th percentile is used}
 }
 \value{
-a igraph object
+an igraph object
 }
 \description{
-Uses WGCNA to learn a graph
+Learn a gene co-expression graph from a data matrix using WGCNA
 }

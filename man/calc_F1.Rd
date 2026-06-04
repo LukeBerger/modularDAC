@@ -2,18 +2,18 @@
 % Please edit documentation in R/02.LearnGraphs.R
 \name{calc_F1}
 \alias{calc_F1}
-\title{Calculates F1 score from a true and predicted graph}
+\title{Calculate the F1 score comparing a predicted graph against a true graph}
 \usage{
 calc_F1(g.true, g.pred)
 }
 \arguments{
-\item{g.true}{an igraph object, the true graph for the purpose of F1 calculation}
+\item{g.true}{an igraph object, the true reference graph}
 
-\item{g.pred}{an igraph object, the predicted graph for the purpose of F1 calculation}
+\item{g.pred}{an igraph object, the predicted graph to evaluate}
 }
 \value{
 a list of F1 score and its components
 }
 \description{
-Calculates F1 score from a true and predicted graph
+Calculate the F1 score comparing a predicted graph against a true graph
 }

@@ -2,24 +2,24 @@
 % Please edit documentation in R/01.DetectModules.R
 \name{eigen_fuzzy_modules}
 \alias{eigen_fuzzy_modules}
-\title{Creates overlapping sets of fuzzy modules based on correlation of nodes outside the module with its eigen gene}
+\title{Expand non-overlapping modules to fuzzy (overlapping) modules by recruiting nodes correlated with each module's eigengene}
 \usage{
 eigen_fuzzy_modules(x, input.modules, max.size, n.pc = 2, ratio = 1.5)
 }
 \arguments{
-\item{x}{a p x n matrix of features}
+\item{x}{a numeric matrix with p features (rows) and n samples (columns)}
 
-\item{input.modules}{a module object}
+\item{input.modules}{a module S4 object containing the non-overlapping module assignments to expand}
 
-\item{max.size}{the maxsize of fuzzy modules}
+\item{max.size}{an integer, the maximum number of nodes allowed in any fuzzy module}
 
-\item{n.pc}{number of principle componets use to define correlation of fuzzy nodes to the module}
+\item{n.pc}{an integer, the number of principal components used to represent each module's eigengene}
 
-\item{ratio}{the ratio of original nodes in the module to nodes in the fuzzy module}
+\item{ratio}{a numeric, the maximum ratio of fuzzy module size to original module size}
 }
 \value{
 a module object
 }
 \description{
-Creates overlapping sets of fuzzy modules based on correlation of nodes outside the module with its eigen gene
+Expand non-overlapping modules to fuzzy (overlapping) modules by recruiting nodes correlated with each module's eigengene
 }

@@ -2,7 +2,7 @@
 % Please edit documentation in R/02.LearnGraphs.R
 \name{learn_SILGGM_graph}
 \alias{learn_SILGGM_graph}
-\title{Learns a graph from data using SILGGM}
+\title{Learn a gene co-expression graph from a data matrix using SILGGM}
 \usage{
 learn_SILGGM_graph(
   x,
@@ -17,27 +17,27 @@ learn_SILGGM_graph(
 )
 }
 \arguments{
-\item{x}{an  n by p matrix of numeric data}
+\item{x}{a numeric matrix with p features (rows) and n samples (columns)}
 
-\item{method}{Methods for statistical inference with 5 options: "B_NW_SL", "D-S_NW_SL", "D-S_GL", "GFC_SL" and "GFC_L"}
+\item{method}{a character, the statistical inference method; one of 'B_NW_SL', 'D-S_NW_SL', 'D-S_GL', 'GFC_SL', or 'GFC_L'}
 
-\item{global}{If global = TRUE, the global inference of all gene pairs is performed.}
+\item{global}{a logical, if TRUE global inference is performed across all feature pairs}
 
-\item{alpha}{A user-supplied sequence of pre-sepecified alpha levels for FDR control. The default is alpha = 0.05, 0.1 if no sequence is provided.}
+\item{alpha}{a numeric or numeric vector, the pre-specified FDR significance level(s) for edge inclusion (default 0.05)}
 
-\item{fdr.filter}{Whether to filter adjacency matrix results based on}
+\item{fdr.filter}{a logical, if TRUE the adjacency matrix is filtered to retain only edges below max.fdr}
 
-\item{max.fdr}{The threshold to define an edge based on partial cor q val}
+\item{max.fdr}{a numeric, the FDR q-value threshold above which an edge is set to zero}
 
-\item{pos.cut}{Threhold to zero values in adjacency matrix}
+\item{pos.cut}{a numeric, the minimum absolute partial correlation for a positive edge to be retained}
 
-\item{neg.cut}{Threhold to zero values in adjacency matrix}
+\item{neg.cut}{a numeric, the minimum absolute partial correlation for a negative edge to be retained}
 
-\item{...}{Additional arguments passed to SILGGM function}
+\item{...}{additional arguments passed to SILGGM::SILGGM}
 }
 \value{
 an igraph object
 }
 \description{
-Learns a graph from data using SILGGM
+Learn a gene co-expression graph from a data matrix using SILGGM
 }

@@ -2,7 +2,7 @@
 % Please edit documentation in R/00.SimulateGraphs.R
 \name{modular_plot}
 \alias{modular_plot}
-\title{Plots a graph with nicely coloured modules}
+\title{Plot a modular graph with nodes colored by module membership using visNetwork}
 \usage{
 modular_plot(
   g,
@@ -12,14 +12,17 @@ modular_plot(
 )
 }
 \arguments{
-\item{g}{an igraph object}
+\item{g}{an igraph object whose nodes have a module (and optionally subgraph) vertex attribute}
 
-\item{module.name}{the name of the module value on each node}
+\item{module.name}{a character, the name of the vertex attribute storing module membership (default 'module')}
 
-\item{subgraphs}{boolean indicating whether to use subgraphs}
+\item{subgraphs}{a logical, if TRUE nodes are colored by module and can be filtered by subgraph membership}
 
-\item{subname}{the name of the subgraph value on each node}
+\item{subname}{a character, the name of the vertex attribute storing subgraph membership (default 'subgraph')}
+}
+\value{
+a visNetwork HTML widget
 }
 \description{
-Plots a graph with nicely coloured modules
+Plot a modular graph with nodes colored by module membership using visNetwork
 }

@@ -2,23 +2,23 @@
 % Please edit documentation in R/01.DetectModules.R
 \name{.match_modules}
 \alias{.match_modules}
-\title{Finds the best module matches between two sets of nodes}
+\title{Find the best-matching module pairs between two sets of modules based on node membership overlap}
 \usage{
 .match_modules(m1.nodes, m2.nodes, m1.names, m2.names)
 }
 \arguments{
-\item{m1.nodes}{Node index vector from m1}
+\item{m1.nodes}{an integer vector, the node index assignments from m1}
 
-\item{m2.nodes}{Node index vector from m2}
+\item{m2.nodes}{an integer vector, the node index assignments from m2}
 
-\item{m1.names}{Node character vector from m1}
+\item{m1.names}{a character vector, the node names from m1}
 
-\item{m2.names}{Node character vector from m2}
+\item{m2.names}{a character vector, the node names from m2}
 }
 \value{
 a list of all the best modules matched based on node membership
 }
 \description{
-Finds the best module matches between two sets of nodes
+Find the best-matching module pairs between two sets of modules based on node membership overlap
 }
 \keyword{internal}

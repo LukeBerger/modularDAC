@@ -2,7 +2,7 @@
 % Please edit documentation in R/03.Multithreaded_DaC.R
 \name{.default_arg_wrapper}
 \alias{.default_arg_wrapper}
-\title{Basic arg wrapper to prepare args for graph learning in divide_and_conquer}
+\title{Default argument wrapper for divide_and_conquer: packages each module data subset with SILGGM arguments}
 \usage{
 .default_arg_wrapper(
   sub.x,
@@ -16,26 +16,26 @@
 )
 }
 \arguments{
-\item{sub.x}{subset of a large data matrix x defined based on modules}
+\item{sub.x}{a list of numeric matrices, each being a p_i x n subset of x for one module (features as rows)}
 
-\item{method}{Methods for statistical inference with 5 options: "B_NW_SL", "D-S_NW_SL", "D-S_GL", "GFC_SL" and "GFC_L"}
+\item{method}{a character, the statistical inference method; one of 'B_NW_SL', 'D-S_NW_SL', 'D-S_GL', 'GFC_SL', or 'GFC_L'}
 
-\item{global}{If global = TRUE, the global inference of all gene pairs is performed.}
+\item{global}{a logical, if TRUE global inference is performed across all feature pairs}
 
-\item{alpha}{A user-supplied sequence of pre-sepecified alpha levels for FDR control. The default is alpha = 0.05, 0.1 if no sequence is provided.}
+\item{alpha}{a numeric or numeric vector, the pre-specified FDR significance level(s) for edge inclusion (default 0.05)}
 
-\item{fdr.filter}{Whether to filter adjacency matrix results based on}
+\item{fdr.filter}{a logical, if TRUE the adjacency matrix is filtered to retain only edges below max.fdr}
 
-\item{max.fdr}{The threshold to define an edge based on partial cor q val}
+\item{max.fdr}{a numeric, the FDR q-value threshold above which an edge is set to zero}
 
-\item{pos.cut}{Threhold to zero values in adjacency matrix}
+\item{pos.cut}{a numeric, the minimum absolute partial correlation for a positive edge to be retained}
 
-\item{neg.cut}{Threhold to zero values in adjacency matrix}
+\item{neg.cut}{a numeric, the minimum absolute partial correlation for a negative edge to be retained}
 }
 \value{
 a list of arguments to feed to graph learning function
 }
 \description{
-Basic arg wrapper to prepare args for graph learning in divide_and_conquer
+Default argument wrapper for divide_and_conquer: packages each module data subset with SILGGM arguments
 }
 \keyword{internal}

@@ -2,7 +2,7 @@
 % Please edit documentation in R/01.DetectModules.R
 \name{find_megena_mods}
 \alias{find_megena_mods}
-\title{Uses megena to detect modules from a data matrix}
+\title{Detect co-expression modules from a data matrix using MEGENA}
 \usage{
 find_megena_mods(
   x,
@@ -18,29 +18,29 @@ find_megena_mods(
 )
 }
 \arguments{
-\item{x}{a n x p matrix of features}
+\item{x}{a numeric matrix with p features (rows) and n samples (columns)}
 
-\item{method}{method for the calculate.correlation function}
+\item{method}{a character, the correlation method passed to MEGENA::calculate.correlation}
 
-\item{fdr.cutoff}{fdr cut off value in calculate.correlation}
+\item{fdr.cutoff}{a numeric, the FDR cutoff used in MEGENA::calculate.correlation}
 
-\item{mod.pval}{module p value for the do.MEGENA function}
+\item{mod.pval}{a numeric, the module significance p-value threshold for MEGENA::do.MEGENA}
 
-\item{hub.pval}{hub p value for the do.MEGENA function}
+\item{hub.pval}{a numeric, the hub significance p-value threshold for MEGENA::do.MEGENA}
 
-\item{cor.perm}{number of  permutations in calculate.correlation}
+\item{cor.perm}{an integer, the number of permutations used in MEGENA::calculate.correlation}
 
-\item{hub.perm}{the number of hub permutations in do.MEGENA}
+\item{hub.perm}{an integer, the number of permutations used for hub identification in MEGENA::do.MEGENA}
 
-\item{min.size}{the minimum number of nodes in each module}
+\item{min.size}{an integer, the minimum number of nodes allowed in a module}
 
-\item{is.signed}{indicate using signed/unsigned correlation in calculate.correlation}
+\item{is.signed}{a logical, if TRUE signed correlation is used in MEGENA::calculate.correlation}
 
-\item{n.cores}{number of cores to use for multithreading}
+\item{n.cores}{an integer, the number of cores to use for parallel processing}
 }
 \value{
 a module object
 }
 \description{
-Uses megena to detect modules from a data matrix
+Detect co-expression modules from a data matrix using MEGENA
 }

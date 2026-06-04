@@ -2,7 +2,7 @@
 % Please edit documentation in R/00.SimulateGraphs.R
 \name{make_lfr}
 \alias{make_lfr}
-\title{Wrapper for netutils sample_lfr that adds name and "module" label to nodes}
+\title{Wrapper for netUtils::sample_lfr that generates a Lancichinetti-Fortunato-Radicchi (LFR) benchmark graph and labels nodes}
 \usage{
 make_lfr(
   n = 120,
@@ -16,25 +16,25 @@ make_lfr(
 )
 }
 \arguments{
-\item{n}{a integer, the number of nodes}
+\item{n}{an integer, the number of nodes in the graph}
 
-\item{tau1}{PLACEHOLDER}
+\item{tau1}{a numeric, the power-law exponent for the degree distribution}
 
-\item{tau2}{PLACEHOLDER}
+\item{tau2}{a numeric, the power-law exponent for the community size distribution}
 
-\item{mu}{PLACEHOLDER}
+\item{mu}{a numeric between 0 and 1, the mixing parameter controlling the fraction of inter-community edges per node}
 
-\item{average.degree}{PLACEHOLDER}
+\item{average.degree}{a numeric, the average node degree in the graph}
 
-\item{max.degree}{PLACEHOLDER}
+\item{max.degree}{an integer, the maximum node degree allowed in the graph}
 
-\item{min.community}{PLACEHOLDER}
+\item{min.community}{an integer, the minimum number of nodes in each community}
 
-\item{max.community}{PLACEHOLDER}
+\item{max.community}{an integer, the maximum number of nodes in each community}
 }
 \value{
 an igraph object
 }
 \description{
-Wrapper for netutils sample_lfr that adds name and "module" label to nodes
+Wrapper for netUtils::sample_lfr that generates a Lancichinetti-Fortunato-Radicchi (LFR) benchmark graph and labels nodes
 }

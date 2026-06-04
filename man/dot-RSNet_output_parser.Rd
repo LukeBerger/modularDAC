@@ -2,17 +2,17 @@
 % Please edit documentation in R/03.Multithreaded_DaC.R
 \name{.RSNet_output_parser}
 \alias{.RSNet_output_parser}
-\title{Output parser for RSNet learning}
+\title{Output parser for RSNet: extracts consensus networks and other outputs from RSNet graph learning results}
 \usage{
 .RSNet_output_parser(graph.learning.outputs)
 }
 \arguments{
-\item{graph.learning.outputs}{list of outputs from each graph learning call on a subgraph}
+\item{graph.learning.outputs}{a list of outputs, one per sub-graph, returned by .RSNet_full_learning}
 }
 \value{
 a list containing the learned subgraphs and any other outputs of graph learning
 }
 \description{
-Output parser for RSNet learning
+Output parser for RSNet: extracts consensus networks and other outputs from RSNet graph learning results
 }
 \keyword{internal}

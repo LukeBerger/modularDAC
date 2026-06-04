@@ -2,7 +2,7 @@
 % Please edit documentation in R/00.SimulateGraphs.R
 \name{make_submodular_graph}
 \alias{make_submodular_graph}
-\title{Create graph comprised of multiple subgraphs each of which is comprised of multiple modules, see create modular graph for details}
+\title{Create a submodular graph comprised of multiple subgraphs, each built as a modular graph; see make_modular_graph for details}
 \usage{
 make_submodular_graph(
   g.type = c("er", "sf"),
@@ -20,33 +20,33 @@ make_submodular_graph(
 )
 }
 \arguments{
-\item{g.type}{a character, graph type graph type, er for Erdos Renyi or sf for scale free}
+\item{g.type}{a character, the graph type; 'er' for Erdos-Renyi or 'sf' for scale-free}
 
-\item{n.mods}{an integer, the number of modules in output graph}
+\item{n.mods}{an integer, the number of modules in the output graph}
 
-\item{n.mod.links}{an integer, the number of edges between each module in the graph}
+\item{n.mod.links}{an integer, the number of edges between each pair of modules}
 
-\item{n.sg}{an integer, the number of module subgraphs}
+\item{n.sg}{an integer, the number of subgraphs to create}
 
 \item{n.sg.nodes}{an integer, the number of nodes in each subgraph}
 
 \item{n.sg.links}{an integer, the number of edges between each pair of subgraphs}
 
-\item{no.uncon}{a boolean, if nodes with zero edges are allowed}
+\item{no.uncon}{a logical, if TRUE nodes with zero edges are not permitted (each isolated node is assigned one edge)}
 
-\item{link.all}{a boolean, whether all modules have edges between each other}
+\item{link.all}{a logical, if TRUE all module pairs receive inter-module edges; if FALSE modules are linked in a chain}
 
-\item{p.edge}{an integer, the odds of two nodes within a module havin an edge}
+\item{p.edge}{a numeric between 0 and 1, the probability of an edge between any two nodes within a module (Erdos-Renyi only)}
 
-\item{power}{an integer, the power in scale free graph generation}
+\item{power}{an integer, the power parameter for scale-free graph generation via preferential attachment}
 
-\item{z.appeal}{an integer, the z appeal of nodes in scale fre graph generation}
+\item{z.appeal}{an integer, the zero-appeal parameter controlling the attractiveness of isolated nodes in scale-free generation}
 
-\item{...}{other arguments passed to graph building functions}
+\item{...}{additional arguments passed to the underlying igraph graph-building functions}
 }
 \value{
 an igraph object
 }
 \description{
-Create graph comprised of multiple subgraphs each of which is comprised of multiple modules, see create modular graph for details
+Create a submodular graph comprised of multiple subgraphs, each built as a modular graph; see make_modular_graph for details
 }

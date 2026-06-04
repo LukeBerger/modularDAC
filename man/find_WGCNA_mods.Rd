@@ -2,7 +2,7 @@
 % Please edit documentation in R/01.DetectModules.R
 \name{find_WGCNA_mods}
 \alias{find_WGCNA_mods}
-\title{Uses WGCNA to detect modules from a data matrix}
+\title{Detect co-expression modules from a data matrix using WGCNA}
 \usage{
 find_WGCNA_mods(
   x,
@@ -20,33 +20,33 @@ find_WGCNA_mods(
 )
 }
 \arguments{
-\item{x}{a P x N matrix of features}
+\item{x}{a numeric matrix with p features (rows) and n samples (columns)}
 
-\item{min.size}{an integer, the min size of modules produced by dynamicTreeCut}
+\item{min.size}{an integer, the minimum number of nodes allowed in a module (passed to cutreeDynamic)}
 
-\item{max.size}{an integer, the maximum size of modules}
+\item{max.size}{an integer, the maximum number of nodes allowed in a module}
 
-\item{min.sft}{an integer, the min sft used by the pickSoftThreshold function}
+\item{min.sft}{a numeric between 0 and 1, the minimum R-squared threshold for soft-thresholding power selection}
 
-\item{beta}{an integer, the power value used by WGCNA::adjacency}
+\item{beta}{an integer, the soft-thresholding power for WGCNA::adjacency; if NULL it is selected automatically via pickSoftThreshold}
 
-\item{cor.FN}{a character, the cor.options WGCNA::adjacency}
+\item{cor.FN}{a character, the correlation function to use in WGCNA::adjacency; either 'bicor' or 'cor'}
 
-\item{powers}{an integer vector, the powers vector used by WGCNA::pickSoftThreshold}
+\item{powers}{an integer vector, candidate soft-thresholding powers evaluated by WGCNA::pickSoftThreshold}
 
-\item{hclust.method}{a character, the method used by flashClust}
+\item{hclust.method}{a character, the agglomeration method passed to flashClust}
 
-\item{cut.height}{an integer between 0 and 1, the cut height used by cutreeDynamic}
+\item{cut.height}{a numeric between 0 and 1, the dendrogram cut height used by cutreeDynamic}
 
-\item{merge}{a boolean, whether or not to attempt to merge modules using WGCNA::mergeCloseModules}
+\item{merge}{a logical, if TRUE adjacent modules are merged using WGCNA::mergeCloseModules}
 
-\item{merging.cut}{a numeric between 0 and 1, the cutheight for WGCNA::mergeCloseModules}
+\item{merging.cut}{a numeric between 0 and 1, the eigengene dissimilarity threshold for WGCNA::mergeCloseModules}
 
-\item{iterate}{boolean, whether to run module detection iteratively to break up large modules}
+\item{iterate}{a logical, if TRUE module detection is run iteratively to break up any modules exceeding max.size}
 }
 \value{
 a module object
 }
 \description{
-Uses WGCNA to detect modules from a data matrix
+Detect co-expression modules from a data matrix using WGCNA
 }

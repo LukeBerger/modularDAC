@@ -2,17 +2,17 @@
 % Please edit documentation in R/03.Multithreaded_DaC.R
 \name{.bd_wrapper}
 \alias{.bd_wrapper}
-\title{graph learning wrapper for BD graph}
+\title{Graph learning wrapper for BDgraph: fits a Gaussian graphical model and returns an igraph object}
 \usage{
 .bd_wrapper(x)
 }
 \arguments{
-\item{x}{subset of a large data matrix x defined based on modules, transformed by arg wrapper}
+\item{x}{a numeric matrix with n samples (rows) and p features (columns), as prepared by .bd_arg_wrapper}
 }
 \value{
 a list containing the learned subgraphs data transformed
 }
 \description{
-graph learning wrapper for BD graph
+Graph learning wrapper for BDgraph: fits a Gaussian graphical model and returns an igraph object
 }
 \keyword{internal}

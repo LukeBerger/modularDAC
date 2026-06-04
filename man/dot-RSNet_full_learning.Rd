@@ -2,7 +2,7 @@
 % Please edit documentation in R/03.Multithreaded_DaC.R
 \name{.RSNet_full_learning}
 \alias{.RSNet_full_learning}
-\title{wrapper function to generate ensemble and conc networks from sub matrix data}
+\title{Graph learning wrapper for RSNet: generates ensemble and consensus GGM networks from a module data subset}
 \usage{
 .RSNet_full_learning(
   dat,
@@ -21,36 +21,36 @@
 )
 }
 \arguments{
-\item{dat}{subset of a large data matrix x defined based on modules}
+\item{dat}{a numeric matrix with n samples (rows) and p features (columns), as prepared by .RSNet_arg_wrapper}
 
-\item{num_iteration}{Number of iterations to perform. Defaults to 1.}
+\item{num_iteration}{an integer, the number of bootstrap/subsampling iterations to perform}
 
-\item{boot}{Logical; whether to use bootstrap resampling. Defaults to FALSE.}
+\item{boot}{a logical, if TRUE bootstrap resampling is used}
 
-\item{sub_ratio}{Numeric; subsampling ratio. Defaults to 1.}
+\item{sub_ratio}{a numeric between 0 and 1, the subsampling ratio applied to samples}
 
-\item{sample_class}{Character or NULL; class label(s) for samples to include in analysis.}
+\item{sample_class}{a character vector or NULL, class labels for samples to include; NULL uses all samples}
 
-\item{correlated}{Logical; whether to account for correlated features. Defaults to FALSE.}
+\item{correlated}{a logical, if TRUE correlated feature structure is accounted for}
 
-\item{cluster_ratio}{Numeric; clustering ratio. Defaults to 1.}
+\item{cluster_ratio}{a numeric, the clustering ratio parameter}
 
-\item{estimate_CI}{Logical; whether to estimate confidence intervals. Defaults to TRUE.}
+\item{estimate_CI}{a logical, if TRUE confidence intervals are estimated for each edge}
 
-\item{method}{Character; method for network analysis. Defaults to "B_NW_SL".}
+\item{method}{a character, the statistical inference method passed to RSNet (e.g. 'B_NW_SL')}
 
-\item{n_cores}{Integer or NULL; number of cores for parallel processing. If NULL, uses single core.}
+\item{n_cores}{an integer or NULL, the number of cores for parallel processing; NULL uses a single core}
 
-\item{CI}{Numeric; confidence level for interval estimation (between 0 and 1). Defaults to 0.95.}
+\item{CI}{a numeric between 0 and 1, the confidence level for interval estimation}
 
-\item{filter}{Character; filtering criterion to apply. Defaults to "pval" (p-value).}
+\item{filter}{a character, the filtering criterion applied to edges (e.g. 'pval')}
 
-\item{threshold}{Numeric; threshold value for filtering. Defaults to 0.005.}
+\item{threshold}{a numeric, the threshold value for the chosen filter}
 }
 \value{
 a list of learned graphs (and other consensus_net_ggm outputs)
 }
 \description{
-wrapper function to generate ensemble and conc networks from sub matrix data
+Graph learning wrapper for RSNet: generates ensemble and consensus GGM networks from a module data subset
 }
 \keyword{internal}

@@ -2,18 +2,18 @@
 % Please edit documentation in R/01.DetectModules.R
 \name{true_fuzzy}
 \alias{true_fuzzy}
-\title{Returns fuzzy moduls based on neighborhood in true graph}
+\title{Expand true modules to fuzzy (overlapping) modules based on second-order graph neighborhood}
 \usage{
 true_fuzzy(m, g)
 }
 \arguments{
-\item{m}{a module object}
+\item{m}{a module S4 object containing module membership assignments}
 
-\item{g}{a igraph object with values for each node in the V(g)$module field}
+\item{g}{an igraph object with a 'module' vertex attribute defining ground-truth module membership for each node}
 }
 \value{
 a module object
 }
 \description{
-Returns fuzzy moduls based on neighborhood in true graph
+Expand true modules to fuzzy (overlapping) modules based on second-order graph neighborhood
 }

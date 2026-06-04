@@ -2,20 +2,20 @@
 % Please edit documentation in R/01.DetectModules.R
 \name{find_ICA_mods}
 \alias{find_ICA_mods}
-\title{Uses ICA to detect modules from a data matrix}
+\title{Detect co-expression modules from a data matrix using Independent Component Analysis (ICA)}
 \usage{
 find_ICA_mods(x, n.comp, ...)
 }
 \arguments{
-\item{x}{a p x n  matrix of features}
+\item{x}{a numeric matrix with p features (rows) and n samples (columns)}
 
-\item{n.comp}{the number of components to search for in the data}
+\item{n.comp}{an integer, the number of independent components (modules) to extract}
 
-\item{...}{other arguments to fastICA}
+\item{...}{additional arguments passed to fastICA::fastICA}
 }
 \value{
 a module object
 }
 \description{
-Uses ICA to detect modules from a data matrix
+Detect co-expression modules from a data matrix using Independent Component Analysis (ICA)
 }

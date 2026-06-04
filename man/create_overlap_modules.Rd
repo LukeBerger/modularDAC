@@ -2,22 +2,22 @@
 % Please edit documentation in R/01.DetectModules.R
 \name{create_overlap_modules}
 \alias{create_overlap_modules}
-\title{Create a set of overlapping modules from data matrix and strict, nonverlapping modules}
+\title{Create overlapping modules by merging pairs of non-overlapping modules based on shared nodes}
 \usage{
 create_overlap_modules(x, input.modules, use.eigen = TRUE, best.pairs = TRUE)
 }
 \arguments{
-\item{x}{a p x n matrix of features}
+\item{x}{a numeric matrix with p features (rows) and n samples (columns)}
 
-\item{input.modules}{a module object}
+\item{input.modules}{a module S4 object containing the non-overlapping module assignments to expand}
 
-\item{use.eigen}{whether or not to use the eigen gene to determine overlaps, otherwise nodewise correlation is used}
+\item{use.eigen}{a logical, if TRUE module pairs are selected based on eigengene correlation; if FALSE nodewise correlation is used}
 
-\item{best.pairs}{whether or not to overlap the best pairs of modules based on eigen genes only, otherwise all pairs of models are overlapped}
+\item{best.pairs}{a logical, if TRUE only the best-correlated module pairs are overlapped; if FALSE all pairs are overlapped}
 }
 \value{
 a module object
 }
 \description{
-Create a set of overlapping modules from data matrix and strict, nonverlapping modules
+Create overlapping modules by merging pairs of non-overlapping modules based on shared nodes
 }

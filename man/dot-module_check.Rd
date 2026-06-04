@@ -2,19 +2,19 @@
 % Please edit documentation in R/01.DetectModules.R
 \name{.module_check}
 \alias{.module_check}
-\title{Checks if a module object is properly formated and throws errors if not}
+\title{Validate a module object against the data matrix and throw errors if checks fail}
 \usage{
 .module_check(x, m)
 }
 \arguments{
-\item{x}{data matrix used to learn the modules}
+\item{x}{a numeric matrix with p features (rows) and n samples (columns)}
 
-\item{m}{a module object}
+\item{m}{a module S4 object containing module membership assignments}
 }
 \value{
 TRUE, if all checks passed
 }
 \description{
-Checks if a module object is properly formated and throws errors if not
+Validate a module object against the data matrix and throw errors if checks fail
 }
 \keyword{internal}

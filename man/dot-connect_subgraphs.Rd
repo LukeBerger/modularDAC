@@ -2,19 +2,19 @@
 % Please edit documentation in R/03.Multithreaded_DaC.R
 \name{.connect_subgraphs}
 \alias{.connect_subgraphs}
-\title{Connects the subgraphs output based on overlapping nodes}
+\title{Combine a list of sub-graphs with overlapping nodes into a single graph by reconciling edge disagreements}
 \usage{
 .connect_subgraphs(sub.graphs, keep.all.edges = FALSE)
 }
 \arguments{
-\item{sub.graphs}{PLACEHOLDER}
+\item{sub.graphs}{a list of igraph objects with overlapping node names}
 
-\item{keep.all.edges}{PLACEHOLDER}
+\item{keep.all.edges}{a logical, if TRUE all edges are retained; if FALSE edges that appear in only one of two overlapping sub-graphs are removed}
 }
 \value{
 an igraph object comprised of the combine subgraphs
 }
 \description{
-Connects the subgraphs output based on overlapping nodes
+Combine a list of sub-graphs with overlapping nodes into a single graph by reconciling edge disagreements
 }
 \keyword{internal}

@@ -9,9 +9,9 @@
 \arguments{
 \item{upper_tri_values}{a numeric vector of the upper triangle of the matrix}
 
-\item{variable_names}{row&column names}
+\item{variable_names}{a character vector of row and column names for the output matrix}
 
-\item{diagl}{the diagnoal elemenet, a number of a numerci vector}
+\item{diagl}{a numeric scalar or vector of length p, the diagonal value(s) of the output matrix}
 }
 \value{
 a symmetric matrix

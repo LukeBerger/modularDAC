@@ -2,18 +2,18 @@
 % Please edit documentation in R/01.DetectModules.R
 \name{percent_module_match}
 \alias{percent_module_match}
-\title{Calculates the percentage of nodes assigned to the same module between to module sets, based on node index, not module name}
+\title{Calculate the percentage of nodes assigned to the same module across two module sets, compared by node index}
 \usage{
 percent_module_match(m1, m2)
 }
 \arguments{
-\item{m1}{a module object}
+\item{m1}{a module S4 object containing module membership assignments}
 
-\item{m2}{another module object to compare to}
+\item{m2}{a module S4 object containing module membership assignments to compare against m1}
 }
 \value{
 an integer between 0 and 100
 }
 \description{
-Calculates the percentage of nodes assigned to the same module between to module sets, based on node index, not module name
+Calculate the percentage of nodes assigned to the same module across two module sets, compared by node index
 }

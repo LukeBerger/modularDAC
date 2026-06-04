@@ -2,18 +2,18 @@
 % Please edit documentation in R/01.DetectModules.R
 \name{module_contiguity}
 \alias{module_contiguity}
-\title{Calculate the percentage of nodes with more edges within their module then outside of it}
+\title{Calculate the fraction of nodes in a module that have more edges within the module than outside of it}
 \usage{
 module_contiguity(g, test.module)
 }
 \arguments{
-\item{g}{an igraph object}
+\item{g}{an igraph object whose node names match the node names stored in test.module}
 
-\item{test.module}{a module to test for contiguity, whose nodes indexs and names must match the graph}
+\item{test.module}{a module S4 object containing module membership assignments}
 }
 \value{
 an integer between 0 and 100
 }
 \description{
-Calculate the percentage of nodes with more edges within their module then outside of it
+Calculate the fraction of nodes in a module that have more edges within the module than outside of it
 }

@@ -2,23 +2,23 @@
 % Please edit documentation in R/01.DetectModules.R
 \name{.fit_to_max_size}
 \alias{.fit_to_max_size}
-\title{Helper to find_WGCNA_mods that forces all modules to be within some max size}
+\title{Helper to find_WGCNA_mods that subdivides modules exceeding a maximum size}
 \usage{
 .fit_to_max_size(index.vector, adj, max.size, verbose = F)
 }
 \arguments{
-\item{index.vector}{index vector defining a module for each node or 0 for unassigned}
+\item{index.vector}{an integer vector of length p, assigning each node to a module (0 = unassigned)}
 
-\item{adj}{adjacency matrix produced by WGCNA::adjacency}
+\item{adj}{a p x p numeric adjacency matrix produced by WGCNA::adjacency}
 
-\item{max.size}{integer for max number of nodes in each module}
+\item{max.size}{an integer, the maximum number of nodes allowed in a module}
 
-\item{verbose}{bool to declare each trade (mostly for debugging)}
+\item{verbose}{a logical, if TRUE progress messages are printed for each split (useful for debugging)}
 }
 \value{
-index vector with each module fitted to max size
+an integer vector of length p with the updated module assignments
 }
 \description{
-Helper to find_WGCNA_mods that forces all modules to be within some max size
+Helper to find_WGCNA_mods that subdivides modules exceeding a maximum size
 }
 \keyword{internal}

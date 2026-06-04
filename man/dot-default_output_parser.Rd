@@ -2,17 +2,17 @@
 % Please edit documentation in R/03.Multithreaded_DaC.R
 \name{.default_output_parser}
 \alias{.default_output_parser}
-\title{Processes output of graph learning function into list of learned graphs and other outputs}
+\title{Default output parser for divide_and_conquer: returns the graph learning outputs as learned graphs with no other outputs}
 \usage{
 .default_output_parser(graph.learning.outputs)
 }
 \arguments{
-\item{graph.learning.outputs}{list of outputs from each graph learning call on a subgraph}
+\item{graph.learning.outputs}{a list of outputs, one per sub-graph, returned by graph.learning.func}
 }
 \value{
 a list containing the learned subgraphs and any other outputs of graph learning
 }
 \description{
-Processes output of graph learning function into list of learned graphs and other outputs
+Default output parser for divide_and_conquer: returns the graph learning outputs as learned graphs with no other outputs
 }
 \keyword{internal}

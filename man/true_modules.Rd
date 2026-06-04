@@ -2,16 +2,16 @@
 % Please edit documentation in R/01.DetectModules.R
 \name{true_modules}
 \alias{true_modules}
-\title{Returns true modules from a simulated graph with V(g)$modules}
+\title{Extract true module assignments from a simulated graph}
 \usage{
 true_modules(g)
 }
 \arguments{
-\item{g}{a igraph object with values for each node in the V(g)$module field}
+\item{g}{an igraph object with a 'module' vertex attribute defining ground-truth module membership for each node}
 }
 \value{
 a module object
 }
 \description{
-Returns true modules from a simulated graph with V(g)$modules
+Extract true module assignments from a simulated graph
 }

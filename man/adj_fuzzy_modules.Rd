@@ -2,24 +2,24 @@
 % Please edit documentation in R/01.DetectModules.R
 \name{adj_fuzzy_modules}
 \alias{adj_fuzzy_modules}
-\title{Creates overlapping sets of fuzzy modules based on thresholded adj matrix from WGCNA}
+\title{Expand non-overlapping modules to fuzzy (overlapping) modules using a thresholded WGCNA adjacency matrix}
 \usage{
 adj_fuzzy_modules(x, adj, input.modules, max.size, ratio)
 }
 \arguments{
-\item{x}{a p x n matrix of features}
+\item{x}{a numeric matrix with p features (rows) and n samples (columns)}
 
-\item{adj}{the thresholded adjacency matrix from WGCNA}
+\item{adj}{a p x p numeric adjacency matrix (e.g. from WGCNA::adjacency) defining pairwise feature similarity}
 
-\item{input.modules}{a module object}
+\item{input.modules}{a module S4 object containing the non-overlapping module assignments to expand}
 
-\item{max.size}{the max size of fuzzy modules}
+\item{max.size}{an integer, the maximum number of nodes allowed in any fuzzy module}
 
-\item{ratio}{the ratio of original nodes in the module to nodes in the fuzzy module}
+\item{ratio}{a numeric, the maximum ratio of fuzzy module size to original module size}
 }
 \value{
 a module object
 }
 \description{
-Creates overlapping sets of fuzzy modules based on thresholded adj matrix from WGCNA
+Expand non-overlapping modules to fuzzy (overlapping) modules using a thresholded WGCNA adjacency matrix
 }

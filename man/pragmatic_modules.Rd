@@ -2,20 +2,20 @@
 % Please edit documentation in R/01.DetectModules.R
 \name{pragmatic_modules}
 \alias{pragmatic_modules}
-\title{Uses ICA to detect modules from a data matrix then reassigned nodes to fit all modules to a max size}
+\title{Detect modules using ICA then subdivide any modules exceeding a maximum size}
 \usage{
 pragmatic_modules(x, max.size, n.mods = NULL)
 }
 \arguments{
-\item{x}{a p x n matrix of features}
+\item{x}{a numeric matrix with p features (rows) and n samples (columns)}
 
-\item{max.size}{the maxsize of modules}
+\item{max.size}{an integer, the maximum number of nodes allowed in any single module}
 
-\item{n.mods}{the number of modules to search for in the data}
+\item{n.mods}{an integer, the number of independent components to extract; if NULL it is selected automatically}
 }
 \value{
 a module object
 }
 \description{
-Uses ICA to detect modules from a data matrix then reassigned nodes to fit all modules to a max size
+Detect modules using ICA then subdivide any modules exceeding a maximum size
 }

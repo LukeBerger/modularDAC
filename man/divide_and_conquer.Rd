@@ -2,7 +2,7 @@
 % Please edit documentation in R/03.Multithreaded_DaC.R
 \name{divide_and_conquer}
 \alias{divide_and_conquer}
-\title{Learns a network from data by dividing into it modules which are learned individually and stitched back together}
+\title{Learn a network from a data matrix using a divide-and-conquer strategy: data is split into overlapping modules, graphs are learned per module, and the results are stitched back together}
 \usage{
 divide_and_conquer(
   x,
@@ -19,29 +19,29 @@ divide_and_conquer(
 )
 }
 \arguments{
-\item{x}{input data, p x n matrix}
+\item{x}{a numeric matrix with p features (rows) and n samples (columns)}
 
-\item{subgraph.module}{overlappping subsets of p wihtin a module object}
+\item{subgraph.module}{a module S4 object with overlapping index sets defining which feature subsets to use for each sub-graph}
 
-\item{keep.all.edges}{whether to keep all edges when combine subgraphs}
+\item{keep.all.edges}{a logical, if TRUE all edges from all sub-graphs are retained; if FALSE only edges consistent across overlapping sub-graphs are kept}
 
-\item{n.cores}{number of cores to use for multithreading}
+\item{n.cores}{an integer, the number of cores to use for parallel processing}
 
-\item{graph.learning.func}{function to learn graphs}
+\item{graph.learning.func}{a function that accepts a data matrix and returns an igraph object}
 
-\item{arg.wrapping.func}{function to wrap each module of x with args for graph learning function}
+\item{arg.wrapping.func}{a function that packages each module's data subset and additional arguments into a list ready for graph.learning.func}
 
-\item{out.parsing.func}{function to parse outputs of graph learning into list of igraphs and other outputs}
+\item{out.parsing.func}{a function that extracts a list of igraph objects and any other outputs from the raw output of graph.learning.func}
 
-\item{packages.to.each}{packages for each thread}
+\item{packages.to.each}{a character vector of package names to load on each parallel worker}
 
-\item{export.to.each}{functions for each thread}
+\item{export.to.each}{a character vector of function names to export to each parallel worker}
 
-\item{...}{other args to pass through arg wrapper to graph learning}
+\item{...}{additional arguments passed through arg.wrapping.func to graph.learning.func}
 }
 \value{
-a list containing a the full graph (an igraph objects), the modular subgraphs (also igraphs), and any other outputs of graph learning
+a list with elements: modular.subgraphs (list of igraph objects, one per module), final.graph (igraph object combining all sub-graphs), and other.outputs (any additional outputs from graph learning)
 }
 \description{
-Learns a network from data by dividing into it modules which are learned individually and stitched back together
+Learn a network from a data matrix using a divide-and-conquer strategy: data is split into overlapping modules, graphs are learned per module, and the results are stitched back together
 }
