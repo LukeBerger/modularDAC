@@ -21,7 +21,7 @@ make_modular_graph <- function(g.type=c("er", "sf"),
                                p.edge = 0.05, power=1, z.appeal=1, ...){
 
   # match args
-  g.type <- match.arg(g.type)
+  g.type <- match.arg(g.type) # test git push
 
   #calculate the number of nodes per module
   n.nodes <- round(n.nodes / n.mods)
