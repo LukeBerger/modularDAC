@@ -145,7 +145,7 @@ divide_and_conquer <- function(x,
 #' @param sub.graphs a list of igraph objects with overlapping node names
 #' @param keep.all.edges a logical, if TRUE all edges are retained; if FALSE edges that appear in only one of two overlapping sub-graphs are removed
 
-#' @importFrom igraph union as_adjacency_matrix graph_from_adjacency_matrix V as_edgelist delete_edges get.edge.ids
+#' @importFrom igraph union as_adjacency_matrix graph_from_adjacency_matrix V as_edgelist delete_edges get_edge_ids
 #' @importFrom stringr str_remove
 #' @importFrom utils combn
 #' @importFrom dplyr bind_rows anti_join %>%
@@ -231,7 +231,7 @@ divide_and_conquer <- function(x,
   edges.to.remove <-as.matrix(unique(do.call(rbind, edges.to.remove)))
 
   # remove these edges from combined graoh
-  full.graph <- igraph::delete_edges(full.graph, igraph::get.edge.ids(full.graph, as.vector(t(edges.to.remove)), directed = FALSE))
+  full.graph <- igraph::delete_edges(full.graph, igraph::get_edge_ids(full.graph, as.vector(t(edges.to.remove)), directed = FALSE))
 
   return(full.graph)
 }
