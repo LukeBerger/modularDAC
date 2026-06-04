@@ -1,12 +1,14 @@
-﻿### Allow for dplyr piping
+####################
+### Learn Graphs ###
+####################
+
+# allow for dplyr piping
 utils::globalVariables(".")
 
-######################
-### Graph learning ###
-######################
+# graph learning
 
-### Takes a p x n matrix of data and inputs to SILGGM function
-### Then generates networks based on partial correlation between nodes
+# takes a p x n matrix of data and inputs to SILGGM function
+# then generates networks based on partial correlation between nodes
 
 #' Learn a gene co-expression graph from a data matrix using SILGGM
 #' @param x a numeric matrix with p features (rows) and n samples (columns)
@@ -36,7 +38,7 @@ learn_SILGGM_graph <- function(x,
                                neg.cut = 0,
                                ...){
 
-  #run silggm
+  # run silggm
   silggm.output <- suppressMessages(
     SILGGM::SILGGM(x,
                    method = method,
@@ -44,7 +46,7 @@ learn_SILGGM_graph <- function(x,
                    global = global,
                    ...)
   )
-  #get partial.cor and zScore based on method
+  # get partial.cor and zScore based on method
   if(method == "D-S_NW_SL"){
     partial.cor <- .upper_tri_vec(silggm.output$partialCor)
     z.score.partial.cor <- sapply(partial.cor, .pcor_zscore, nrow(x))
@@ -54,26 +56,26 @@ learn_SILGGM_graph <- function(x,
     z.score.partial.cor <- .upper_tri_vec(silggm.output$z_score_partialCor)
   }
 
-  #estimate the adjusted p-value of each edge
+  # estimate the adjusted p-value of each edge
   qval.pcor <- sapply(z.score.partial.cor, .pvalue) %>%
     .upper_tri_to_matrix(., variable_names = colnames(x), diagl = 1) %>%
     .matrix_p_adjust(.)
 
-  #make network
+  # build partial correlation adjacency matrix
   pcor.avg <- partial.cor %>%
     round(.,2) %>%
     .upper_tri_to_matrix(., variable_names = colnames(x), diagl = 1)
   adj.mat <- apply(pcor.avg, c(1,2), .abs_pcor_filter, pos.cut, neg.cut)
 
-  ## further filtering by significance
+  # further filtering by significance
   if(fdr.filter){
     adj.mat[qval.pcor>=max.fdr] <- 0
   }
 
-  ## diagonal to 0 before creating igraph object
+  # diagonal to 0 before creating igraph object
   diag(adj.mat) <- 0
 
-  # to igraph object
+  # convert weighted adjacency matrix to igraph object
   g  <- igraph::graph_from_adjacency_matrix(adj.mat,
                                             mode = "undirected",
                                             weighted = TRUE)
@@ -81,10 +83,8 @@ learn_SILGGM_graph <- function(x,
   return(g)
 }
 
-
-## Helpers to simpleSILGGM graph taken from RSCGGM
-## So that i can run it without loading the full package
-
+# helpers to simpleSILGGM graph taken from RSCGGM
+# so that i can run it without loading the full package
 
 #' Reconstruct the symmetric matrix from upper triangular vector
 #'
@@ -110,13 +110,13 @@ learn_SILGGM_graph <- function(x,
     colnames(mat) <- variable_names
   }
 
-  ## Fill the diagonal
+  # fill the diagonal
   diag(mat) <- diagl
 
-  ## Fill the upper triangular part
+  # fill the upper triangular part
   mat[upper.tri(mat, diag = FALSE)] <- upper_tri_values
 
-  # Fill the lower triangular part (mirror the upper triangular part)
+  # fill the lower triangular part (mirror the upper triangular part)
   mat[lower.tri(mat)] <- t(mat)[lower.tri(mat)]
 
   return(mat)
@@ -132,15 +132,15 @@ learn_SILGGM_graph <- function(x,
 
 #' @keywords internal
 .matrix_p_adjust <- function( mx_p ) {
-  ## initialize
+  # initialize
   mx_q <- mx_p
-  ## adjust upper triangle
+  # adjust upper triangle
   mx_q[upper.tri(mx_q)] <-
     stats::p.adjust(mx_p[upper.tri(mx_p)], method = "BH")
-  ## copy to lower triangle
+  # copy to lower triangle
   mx_q[lower.tri(mx_q)] <-
     t(mx_q)[lower.tri(mx_q)]
-  ## some checks
+  # some checks
   stopifnot(isTRUE(
     all.equal(
       mx_q[upper.tri(mx_q)],
@@ -150,7 +150,6 @@ learn_SILGGM_graph <- function(x,
   stopifnot(!isTRUE(all.equal(mx_p,mx_q)))
   return( mx_q)
 }
-
 
 #' Take the upper triangular vector of a symmetric matrix
 #'
@@ -164,7 +163,6 @@ learn_SILGGM_graph <- function(x,
   if(length(vec) != (ncol(mat)*(ncol(mat)-1))/2) stop ("invalid length!")
   return(vec)
 }
-
 
 #' Compute the z-score of a partial correlation, see https://github.com/cran/SILGGM/blob/master/src/SILGGMCpp.cpp
 #'
@@ -247,39 +245,39 @@ learn_WGCNA_graph <- function(x,
                               powers=c(seq(1, 10, by = 1), seq(12, 20, by = 2)),
                               threshold = NULL
 ) {
-  # Handle arguments
+  # handle arguments
   cor.FN <- match.arg(cor.FN)
 
-  # Correlation options
+  # correlation options
   if (cor.FN == "cor") cor.options = list(use="p")
   if (cor.FN == "bicor") cor.options = list(pearsonFallback="individual")
 
-  # Pick soft threshold via scale-free fit
+  # pick soft threshold via scale-free fit
   if (is.null(beta)) {
     sft <- WGCNA::pickSoftThreshold(data=x,
                                     corFnc=cor.FN,
                                     RsquaredCut=min.sft,
                                     powerVector=powers)
 
-    # Check selected power
+    # check selected power
     beta <- .sft_check(sft)
   }
 
-  # Construct co-expression similarity
+  # construct co-expression similarity
   adj <- WGCNA::adjacency(datExpr=x,
                           power=beta,
                           corFnc=cor.FN,
                           type="unsigned",
                           corOptions=cor.options)
 
-  # Binarize based on threshold
+  # binarize based on threshold
   if(is.null(threshold)){threshold <- quantile(.upper_tri_vec(adj), .999)}
   binary.adj <- (adj > threshold) * 1
 
-  # Remove looped edges
+  # remove looped edges
   diag(binary.adj) <- 0
 
-  # Return as Igraph
+  # return as igraph object
   return(igraph::graph_from_adjacency_matrix(binary.adj, mode = "undirected"))
 }
 
@@ -296,19 +294,19 @@ learn_WGCNA_graph <- function(x,
 #' @export
 learn_ARACNE_graph <- function(x, eps=0, threshold = 0.05) {
 
-  # Build mutual information matrix
+  # build mutual information matrix
   mim <- minet::build.mim(dataset = x)
 
-  # Apply ARANCE alogrithm
+  # apply ARANCE alogrithm
   aracne.mat <- minet::aracne(mim, eps=eps)
 
-  # Binarize and convert to graph object
+  # binarize and convert to graph object
   return(igraph::graph_from_adjacency_matrix((aracne.mat > threshold ) * 1, mode = "undirected"))
 }
 
-####################
-###Compare Graphs###
-####################
+######################
+### Compare Graphs ###
+######################
 
 #' Calculate the F1 score comparing a predicted graph against a true graph
 #' @param g.true an igraph object, the true reference graph
@@ -320,32 +318,32 @@ learn_ARACNE_graph <- function(x, eps=0, threshold = 0.05) {
 
 #' @export
 calc_F1 <- function(g.true, g.pred) {
-  #check that the graphs have the same nodes
+  # check that the graphs have the same nodes
   if (!all(igraph::V(g.true)$name %in% igraph::V(g.pred)$name)) {
     stop("True and Predicted graphs must contain the same nodes")
   }
 
-  #extract edges as character vectors in a consistent format
+  # extract edges as character vectors in a consistent format
   edges.true <- apply(igraph::as_edgelist(g.true), 1, function(x) paste(sort(x), collapse = " -- "))
   edges.pred <- apply(igraph::as_edgelist(g.pred), 1, function(x) paste(sort(x), collapse = " -- "))
 
-  #count True Positives, False Positives, False Negatives
+  # count True Positives, False Positives, False Negatives
   tp <- sum(edges.pred %in% edges.true)
   fp <- sum(!(edges.pred %in% edges.true))
   fn <- sum(!(edges.true %in% edges.pred))
 
-  #calc precision and recall
+  # calc precision and recall
   precision <- ifelse(tp + fp == 0, 0, tp / (tp + fp))
   recall <- ifelse(tp + fn == 0, 0, tp / (tp + fn))
 
-  #calc F1 Score
+  # calc F1 Score
   if (precision + recall == 0) {
-    f1 <- 0 #to avoid zero divison error in edge case
+    f1 <- 0 # to avoid zero divison error in edge case
   } else {
     f1 <- 2 * precision * recall / (precision + recall)
   }
 
-  #return values as list
+  # return values as list
   return(list(
     F1 = f1,
     Precision = precision,
@@ -356,10 +354,7 @@ calc_F1 <- function(g.true, g.pred) {
   ))
 }
 
-
-###############
-#### Other ####
-###############
+# other
 
 #' Impute missing values in a data matrix using half the row minimum
 #' @param dat a numeric matrix with p features (rows) and n samples (columns)
@@ -373,7 +368,7 @@ calc_F1 <- function(g.true, g.pred) {
   halfmin <- matrix(matrixStats::rowMins(dat, na.rm = TRUE) / 2,
                     nrow = nrow(dat), ncol = ncol(dat), dimnames = dimnames(dat)
   )
-  ## just checking
+  # just checking
   stopifnot(all.equal(
     matrixStats::rowMeans2(halfmin),
     matrixStats::rowMins(dat, na.rm = TRUE) / 2

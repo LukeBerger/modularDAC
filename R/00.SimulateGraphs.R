@@ -1,4 +1,8 @@
-﻿#' Create a modular graph comprised of multiple modules using either Erdos-Renyi or scale-free structure within modules
+#####################
+### Create Graphs ###
+#####################
+
+#' Create a modular graph comprised of multiple modules using either Erdos-Renyi or scale-free structure within modules
 #' @param g.type a character, the graph type; 'er' for Erdos-Renyi or 'sf' for scale-free
 #' @param n.mods an integer, the number of modules in the output graph
 #' @param n.nodes an integer, the total number of nodes in the graph
@@ -23,13 +27,13 @@ make_modular_graph <- function(g.type=c("er", "sf"),
   # match args
   g.type <- match.arg(g.type)
 
-  #calculate the number of nodes per module
+  # calculate the number of nodes per module
   n.nodes <- round(n.nodes / n.mods)
 
-  #initialize an empty list of modules
+  # initialize an empty list of modules
   modules <- vector(mode = "list", length = n.mods)
 
-  #create modules and add them to the list
+  # create modules and add them to the list
   for (i in 1:n.mods) {
     if(g.type == "er"){
       temp <-  igraph::sample_gnp(n = n.nodes,
@@ -45,52 +49,52 @@ make_modular_graph <- function(g.type=c("er", "sf"),
       stop("invalid graph type: submit 'er' or 'sf' ")
     }
 
-    #Add module label
+    # add module label
     igraph::V(temp)$module <- i
 
     if(no.uncon){
-      #check for unconnected nodes
+      # check for unconnected nodes
       no.edge <-  igraph::V(temp)[igraph::degree(temp) == 0]
 
-      #if any exist
+      # if any exist
       if(length(no.edge) > 0){
-        #give them each an edge
+        # give them each an edge
         for(node in no.edge){
-          #get module
+          # get module
           temp.mod <- igraph::V(temp)$module[node]
 
-          #get targets
+          # get targets
           targets <- igraph::V(temp)[igraph::V(temp)$module == temp.mod]
           targets <- targets[!(targets %in% no.edge)]
 
-          #add edge
+          # add edge
           temp <- igraph::add_edges(temp, c(node, sample(targets, 1)))
         }
       }
     }
 
-    #add to list
+    # add to list
     modules[[i]] <- temp
   }
 
-  #merge modules
-  mg <- Reduce("+", modules) #taking advantage the fact that igraphs are just fancy lists
+  # merge modules
+  mg <- Reduce("+", modules) # taking advantage the fact that igraphs are just fancy lists
 
   if(link.all){
-    #add edges between each pair of modules
+    # add edges between each pair of modules
     mod.pairs <- utils::combn(1:n.mods, m = 2, simplify = F)
   }else{
     mod.chain <- c(1:n.mods)
     mod.pairs <- mapply(c, mod.chain, c(mod.chain[-1], mod.chain[1]), SIMPLIFY = FALSE)
   }
 
-  #for each pair
+  # for each pair
   for (pair in mod.pairs) {
-    #get node indexes based on modules
-    i.nodes <- which(igraph::V(mg)$module == pair[1]) #first half of pair
-    j.nodes <- which(igraph::V(mg)$module == pair[2]) #second half of nodes
+    # get node indexes based on modules
+    i.nodes <- which(igraph::V(mg)$module == pair[1]) # first half of pair
+    j.nodes <- which(igraph::V(mg)$module == pair[2]) # second half of nodes
 
-    #link i and j by adding edges between random nodes
+    # link i and j by adding edges between random nodes
     mg <- igraph::add_edges(mg,
                             as.vector(
                               rbind(
@@ -101,13 +105,13 @@ make_modular_graph <- function(g.type=c("er", "sf"),
     )
   }
 
-  #removes any loops and multiples resulting from randomness (will in some cases result in less edges then intended)
+  # removes any loops and multiples resulting from randomness (will in some cases result in less edges then intended)
   mg <- igraph::simplify(mg, remove.multiple=TRUE, remove.loops=TRUE)
 
-  #label nodes
+  # label nodes
   igraph::V(mg)$name <- paste0("Node_", igraph::V(mg))
 
-  #return graph
+  # return graph
   return(mg)
 }
 
@@ -139,67 +143,67 @@ make_submodular_graph <- function(g.type=c("er", "sf"),
   # match args
   g.type <- match.arg(g.type)
 
-  #initialize and empty list of subgraphs
+  # initialize and empty list of subgraphs
   subgraphs <- vector(mode = "list", length = n.sg)
 
-  #create subgraphs and add them to the list
+  # create subgraphs and add them to the list
   for (i in 1:n.sg) {
-    #create modular graph: er or sf
+    # create modular graph: er or sf
     temp <- make_modular_graph(g.type=g.type,
                                n.mods=n.mods, n.nodes=n.sg.nodes, n.mod.links=n.mod.links,
                                no.uncon =no.uncon, link.all = link.all,
-                               p.edge = p.edge, power=power, z.appeal=z.appeal) #, ...
-    #add subgraph label
+                               p.edge = p.edge, power=power, z.appeal=z.appeal) # , ...
+    # add subgraph label
     igraph::V(temp)$subgraph <- i
 
-    #fix module lables
-    mod.names <- paste0(i, ".", letters[1:n.mods]) #cant have more than 26 modules or this breaks down
+    # fix module lables
+    mod.names <- paste0(i, ".", letters[1:n.mods]) # cant have more than 26 modules or this breaks down
     temp <- .label_mods(temp, n.sg.nodes, n.mods, mod.names)
 
-    #and node names
+    # and node names
     igraph::V(temp)$name <- paste0("Subgraph_", as.character(i) , "_",igraph::V(temp)$name)
 
     if(no.uncon){
-      #check for unconnected nodes
+      # check for unconnected nodes
       no.edge <-  igraph::V(temp)[igraph::degree(temp) == 0]
 
-      #if any exist
+      # if any exist
       if(length(no.edge) > 0){
-        #give them each an edge
+        # give them each an edge
         for(node in no.edge){
-          #get module
+          # get module
           temp.mod <- igraph::V(temp)$module[node]
 
-          #get targets
+          # get targets
           targets <- igraph::V(temp)[igraph::V(temp)$module == temp.mod]
           targets <- targets[!(targets %in% no.edge)]
 
-          #add edge
+          # add edge
           temp <- igraph::add_edges(temp, c(node, sample(targets, 1)))
         }
       }
     }
-    #add to list
+    # add to list
     subgraphs[[i]] <- temp
   }
 
-  #merge subgraphs
+  # merge subgraphs
   hybrid <- do.call(igraph::union, subgraphs)
   igraph::V(hybrid)$name <- unlist(lapply(subgraphs, function(x) igraph::V(x)$name))
   igraph::V(hybrid)$subgraph <- unlist(lapply(subgraphs, function(x) igraph::V(x)$subgraph))
 
   if(link.all){
-    #add edges between each pair of modules
+    # add edges between each pair of modules
     mod.pairs <- utils::combn(1:n.sg, m = 2, simplify = F)
   }else{
     mod.chain <- c(1:n.sg)
     mod.pairs <- mapply(c, mod.chain, c(mod.chain[-1], mod.chain[1]), SIMPLIFY = FALSE)
   }
   for (pair in mod.pairs) {
-    #get node indexes based on subgraphs
-    i.nodes <- which(igraph::V(hybrid)$subgraph == pair[1]) #first half of pair
-    j.nodes <- which(igraph::V(hybrid)$subgraph == pair[2]) #second half of nodes
-    #link i and j by adding edges between random nodes
+    # get node indexes based on subgraphs
+    i.nodes <- which(igraph::V(hybrid)$subgraph == pair[1]) # first half of pair
+    j.nodes <- which(igraph::V(hybrid)$subgraph == pair[2]) # second half of nodes
+    # link i and j by adding edges between random nodes
     hybrid <- igraph::add_edges(hybrid,
                                 as.vector(
                                   rbind(
@@ -210,6 +214,7 @@ make_submodular_graph <- function(g.type=c("er", "sf"),
     )
   }
 
+  # remove duplicate edges and self-loops created during random linking
   hybrid <- igraph::simplify(hybrid, remove.multiple=TRUE, remove.loops=TRUE)
   return(hybrid)
 }
@@ -247,15 +252,15 @@ make_submodular_graph <- function(g.type=c("er", "sf"),
 #' @importFrom igraph V
 
 #' @export
-make_lfr <- function(n = 120,        #number of nodes
-                     tau1 = 3,       #power-law exponent for degree distribution
-                     tau2 = 2,       #power-law exponent for community size distribution
-                     mu = 0.08,      #mixing parameter
-                     average.degree = 6,   #required: typical node degree
-                     max.degree = 10,      #required: highest possible node  degree
-                     min.community = 30,   # min communitu size
+make_lfr <- function(n = 120,
+                     tau1 = 3,
+                     tau2 = 2,
+                     mu = 0.08,
+                     average.degree = 6,
+                     max.degree = 10,
+                     min.community = 30,
                      max.community = 50){
-
+  # generate LFR benchmark graph
   g <- netUtils::sample_lfr(
     n = n,
     tau1 = tau1,
@@ -267,12 +272,17 @@ make_lfr <- function(n = 120,        #number of nodes
     max_community = max.community
   )
 
-  #label
+  # assign sequential node names and copy community membership to module attribute
   igraph::V(g)$name <- paste0("Node_", igraph::V(g))
   igraph::V(g)$module <- igraph::V(g)$membership
 
   return(g)
 }
+
+
+#####################
+### Simulate Data ###
+#####################
 
 #' Simulate gene expression data for n.samples samples based on the covariance structure implied by a graph
 #' @param g an igraph object defining the dependency structure between features
@@ -286,33 +296,32 @@ make_lfr <- function(n = 120,        #number of nodes
 
 #' @export
 sim_graph_data <- function(g, n.samples, mean.vec = NULL){
-  #if mean.vec isnt set, use vector of all 10s
+  # if mean.vec is not set, default to a zero vector
   if(is.null(mean.vec)){
-    #set as a vector of 10s
+    # zero mean for all features
     mean.vec = rep(0, length(g))
   }
-
-  bdg <- .mod.bdgraph.sim(n=1, #makes a single samples worth of data
+  # derive the covariance matrix implied by the graph structure
+  bdg <- .mod.bdgraph.sim(n=1,
                          graph=as.matrix(igraph::as_adjacency_matrix(g)),
                          type="Gaussian",
                          mean = mean.vec[1]
   )
-  sigma.mat <- bdg$sigma #get the covariance matrix from bdg.graph
+  sigma.mat <- bdg$sigma # get the covariance matrix from bdg.graph
 
-  #make n samples with MASS
+  # make n samples with MASS
   sim.data <- t(MASS::mvrnorm(n = n.samples, mu = mean.vec, Sigma =  sigma.mat))
 
-  # #format as eset
+  # # format as eset
   # sim.data <- Biobase::ExpressionSet(t(sim.data))
 
-  #add row and column names
+  # add row and column names
   colnames(sim.data) <- paste("Sample", 1:ncol(sim.data), sep="_")
   rownames(sim.data) <- igraph::V(g)$name
 
-  #return data
+  # return data
   return(sim.data)
 }
-
 
 #' Plot a modular graph with nodes colored by module membership using visNetwork
 #' @param g an igraph object whose nodes have a module (and optionally subgraph) vertex attribute
@@ -329,29 +338,29 @@ modular_plot <- function(g,
                          module.name = "module",
                          subgraphs = FALSE,
                          subname = "subgraph"){
-  #get edges matrix
+  # get edges matrix
   edge.list <- igraph::as_edgelist(g)
   edges <- data.frame(
     from = as.character(edge.list[, 1]),
     to = as.character(edge.list[, 2])
   )
 
-  #if there are subgraphs, color by module select by subgraph
+  # if there are subgraphs, color by module select by subgraph
   if(subgraphs){
-    #get nodes matrix
+    # get nodes matrix
     nodes <- data.frame(
       id = igraph::V(g)$name %||% as.character(igraph::V(g)),
       label = igraph::V(g)$label %||% as.character(igraph::V(g)),
-      group = as.factor(igraph::vertex.attributes(g)[[module.name]]),  #color by module
-      subgraph = as.factor(igraph::vertex.attributes(g)[[subname]]) #select by subgraph
+      group = as.factor(igraph::vertex.attributes(g)[[module.name]]),  # color by module
+      subgraph = as.factor(igraph::vertex.attributes(g)[[subname]]) # select by subgraph
     )
 
-    #Plot with visNetwork
+    # plot with visNetwork
     visNetwork::visNetwork(nodes, edges) %>%
       visNetwork::visOptions(
         highlightNearest = TRUE,
-        nodesIdSelection = list(enabled = TRUE, useLabels = TRUE),  # ID/label selector
-        selectedBy = list(variable = "subgraph", multiple = TRUE) #subgraph selector
+        nodesIdSelection = list(enabled = TRUE, useLabels = TRUE),  # iD/label selector
+        selectedBy = list(variable = "subgraph", multiple = TRUE) # subgraph selector
       ) %>%
       visNetwork::visLegend() %>%
       visNetwork::visEdges(smooth=FALSE) %>%
@@ -360,22 +369,22 @@ modular_plot <- function(g,
       visNetwork::visIgraphLayout(layout = "layout_with_fr") %>%
       visNetwork::visLayout(randomSeed = 123)
 
-    #else color and select by modules
+    # else color and select by modules
   }else{
-    #get nodes matrix
+    # get nodes matrix
     nodes <- data.frame(
       id = igraph::V(g)$name %||% as.character(igraph::V(g)),
       label = igraph::V(g)$label %||% as.character(igraph::V(g)),
-      group = as.factor(igraph::vertex.attributes(g)[[module.name]]), #color by module
-      module = as.factor(igraph::vertex.attributes(g)[[module.name]]) #select by module
+      group = as.factor(igraph::vertex.attributes(g)[[module.name]]), # color by module
+      module = as.factor(igraph::vertex.attributes(g)[[module.name]]) # select by module
     )
 
-    #Plot with visNetwork
+    # plot with visNetwork
     visNetwork::visNetwork(nodes, edges) %>%
       visNetwork::visOptions(
         highlightNearest = TRUE,
-        nodesIdSelection = list(enabled = TRUE, useLabels = TRUE),  # ID/label selector
-        selectedBy = list(variable = "module", multiple = TRUE)      # Group/module selector
+        nodesIdSelection = list(enabled = TRUE, useLabels = TRUE),  # iD/label selector
+        selectedBy = list(variable = "module", multiple = TRUE)      # group/module selector
       ) %>%
       visNetwork::visLegend() %>%
       visNetwork::visEdges(smooth=FALSE) %>%
@@ -386,9 +395,8 @@ modular_plot <- function(g,
   }
 }
 
-
-## bdgraph function with two lines removed which caused a bug when using a
-## adjency matrix as the graph parameter
+# bdgraph function with two lines removed which caused a bug when using a
+# adjency matrix as the graph parameter
 .mod.bdgraph.sim <- function (p = 10, graph = "random", n = 0, type = "Gaussian",
                              prob = 0.2, size = NULL, mean = 0, class = NULL, cut = 4,
                              b = 3, D = diag(p), K = NULL, sigma = NULL, q = exp(-1),

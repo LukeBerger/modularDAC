@@ -1,4 +1,8 @@
-﻿#' Learn a network from a data matrix using a divide-and-conquer strategy: data is split into overlapping modules, graphs are learned per module, and the results are stitched back together
+#####################
+### DAC Algorithm ###
+#####################
+
+#' Learn a network from a data matrix using a divide-and-conquer strategy: data is split into overlapping modules, graphs are learned per module, and the results are stitched back together
 #' @param x a numeric matrix with p features (rows) and n samples (columns)
 #' @param subgraph.module a module S4 object with overlapping index sets defining which feature subsets to use for each sub-graph
 #' @param keep.all.edges a logical, if TRUE all edges from all sub-graphs are retained; if FALSE only edges consistent across overlapping sub-graphs are kept
@@ -33,48 +37,45 @@ divide_and_conquer <- function(x,
                                                   ".abs_pcor_filter"),
                                ...
 ){
-  ##################
-  ###Check Inputs###
-  ##################
 
+  # check inputs
 
-
-  # Check if data is a numeric matrix
+  # check if data is a numeric matrix
   if (!is.matrix(x) || !is.numeric(x)) {
     stop("'data' should be a p x n numeric matrix ")
   }
 
-  # Extract index list
+  # extract index list
   subgraph.index.list <- subgraph.module@index.list
 
-  # Check 'subgraph.index.list' is a list of integer vectors with overlapping values
+  # check 'subgraph.index.list' is a list of integer vectors with overlapping values
   if (!is.list(subgraph.index.list) || length(subgraph.index.list) == 0) {
     stop("'subgraph.index.list' must be a non-empty list of integer vectors.")
   }
-  row.range <- c(1:nrow(x)) #get rows of data  matrix
-  for (i in seq_along(subgraph.index.list)) { #for each subgraph
-    sg <- subgraph.index.list[[i]] #get the subgraph node indices
-    other.indexs <- unlist(subgraph.index.list[-i]) #and the other graphs indices
-    # Check that all values are numeric
+  row.range <- c(1:nrow(x)) # get rows of data  matrix
+  for (i in seq_along(subgraph.index.list)) { # for each subgraph
+    sg <- subgraph.index.list[[i]] # get the subgraph node indices
+    other.indexs <- unlist(subgraph.index.list[-i]) # and the other graphs indices
+    # check that all values are numeric
     if (!is.numeric(sg) || any(sg %% 1 != 0)) {
       stop(sprintf("Subgraph %d has non integer values.", i))
     }
-    # Check that all values correspond to rows in data matrix
+    # check that all values correspond to rows in data matrix
     if (any(!(sg %in% row.range))) {
       stop(sprintf("Subgraph %d contains invalid row indices.", i))
     }
-    # Check that the subgraphs all contain overlaps (necessary for reconnecting after learning)
+    # check that the subgraphs all contain overlaps (necessary for reconnecting after learning)
     if (!any(sg %in% other.indexs)){
       warning(sprintf("Subgraph %d has no overlaps with the other subgraphs.", i))
     }
   }
 
-  # Check every row index is in at least one subGraph
+  # check every row index is in at least one subGraph
   if (!all(row.range %in% unique(unlist(subgraph.index.list)))) {
     stop("Not all rows of data are covered by 'subgraph.index.list'.")
   }
 
-  # Check if both functions exist
+  # check if both functions exist
   if (!is.function(arg.wrapping.func)){
     stop("Argument wrapping function is not a function.")
   }
@@ -88,28 +89,24 @@ divide_and_conquer <- function(x,
   graph.learning.func <- match.fun(graph.learning.func)
   out.parsing.func <- match.fun(out.parsing.func)
 
-  ###########################
-  ###Set Up Multithreading###
-  ###########################
+  # set up multithreading
 
-  # If given access to multiple cores...
+  # if given access to multiple cores...
   if (n.cores > 1) {
     cl <- parallel::makeCluster(n.cores)
     doParallel::registerDoParallel(cl)
     on.exit(parallel::stopCluster(cl))
   }
 
-  ##################################
-  ###Divide Data and Learn Graphs###
-  ##################################
+  # divide data and learn graphs
 
-  #divide data based on subGraph indices
+  # divide data based on subGraph indices
   sub.x  <- lapply(subgraph.index.list, function(sg){
     x[sg,]
   })
 
-  #Learn graphs in parallel
-  #NOTE: this function can be substituted for any graph learning function that returns and Igraph object
+  # learn graphs in parallel
+  # nOTE: this function can be substituted for any graph learning function that returns and Igraph object
   args <- arg.wrapping.func(sub.x, ...)
   graph.learning.outputs <- foreach::foreach(i = seq_along(args),
                                              .combine = 'list',
@@ -121,7 +118,7 @@ divide_and_conquer <- function(x,
     do.call(graph.learning.func, args[[i]])
   }
 
-  #Separate outputs of graph learning into a list of learned igraph objects and other outputs
+  # separate outputs of graph learning into a list of learned igraph objects and other outputs
   parsed.outputs <- out.parsing.func(graph.learning.outputs)
 
   if(!all(unlist(lapply(parsed.outputs$learned.graphs , igraph::is_igraph)))){
@@ -130,9 +127,7 @@ divide_and_conquer <- function(x,
          and ensure parsed.outputs$learned.graphs contains a list of igraphs with overlapping node names")
   }
 
-  #################################
-  ###Stitch Graphs Back Together###
-  #################################
+  # stitch graphs back together
 
   final.graph <- .connect_subgraphs(parsed.outputs$learned.graphs, keep.all.edges)
 
@@ -159,38 +154,38 @@ divide_and_conquer <- function(x,
 
 #' @keywords internal
 .connect_subgraphs <- function(sub.graphs, keep.all.edges = FALSE){
-  #new graph containing all edges
+  # new graph containing all edges
   full.graph <- do.call(igraph::union, sub.graphs)
 
-  #if keeping all edges, return that graph
+  # if keeping all edges, return that graph
   if(keep.all.edges){return(full.graph)}
 
-  #rebuild from adj matrix to properly reorder nodes and remove unwanted attributes
+  # rebuild from adj matrix to properly reorder nodes and remove unwanted attributes
   adj <- as.matrix(igraph::as_adjacency_matrix(full.graph))
   adj <- adj[
     order(as.numeric(stringr::str_remove(rownames(adj), "Node_"))),
     order(as.numeric(stringr::str_remove(colnames(adj), "Node_")))]
   full.graph <- igraph::graph_from_adjacency_matrix(adj, mode = "undirected")
 
-  #remove non overlap edges
-  sg.pairs <- utils::combn(seq_along(sub.graphs), m = 2, simplify = F) #get all pairs of subgraphs
-  edges.to.remove <- lapply(sg.pairs, function(pr){ #for each pair of subgraphs
-    #get index for 'left' and 'right' subgraphs
+  # remove non overlap edges
+  sg.pairs <- utils::combn(seq_along(sub.graphs), m = 2, simplify = F) # get all pairs of subgraphs
+  edges.to.remove <- lapply(sg.pairs, function(pr){ # for each pair of subgraphs
+    # get index for 'left' and 'right' subgraphs
     left = pr[1]
     right = pr[2]
 
-    #get set of nodes that are in both graphs
+    # get set of nodes that are in both graphs
     overlapping.nodes <- intersect(
       igraph::V(sub.graphs[[left]])$name, igraph::V(sub.graphs[[right]])$name
     )
 
-    #if there are overlapping nodes
+    # if there are overlapping nodes
     if(length(overlapping.nodes) > 1){
-      #get edge list for these nodes
+      # get edge list for these nodes
       left.edges <- igraph::as_edgelist(sub.graphs[[left]])
       right.edges <- igraph::as_edgelist(sub.graphs[[right]])
 
-      #if both graphs contain edges
+      # if both graphs contain edges
       if(nrow(left.edges) > 0 && nrow(right.edges) > 0){
         left.edges <-left.edges[
           which(
@@ -198,7 +193,7 @@ divide_and_conquer <- function(x,
               all(row %in% overlapping.nodes)
             })
           )
-          ,] #take only edges between overlap nodes
+          ,] # take only edges between overlap nodes
 
         right.edges <-right.edges[
           which(
@@ -206,9 +201,9 @@ divide_and_conquer <- function(x,
               all(row %in% overlapping.nodes)
             })
           )
-          ,] #for both sets of edges
+          ,] # for both sets of edges
 
-        #this will return a vector in the edge case in which there is only one edge with overlap nodes
+        # this will return a vector in the edge case in which there is only one edge with overlap nodes
         if(!is.matrix(left.edges) && length(left.edges) == 2){
           left.edges <- matrix(left.edges, ncol = 2, byrow = T)
         }
@@ -216,14 +211,14 @@ divide_and_conquer <- function(x,
           right.edges <- matrix(right.edges, ncol = 2, byrow = T)
         }
 
-        #if these matrixes have at least one row
+        # if these matrixes have at least one row
         if(nrow(left.edges) > 0 && nrow(right.edges) > 0){
-          #get the edges that dont occur in both sets
+          # get the edges that dont occur in both sets
           sym.diff <- dplyr::bind_rows(
             as.data.frame(left.edges) %>% dplyr::anti_join(as.data.frame(right.edges), by = c("V1","V2")),
             as.data.frame(right.edges) %>% dplyr::anti_join(as.data.frame(left.edges), by = c("V1","V2"))
           )
-          #return the matrix of edges to remove
+          # return the matrix of edges to remove
           return(as.matrix(sym.diff))
         }
 
@@ -232,14 +227,18 @@ divide_and_conquer <- function(x,
     return(matrix(nrow = 0 , ncol = 2))
   })
 
-  #convert list of matrixs into single matrix containing edge information
+  # convert list of matrixs into single matrix containing edge information
   edges.to.remove <-as.matrix(unique(do.call(rbind, edges.to.remove)))
 
-  #remove these edges from combined graoh
+  # remove these edges from combined graoh
   full.graph <- igraph::delete_edges(full.graph, igraph::get.edge.ids(full.graph, as.vector(t(edges.to.remove)), directed = FALSE))
 
   return(full.graph)
 }
+
+#####################################################
+### Wrappers for different graph learning methods ###
+#####################################################
 
 #' Default argument wrapper for divide_and_conquer: packages each module data subset with SILGGM arguments
 
@@ -264,7 +263,7 @@ divide_and_conquer <- function(x,
                                  pos.cut = 0,
                                  neg.cut = 0){
 
-  #return a list of packaged args
+  # return a list of packaged args
   lapply(sub.x, function(x){
     list(x = t(x), # transform to fit n x p matrix required by silggm
          method  = method,
@@ -293,8 +292,6 @@ divide_and_conquer <- function(x,
   )
 }
 
-
-### Alternative functions for running with BDgraph
 
 #' Argument wrapper for BDgraph: transposes each module data subset for use with BDgraph::bdgraph
 #' @param sub.x a list of numeric matrices, each being a p_i x n subset of x for one module (features as rows)
@@ -325,9 +322,6 @@ divide_and_conquer <- function(x,
   adjMat <- BDgraph::select(postProb)
   igraph::graph_from_adjacency_matrix(adjMat, mode = "undirected") # can change this if I want to test edge directional update for .connect_subgraphs
 }
-
-
-### Alternative function for running with RSNet
 
 #' Argument wrapper for RSNet: packages each module data subset with RSNet arguments
 #' @param sub.x a list of numeric matrices, each being a p_i x n subset of x for one module (features as rows)
@@ -361,7 +355,7 @@ divide_and_conquer <- function(x,
                                filter = "pval",
                                threshold = 0.005){
 
-  #return a list of packaged args,
+  # return a list of packaged args,
   lapply(sub.x, function(x){
     list(dat = t(x), # transform to fit n x p matrix required by silggm
          num_iteration = 1,
