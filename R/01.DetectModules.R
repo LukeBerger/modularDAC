@@ -1,4 +1,4 @@
-# Declare module object
+﻿# Declare module object
 setClass("module",
          slots = list(
            source = "character",
@@ -35,8 +35,8 @@ setClass("module",
 
 )
 
-#' Returns true modules from a simulated graph with V(g)$modules
-#' @param g a igraph object with values for each node in the V(g)$module field
+#' Extract true module assignments from a simulated graph
+#' @param g an igraph object with a 'module' vertex attribute defining ground-truth module membership for each node
 
 #' @return a module object
 
@@ -54,9 +54,9 @@ true_modules <- function(g){
   )
 }
 
-#' Returns fuzzy moduls based on neighborhood in true graph
-#' @param m a module object
-#' @param g a igraph object with values for each node in the V(g)$module field
+#' Expand true modules to fuzzy (overlapping) modules based on second-order graph neighborhood
+#' @param m a module S4 object containing module membership assignments
+#' @param g an igraph object with a 'module' vertex attribute defining ground-truth module membership for each node
 
 #' @return a module object
 
@@ -85,9 +85,9 @@ true_fuzzy <- function(m, g){
 }
 
 
-#'Checks if a module object is properly formated and throws errors if not
-#' @param x data matrix used to learn the modules
-#' @param m a module object
+#' Validate a module object against the data matrix and throw errors if checks fail
+#' @param x a numeric matrix with p features (rows) and n samples (columns)
+#' @param m a module S4 object containing module membership assignments
 
 #' @return TRUE, if all checks passed
 
@@ -132,19 +132,19 @@ true_fuzzy <- function(m, g){
   return(TRUE)
 }
 
-#' Uses WGCNA to detect modules from a data matrix
-#' @param x a P x N matrix of features
-#' @param min.size an integer, the min size of modules produced by dynamicTreeCut
-#' @param max.size an integer, the maximum size of modules
-#' @param min.sft an integer, the min sft used by the pickSoftThreshold function
-#' @param beta an integer, the power value used by WGCNA::adjacency
-#' @param cor.FN a character, the cor.options WGCNA::adjacency
-#' @param powers an integer vector, the powers vector used by WGCNA::pickSoftThreshold
-#' @param hclust.method a character, the method used by flashClust
-#' @param cut.height an integer between 0 and 1, the cut height used by cutreeDynamic
-#' @param merge a boolean, whether or not to attempt to merge modules using WGCNA::mergeCloseModules
-#' @param merging.cut a numeric between 0 and 1, the cutheight for WGCNA::mergeCloseModules
-#' @param iterate boolean, whether to run module detection iteratively to break up large modules
+#' Detect co-expression modules from a data matrix using WGCNA
+#' @param x a numeric matrix with p features (rows) and n samples (columns)
+#' @param min.size an integer, the minimum number of nodes allowed in a module (passed to cutreeDynamic)
+#' @param max.size an integer, the maximum number of nodes allowed in a module
+#' @param min.sft a numeric between 0 and 1, the minimum R-squared threshold for soft-thresholding power selection
+#' @param beta an integer, the soft-thresholding power for WGCNA::adjacency; if NULL it is selected automatically via pickSoftThreshold
+#' @param cor.FN a character, the correlation function to use in WGCNA::adjacency; either 'bicor' or 'cor'
+#' @param powers an integer vector, candidate soft-thresholding powers evaluated by WGCNA::pickSoftThreshold
+#' @param hclust.method a character, the agglomeration method passed to flashClust
+#' @param cut.height a numeric between 0 and 1, the dendrogram cut height used by cutreeDynamic
+#' @param merge a logical, if TRUE adjacent modules are merged using WGCNA::mergeCloseModules
+#' @param merging.cut a numeric between 0 and 1, the eigengene dissimilarity threshold for WGCNA::mergeCloseModules
+#' @param iterate a logical, if TRUE module detection is run iteratively to break up any modules exceeding max.size
 
 #' @return a module object
 
@@ -432,10 +432,10 @@ find_WGCNA_mods <- function(x,
   ))
 }
 
-#' Helper to WGCNA calling functions to select soft thresholding power in WGCNA::adjacency
-#' @param sft output of WGCNA::pickSoftThreshold
+#' Select soft-thresholding power from WGCNA::pickSoftThreshold output
+#' @param sft a list, the output of WGCNA::pickSoftThreshold
 
-#' @return an int power level
+#' @return an integer, the selected soft-thresholding power
 
 #' @keywords internal
 .sft_check <- function(sft) {
@@ -449,13 +449,13 @@ find_WGCNA_mods <- function(x,
   return(beta)
 }
 
-#' Helper to find_WGCNA_mods that forces all modules to be within some max size
-#' @param index.vector index vector defining a module for each node or 0 for unassigned
-#' @param adj adjacency matrix produced by WGCNA::adjacency
-#' @param max.size integer for max number of nodes in each module
-#' @param verbose bool to declare each trade (mostly for debugging)
+#' Helper to find_WGCNA_mods that subdivides modules exceeding a maximum size
+#' @param index.vector an integer vector of length p, assigning each node to a module (0 = unassigned)
+#' @param adj a p x p numeric adjacency matrix produced by WGCNA::adjacency
+#' @param max.size an integer, the maximum number of nodes allowed in a module
+#' @param verbose a logical, if TRUE progress messages are printed for each split (useful for debugging)
 
-#' @return index vector with each module fitted to max size
+#' @return an integer vector of length p with the updated module assignments
 
 #' @keywords internal
 
@@ -507,10 +507,10 @@ find_WGCNA_mods <- function(x,
 }
 
 
-#' Uses ICA to detect modules from a data matrix
-#' @param x a p x n  matrix of features
-#' @param n.comp the number of components to search for in the data
-#' @param ... other arguments to fastICA
+#' Detect co-expression modules from a data matrix using Independent Component Analysis (ICA)
+#' @param x a numeric matrix with p features (rows) and n samples (columns)
+#' @param n.comp an integer, the number of independent components (modules) to extract
+#' @param ... additional arguments passed to fastICA::fastICA
 
 #' @return a module object
 
@@ -541,14 +541,14 @@ find_ICA_mods <- function(x,
   return(ICA.mods)
 }
 
-#' Uses MCL to detect modules from a data matrix
-#' @param x a n x p matrix of features
-#' @param beta an integer, the power value for WGCNA::adjacency
-#' @param cut a numeric < 1, the cut threshold for converting from correlation to binary adjacency
-#' @param expansion an integer, the expansion value of the mcl function
-#' @param inflation an integer, the inflation value of the mcl function
-#' @param cor.fn the correlation function to use in WGCNA::adjacency
-#' @param iter an integer, the maximum number of iterations in the mcl function
+#' Detect co-expression modules from a data matrix using Markov Clustering (MCL)
+#' @param x a numeric matrix with p features (rows) and n samples (columns)
+#' @param beta an integer, the soft-thresholding power for WGCNA::adjacency
+#' @param cut a numeric between 0 and 1, the adjacency threshold used to binarize the weighted adjacency matrix
+#' @param expansion an integer, the expansion parameter of the MCL algorithm
+#' @param inflation an integer, the inflation parameter of the MCL algorithm
+#' @param cor.fn a character, the correlation function to use in WGCNA::adjacency; either 'bicor' or 'cor'
+#' @param iter an integer, the maximum number of iterations for the MCL algorithm
 
 #' @return a module object
 
@@ -599,17 +599,17 @@ find_mcl_mods <- function(x,
 }
 
 
-#' Uses megena to detect modules from a data matrix
-#' @param x a n x p matrix of features
-#' @param method method for the calculate.correlation function
-#' @param fdr.cutoff fdr cut off value in calculate.correlation
-#' @param mod.pval module p value for the do.MEGENA function
-#' @param hub.pval hub p value for the do.MEGENA function
-#' @param cor.perm number of  permutations in calculate.correlation
-#' @param hub.perm the number of hub permutations in do.MEGENA
-#' @param min.size the minimum number of nodes in each module
-#' @param is.signed indicate using signed/unsigned correlation in calculate.correlation
-#' @param n.cores number of cores to use for multithreading
+#' Detect co-expression modules from a data matrix using MEGENA
+#' @param x a numeric matrix with p features (rows) and n samples (columns)
+#' @param method a character, the correlation method passed to MEGENA::calculate.correlation
+#' @param fdr.cutoff a numeric, the FDR cutoff used in MEGENA::calculate.correlation
+#' @param mod.pval a numeric, the module significance p-value threshold for MEGENA::do.MEGENA
+#' @param hub.pval a numeric, the hub significance p-value threshold for MEGENA::do.MEGENA
+#' @param cor.perm an integer, the number of permutations used in MEGENA::calculate.correlation
+#' @param hub.perm an integer, the number of permutations used for hub identification in MEGENA::do.MEGENA
+#' @param min.size an integer, the minimum number of nodes allowed in a module
+#' @param is.signed a logical, if TRUE signed correlation is used in MEGENA::calculate.correlation
+#' @param n.cores an integer, the number of cores to use for parallel processing
 
 #' @return a module object
 
@@ -686,10 +686,10 @@ find_megena_mods <- function(x,
   return(meg.mods)
 }
 
-#' Uses ICA to detect modules from a data matrix then reassigned nodes to fit all modules to a max size
-#' @param x  a p x n matrix of features
-#' @param max.size the maxsize of modules
-#' @param n.mods the number of modules to search for in the data
+#' Detect modules using ICA then subdivide any modules exceeding a maximum size
+#' @param x a numeric matrix with p features (rows) and n samples (columns)
+#' @param max.size an integer, the maximum number of nodes allowed in any single module
+#' @param n.mods an integer, the number of independent components to extract; if NULL it is selected automatically
 
 #' @return a module object
 
@@ -779,12 +779,12 @@ pragmatic_modules <- function(x, max.size, n.mods = NULL){
 
 
 
-#' Creates overlapping sets of fuzzy modules based on correlation of nodes outside the module with its eigen gene
-#' @param x a p x n matrix of features
-#' @param input.modules a module object
-#' @param max.size the maxsize of fuzzy modules
-#' @param n.pc number of principle componets use to define correlation of fuzzy nodes to the module
-#' @param ratio the ratio of original nodes in the module to nodes in the fuzzy module
+#' Expand non-overlapping modules to fuzzy (overlapping) modules by recruiting nodes correlated with each module's eigengene
+#' @param x a numeric matrix with p features (rows) and n samples (columns)
+#' @param input.modules a module S4 object containing the non-overlapping module assignments to expand
+#' @param max.size an integer, the maximum number of nodes allowed in any fuzzy module
+#' @param n.pc an integer, the number of principal components used to represent each module's eigengene
+#' @param ratio a numeric, the maximum ratio of fuzzy module size to original module size
 
 #' @return a module object
 
@@ -850,12 +850,12 @@ eigen_fuzzy_modules <- function(x, input.modules, max.size, n.pc = 2, ratio = 1.
 
 }
 
-#' Creates overlapping sets of fuzzy modules based on thresholded adj matrix from WGCNA
-#' @param x a p x n matrix of features
-#' @param adj the thresholded adjacency matrix from WGCNA
-#' @param input.modules a module object
-#' @param max.size the max size of fuzzy modules
-#' @param ratio the ratio of original nodes in the module to nodes in the fuzzy module
+#' Expand non-overlapping modules to fuzzy (overlapping) modules using a thresholded WGCNA adjacency matrix
+#' @param x a numeric matrix with p features (rows) and n samples (columns)
+#' @param adj a p x p numeric adjacency matrix (e.g. from WGCNA::adjacency) defining pairwise feature similarity
+#' @param input.modules a module S4 object containing the non-overlapping module assignments to expand
+#' @param max.size an integer, the maximum number of nodes allowed in any fuzzy module
+#' @param ratio a numeric, the maximum ratio of fuzzy module size to original module size
 
 #' @return a module object
 
@@ -905,11 +905,11 @@ adj_fuzzy_modules <- function(x, adj, input.modules, max.size, ratio){
   return(fuzzy.mods)
 }
 
-#' Create a set of overlapping modules from data matrix and strict, nonverlapping modules
-#' @param x a p x n matrix of features
-#' @param input.modules a module object
-#' @param use.eigen whether or not to use the eigen gene to determine overlaps, otherwise nodewise correlation is used
-#' @param best.pairs whether or not to overlap the best pairs of modules based on eigen genes only, otherwise all pairs of models are overlapped
+#' Create overlapping modules by merging pairs of non-overlapping modules based on shared nodes
+#' @param x a numeric matrix with p features (rows) and n samples (columns)
+#' @param input.modules a module S4 object containing the non-overlapping module assignments to expand
+#' @param use.eigen a logical, if TRUE module pairs are selected based on eigengene correlation; if FALSE nodewise correlation is used
+#' @param best.pairs a logical, if TRUE only the best-correlated module pairs are overlapped; if FALSE all pairs are overlapped
 
 #' @return a module object
 
@@ -1020,9 +1020,9 @@ create_overlap_modules <- function(x, input.modules, use.eigen = TRUE, best.pair
   return(overlap.modules)
 }
 
-#' Calculates the percentage of nodes assigned to the same module between to module sets, based on node index, not module name
-#' @param m1 a module object
-#' @param m2 another module object to compare to
+#' Calculate the percentage of nodes assigned to the same module across two module sets, compared by node index
+#' @param m1 a module S4 object containing module membership assignments
+#' @param m2 a module S4 object containing module membership assignments to compare against m1
 
 #' @return an integer between 0 and 100
 
@@ -1039,11 +1039,11 @@ percent_module_match <- function(m1, m2){
   return((matched.nodes / n.nodes) * 100)
 }
 
-#' Finds the best module matches between two sets of nodes
-#' @param m1.nodes Node index vector from m1
-#' @param m2.nodes Node index vector from m2
-#' @param m1.names Node character vector from m1
-#' @param m2.names Node character vector from m2
+#' Find the best-matching module pairs between two sets of modules based on node membership overlap
+#' @param m1.nodes an integer vector, the node index assignments from m1
+#' @param m2.nodes an integer vector, the node index assignments from m2
+#' @param m1.names a character vector, the node names from m1
+#' @param m2.names a character vector, the node names from m2
 
 #' @return a list of all the best modules matched based on node membership
 
@@ -1081,9 +1081,9 @@ percent_module_match <- function(m1, m2){
   return(matches)
 }
 
-#' Calculate the percentage of nodes with more edges within their module then outside of it
-#' @param g an igraph object
-#' @param test.module a module to test for contiguity, whose nodes indexs and names must match the graph
+#' Calculate the fraction of nodes in a module that have more edges within the module than outside of it
+#' @param g an igraph object whose node names match the node names stored in test.module
+#' @param test.module a module S4 object containing module membership assignments
 
 #' @return an integer between 0 and 100
 

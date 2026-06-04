@@ -1,23 +1,23 @@
-### Allow for dplyr piping
+﻿### Allow for dplyr piping
 utils::globalVariables(".")
 
 ######################
 ### Graph learning ###
 ######################
 
-### Takes a n x p matrix of data and inputs to silgggm function
+### Takes a p x n matrix of data and inputs to SILGGM function
 ### Then generates networks based on partial correlation between nodes
 
-#' Learns a graph from data using SILGGM
-#' @param x an  n by p matrix of numeric data
-#' @param method Methods for statistical inference with 5 options: "B_NW_SL", "D-S_NW_SL", "D-S_GL", "GFC_SL" and "GFC_L"
-#' @param global 	If global = TRUE, the global inference of all gene pairs is performed.
-#' @param alpha A user-supplied sequence of pre-sepecified alpha levels for FDR control. The default is alpha = 0.05, 0.1 if no sequence is provided.
-#' @param fdr.filter Whether to filter adjacency matrix results based on
-#' @param max.fdr The threshold to define an edge based on partial cor q val
-#' @param pos.cut Threhold to zero values in adjacency matrix
-#' @param neg.cut Threhold to zero values in adjacency matrix
-#' @param ... Additional arguments passed to SILGGM function
+#' Learn a gene co-expression graph from a data matrix using SILGGM
+#' @param x a numeric matrix with p features (rows) and n samples (columns)
+#' @param method a character, the statistical inference method; one of 'B_NW_SL', 'D-S_NW_SL', 'D-S_GL', 'GFC_SL', or 'GFC_L'
+#' @param global a logical, if TRUE global inference is performed across all feature pairs
+#' @param alpha a numeric or numeric vector, the pre-specified FDR significance level(s) for edge inclusion (default 0.05)
+#' @param fdr.filter a logical, if TRUE the adjacency matrix is filtered to retain only edges below max.fdr
+#' @param max.fdr a numeric, the FDR q-value threshold above which an edge is set to zero
+#' @param pos.cut a numeric, the minimum absolute partial correlation for a positive edge to be retained
+#' @param neg.cut a numeric, the minimum absolute partial correlation for a negative edge to be retained
+#' @param ... additional arguments passed to SILGGM::SILGGM
 
 #' @return an igraph object
 
@@ -89,8 +89,8 @@ learn_SILGGM_graph <- function(x,
 #' Reconstruct the symmetric matrix from upper triangular vector
 #'
 #' @param upper_tri_values a numeric vector of the upper triangle of the matrix
-#' @param variable_names row&column names
-#' @param diagl the diagnoal elemenet, a number of a numerci vector
+#' @param variable_names a character vector of row and column names for the output matrix
+#' @param diagl a numeric scalar or vector of length p, the diagonal value(s) of the output matrix
 
 #' @return a symmetric matrix
 
@@ -225,15 +225,15 @@ learn_SILGGM_graph <- function(x,
   return(x)
 }
 
-#' Uses WGCNA to learn a graph
-#' @param x a n x p matrix of features
-#' @param min.sft an integer, the min sft used by the pickSoftThreshold function
-#' @param beta an integer, the power value used by WGCNA::adjacency
-#' @param cor.FN a character, the cor.options WGCNA::adjacency
-#' @param powers an integer vector, the powers vector used by WGCNA::pickSoftThreshold
-#' @param threshold value to binarize adj matrix against
+#' Learn a gene co-expression graph from a data matrix using WGCNA
+#' @param x a numeric matrix with p features (rows) and n samples (columns)
+#' @param min.sft a numeric between 0 and 1, the minimum R-squared threshold for soft-thresholding power selection
+#' @param beta an integer, the soft-thresholding power for WGCNA::adjacency; if NULL it is selected automatically via pickSoftThreshold
+#' @param cor.FN a character, the correlation function to use in WGCNA::adjacency; either 'bicor' or 'cor'
+#' @param powers an integer vector, candidate soft-thresholding powers evaluated by WGCNA::pickSoftThreshold
+#' @param threshold a numeric, the adjacency value above which an edge is retained; if NULL the 99.9th percentile is used
 
-#' @return a igraph object
+#' @return an igraph object
 
 #' @importFrom WGCNA pickSoftThreshold adjacency bicor
 #' @importFrom igraph graph_from_adjacency_matrix
@@ -283,12 +283,12 @@ learn_WGCNA_graph <- function(x,
   return(igraph::graph_from_adjacency_matrix(binary.adj, mode = "undirected"))
 }
 
-#' Uses ARACNE algorithm to learn a graph
-#' @param x an n x p matrix of features
-#' @param threshold threshold value to convert mutial information to graphs
-#' @param eps numeric value indicating the threshold used when removing an edge
+#' Learn a gene co-expression graph from a data matrix using the ARACNE algorithm
+#' @param x a numeric matrix with p features (rows) and n samples (columns)
+#' @param threshold a numeric, the mutual information value above which an edge is retained
+#' @param eps a numeric, the data processing inequality threshold used by ARACNE to remove indirect edges
 
-#' @return a igraph object
+#' @return an igraph object
 
 #' @importFrom minet build.mim aracne
 #' @importFrom igraph graph_from_adjacency_matrix
@@ -310,9 +310,9 @@ learn_ARACNE_graph <- function(x, eps=0, threshold = 0.05) {
 ###Compare Graphs###
 ####################
 
-#' Calculates F1 score from a true and predicted graph
-#' @param g.true an igraph object, the true graph for the purpose of F1 calculation
-#' @param g.pred an igraph object, the predicted graph for the purpose of F1 calculation
+#' Calculate the F1 score comparing a predicted graph against a true graph
+#' @param g.true an igraph object, the true reference graph
+#' @param g.pred an igraph object, the predicted graph to evaluate
 
 #' @return a list of F1 score and its components
 
@@ -361,8 +361,8 @@ calc_F1 <- function(g.true, g.pred) {
 #### Other ####
 ###############
 
-#' Preforms halfmin imputation to fill NAs in matrix missing values, useful for filling NAs in matrix before graph learning
-#' @param dat data matrix of numeric values
+#' Impute missing values in a data matrix using half the row minimum
+#' @param dat a numeric matrix with p features (rows) and n samples (columns)
 
 #' @return the data matrix with NAs filled
 

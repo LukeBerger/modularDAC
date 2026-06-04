@@ -1,16 +1,16 @@
-#' Learns a network from data by dividing into it modules which are learned individually and stitched back together
-#' @param x input data, p x n matrix
-#' @param subgraph.module overlappping subsets of p wihtin a module object
-#' @param keep.all.edges whether to keep all edges when combine subgraphs
-#' @param n.cores number of cores to use for multithreading
-#' @param graph.learning.func function to learn graphs
-#' @param arg.wrapping.func function to wrap each module of x with args for graph learning function
-#' @param out.parsing.func function to parse outputs of graph learning into list of igraphs and other outputs
-#' @param packages.to.each packages for each thread
-#' @param export.to.each functions for each thread
-#' @param ... other args to pass through arg wrapper to graph learning
+﻿#' Learn a network from a data matrix using a divide-and-conquer strategy: data is split into overlapping modules, graphs are learned per module, and the results are stitched back together
+#' @param x a numeric matrix with p features (rows) and n samples (columns)
+#' @param subgraph.module a module S4 object with overlapping index sets defining which feature subsets to use for each sub-graph
+#' @param keep.all.edges a logical, if TRUE all edges from all sub-graphs are retained; if FALSE only edges consistent across overlapping sub-graphs are kept
+#' @param n.cores an integer, the number of cores to use for parallel processing
+#' @param graph.learning.func a function that accepts a data matrix and returns an igraph object
+#' @param arg.wrapping.func a function that packages each module's data subset and additional arguments into a list ready for graph.learning.func
+#' @param out.parsing.func a function that extracts a list of igraph objects and any other outputs from the raw output of graph.learning.func
+#' @param packages.to.each a character vector of package names to load on each parallel worker
+#' @param export.to.each a character vector of function names to export to each parallel worker
+#' @param ... additional arguments passed through arg.wrapping.func to graph.learning.func
 
-#' @return a list containing a the full graph (an igraph objects), the modular subgraphs (also igraphs), and any other outputs of graph learning
+#' @return a list with elements: modular.subgraphs (list of igraph objects, one per module), final.graph (igraph object combining all sub-graphs), and other.outputs (any additional outputs from graph learning)
 
 #' @importFrom foreach foreach %dopar%
 #' @importFrom igraph is_igraph
@@ -146,9 +146,9 @@ divide_and_conquer <- function(x,
   )
 }
 
-#' Connects the subgraphs output based on overlapping nodes
-#' @param sub.graphs PLACEHOLDER
-#' @param keep.all.edges PLACEHOLDER
+#' Combine a list of sub-graphs with overlapping nodes into a single graph by reconciling edge disagreements
+#' @param sub.graphs a list of igraph objects with overlapping node names
+#' @param keep.all.edges a logical, if TRUE all edges are retained; if FALSE edges that appear in only one of two overlapping sub-graphs are removed
 
 #' @importFrom igraph union as_adjacency_matrix graph_from_adjacency_matrix V as_edgelist delete_edges get.edge.ids
 #' @importFrom stringr str_remove
@@ -241,16 +241,16 @@ divide_and_conquer <- function(x,
   return(full.graph)
 }
 
-#' Basic arg wrapper to prepare args for graph learning in divide_and_conquer
+#' Default argument wrapper for divide_and_conquer: packages each module data subset with SILGGM arguments
 
-#' @param sub.x subset of a large data matrix x defined based on modules
-#' @param method Methods for statistical inference with 5 options: "B_NW_SL", "D-S_NW_SL", "D-S_GL", "GFC_SL" and "GFC_L"
-#' @param global 	If global = TRUE, the global inference of all gene pairs is performed.
-#' @param alpha A user-supplied sequence of pre-sepecified alpha levels for FDR control. The default is alpha = 0.05, 0.1 if no sequence is provided.
-#' @param fdr.filter Whether to filter adjacency matrix results based on
-#' @param max.fdr The threshold to define an edge based on partial cor q val
-#' @param pos.cut Threhold to zero values in adjacency matrix
-#' @param neg.cut Threhold to zero values in adjacency matrix
+#' @param sub.x a list of numeric matrices, each being a p_i x n subset of x for one module (features as rows)
+#' @param method a character, the statistical inference method; one of 'B_NW_SL', 'D-S_NW_SL', 'D-S_GL', 'GFC_SL', or 'GFC_L'
+#' @param global a logical, if TRUE global inference is performed across all feature pairs
+#' @param alpha a numeric or numeric vector, the pre-specified FDR significance level(s) for edge inclusion (default 0.05)
+#' @param fdr.filter a logical, if TRUE the adjacency matrix is filtered to retain only edges below max.fdr
+#' @param max.fdr a numeric, the FDR q-value threshold above which an edge is set to zero
+#' @param pos.cut a numeric, the minimum absolute partial correlation for a positive edge to be retained
+#' @param neg.cut a numeric, the minimum absolute partial correlation for a negative edge to be retained
 
 #' @return a list of arguments to feed to graph learning function
 
@@ -277,9 +277,9 @@ divide_and_conquer <- function(x,
   })
 }
 
-#' Processes output of graph learning function into list of learned graphs and other outputs
+#' Default output parser for divide_and_conquer: returns the graph learning outputs as learned graphs with no other outputs
 
-#' @param graph.learning.outputs list of outputs from each graph learning call on a subgraph
+#' @param graph.learning.outputs a list of outputs, one per sub-graph, returned by graph.learning.func
 
 #' @return a list containing the learned subgraphs and any other outputs of graph learning
 
@@ -296,8 +296,8 @@ divide_and_conquer <- function(x,
 
 ### Alternative functions for running with BDgraph
 
-#' arg wrapper for BD graph
-#' @param sub.x subset of a large data matrix x defined based on modules
+#' Argument wrapper for BDgraph: transposes each module data subset for use with BDgraph::bdgraph
+#' @param sub.x a list of numeric matrices, each being a p_i x n subset of x for one module (features as rows)
 
 #' @return a list containing the learned subgraphs data transformed for bdgraph
 
@@ -310,8 +310,8 @@ divide_and_conquer <- function(x,
   })
 }
 
-#' graph learning wrapper for BD graph
-#' @param x subset of a large data matrix x defined based on modules, transformed by arg wrapper
+#' Graph learning wrapper for BDgraph: fits a Gaussian graphical model and returns an igraph object
+#' @param x a numeric matrix with n samples (rows) and p features (columns), as prepared by .bd_arg_wrapper
 
 #' @return a list containing the learned subgraphs data transformed
 
@@ -329,20 +329,20 @@ divide_and_conquer <- function(x,
 
 ### Alternative function for running with RSNet
 
-#' arg wrapper for RSNet conc networks
-#' @param sub.x subset of a large data matrix x defined based on modules
-#' @param num_iteration Number of iterations to perform. Defaults to 1.
-#' @param boot Logical; whether to use bootstrap resampling. Defaults to FALSE.
-#' @param sub_ratio Numeric; subsampling ratio. Defaults to 1.
-#' @param sample_class Character or NULL; class label(s) for samples to include in analysis.
-#' @param correlated Logical; whether to account for correlated features. Defaults to FALSE.
-#' @param cluster_ratio Numeric; clustering ratio. Defaults to 1.
-#' @param estimate_CI Logical; whether to estimate confidence intervals. Defaults to TRUE.
-#' @param method Character; method for network analysis. Defaults to "B_NW_SL".
-#' @param n_cores Integer or NULL; number of cores for parallel processing. If NULL, uses single core.
-#' @param CI Numeric; confidence level for interval estimation (between 0 and 1). Defaults to 0.95.
-#' @param filter Character; filtering criterion to apply. Defaults to "pval" (p-value).
-#' @param threshold Numeric; threshold value for filtering. Defaults to 0.005.
+#' Argument wrapper for RSNet: packages each module data subset with RSNet arguments
+#' @param sub.x a list of numeric matrices, each being a p_i x n subset of x for one module (features as rows)
+#' @param num_iteration an integer, the number of bootstrap/subsampling iterations to perform
+#' @param boot a logical, if TRUE bootstrap resampling is used
+#' @param sub_ratio a numeric between 0 and 1, the subsampling ratio applied to samples
+#' @param sample_class a character vector or NULL, class labels for samples to include; NULL uses all samples
+#' @param correlated a logical, if TRUE correlated feature structure is accounted for
+#' @param cluster_ratio a numeric, the clustering ratio parameter
+#' @param estimate_CI a logical, if TRUE confidence intervals are estimated for each edge
+#' @param method a character, the statistical inference method passed to RSNet (e.g. 'B_NW_SL')
+#' @param n_cores an integer or NULL, the number of cores for parallel processing; NULL uses a single core
+#' @param CI a numeric between 0 and 1, the confidence level for interval estimation
+#' @param filter a character, the filtering criterion applied to edges (e.g. 'pval')
+#' @param threshold a numeric, the threshold value for the chosen filter
 
 #' @return a list containing the args for rsnet learning
 
@@ -379,20 +379,20 @@ divide_and_conquer <- function(x,
   })
 }
 
-#' wrapper function to generate ensemble and conc networks from sub matrix data
-#' @param dat subset of a large data matrix x defined based on modules
-#' @param num_iteration Number of iterations to perform. Defaults to 1.
-#' @param boot Logical; whether to use bootstrap resampling. Defaults to FALSE.
-#' @param sub_ratio Numeric; subsampling ratio. Defaults to 1.
-#' @param sample_class Character or NULL; class label(s) for samples to include in analysis.
-#' @param correlated Logical; whether to account for correlated features. Defaults to FALSE.
-#' @param cluster_ratio Numeric; clustering ratio. Defaults to 1.
-#' @param estimate_CI Logical; whether to estimate confidence intervals. Defaults to TRUE.
-#' @param method Character; method for network analysis. Defaults to "B_NW_SL".
-#' @param n_cores Integer or NULL; number of cores for parallel processing. If NULL, uses single core.
-#' @param CI Numeric; confidence level for interval estimation (between 0 and 1). Defaults to 0.95.
-#' @param filter Character; filtering criterion to apply. Defaults to "pval" (p-value).
-#' @param threshold Numeric; threshold value for filtering. Defaults to 0.005.
+#' Graph learning wrapper for RSNet: generates ensemble and consensus GGM networks from a module data subset
+#' @param dat a numeric matrix with n samples (rows) and p features (columns), as prepared by .RSNet_arg_wrapper
+#' @param num_iteration an integer, the number of bootstrap/subsampling iterations to perform
+#' @param boot a logical, if TRUE bootstrap resampling is used
+#' @param sub_ratio a numeric between 0 and 1, the subsampling ratio applied to samples
+#' @param sample_class a character vector or NULL, class labels for samples to include; NULL uses all samples
+#' @param correlated a logical, if TRUE correlated feature structure is accounted for
+#' @param cluster_ratio a numeric, the clustering ratio parameter
+#' @param estimate_CI a logical, if TRUE confidence intervals are estimated for each edge
+#' @param method a character, the statistical inference method passed to RSNet (e.g. 'B_NW_SL')
+#' @param n_cores an integer or NULL, the number of cores for parallel processing; NULL uses a single core
+#' @param CI a numeric between 0 and 1, the confidence level for interval estimation
+#' @param filter a character, the filtering criterion applied to edges (e.g. 'pval')
+#' @param threshold a numeric, the threshold value for the chosen filter
 
 #' @importFrom RSNet capture_all ensemble_ggm consensus_net_ggm
 
@@ -433,8 +433,8 @@ divide_and_conquer <- function(x,
   return(conc.nets)
 }
 
-#' Output parser for RSNet learning
-#' @param graph.learning.outputs list of outputs from each graph learning call on a subgraph
+#' Output parser for RSNet: extracts consensus networks and other outputs from RSNet graph learning results
+#' @param graph.learning.outputs a list of outputs, one per sub-graph, returned by .RSNet_full_learning
 
 #' @return a list containing the learned subgraphs and any other outputs of graph learning
 
