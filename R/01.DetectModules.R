@@ -1,4 +1,4 @@
-
+﻿
 ######################
 ### Define Modules ###
 ######################
@@ -158,11 +158,7 @@ true_fuzzy <- function(m, g){
 
 #' @return a module object
 
-#' @importFrom MatrixGenerics rowVars
-#' @importFrom WGCNA pickSoftThreshold adjacency TOMdist bicor mergeCloseModules
-#' @importFrom flashClust flashClust
 #' @importFrom stats as.dist
-#' @importFrom dynamicTreeCut cutreeDynamic
 #' @importFrom methods new
 
 #' @export
@@ -521,7 +517,6 @@ find_WGCNA_mods <- function(x,
 
 #' @return a module object
 
-#' @importFrom fastICA fastICA
 #' @importFrom methods new
 
 #' @export
@@ -560,8 +555,6 @@ find_ICA_mods <- function(x,
 
 #' @return a module object
 
-#' @importFrom WGCNA adjacency
-#' @importFrom MCL mcl
 #' @importFrom methods new
 
 #' @export
@@ -622,7 +615,6 @@ find_mcl_mods <- function(x,
 
 #' @importFrom parallel makeCluster
 #' @importFrom doParallel registerDoParallel
-#' @importFrom MEGENA calculate.correlation calculate.PFN do.MEGENA
 #' @importFrom igraph graph.data.frame
 #' @importFrom methods new
 
@@ -700,7 +692,6 @@ find_megena_mods <- function(x,
 
 #' @return a module object
 
-#' @importFrom fastICA fastICA
 #' @importFrom methods new
 
 #' @export

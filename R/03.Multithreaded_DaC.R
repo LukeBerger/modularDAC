@@ -1,4 +1,4 @@
-#####################
+﻿#####################
 ### DAC Algorithm ###
 #####################
 
@@ -312,7 +312,6 @@ divide_and_conquer <- function(x,
 
 #' @return a list containing the learned subgraphs data transformed
 
-#' @importFrom BDgraph bdgraph plinks select
 #' @importFrom igraph graph_from_adjacency_matrix
 
 #' @keywords internal
@@ -388,7 +387,6 @@ divide_and_conquer <- function(x,
 #' @param filter a character, the filtering criterion applied to edges (e.g. 'pval')
 #' @param threshold a numeric, the threshold value for the chosen filter
 
-#' @importFrom RSNet capture_all ensemble_ggm consensus_net_ggm
 
 #' @return a list of learned graphs (and other consensus_net_ggm outputs)
 

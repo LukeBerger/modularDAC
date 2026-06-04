@@ -1,4 +1,4 @@
-#####################
+﻿#####################
 ### Create Graphs ###
 #####################
 
@@ -248,7 +248,6 @@ make_submodular_graph <- function(g.type=c("er", "sf"),
 
 #' @return an igraph object
 
-#' @importFrom netUtils sample_lfr
 #' @importFrom igraph V
 
 #' @export
@@ -291,7 +290,6 @@ make_lfr <- function(n = 120,
 
 #' @return a p x n data matrix
 
-#' @importFrom MASS mvrnorm
 #' @importFrom igraph as_adjacency_matrix V
 
 #' @export
@@ -331,7 +329,6 @@ sim_graph_data <- function(g, n.samples, mean.vec = NULL){
 
 #' @return a visNetwork HTML widget
 #' @importFrom dplyr %>%
-#' @import visNetwork
 
 #' @export
 modular_plot <- function(g,

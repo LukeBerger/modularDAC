@@ -1,4 +1,4 @@
-####################
+﻿####################
 ### Learn Graphs ###
 ####################
 
@@ -23,7 +23,6 @@ utils::globalVariables(".")
 
 #' @return an igraph object
 
-#' @importFrom SILGGM SILGGM
 #' @importFrom igraph graph_from_adjacency_matrix
 #' @importFrom dplyr  %>%
 
@@ -233,7 +232,6 @@ learn_SILGGM_graph <- function(x,
 
 #' @return an igraph object
 
-#' @importFrom WGCNA pickSoftThreshold adjacency bicor
 #' @importFrom igraph graph_from_adjacency_matrix
 #' @importFrom stats quantile
 
@@ -288,7 +286,6 @@ learn_WGCNA_graph <- function(x,
 
 #' @return an igraph object
 
-#' @importFrom minet build.mim aracne
 #' @importFrom igraph graph_from_adjacency_matrix
 
 #' @export
@@ -361,7 +358,6 @@ calc_F1 <- function(g.true, g.pred) {
 
 #' @return the data matrix with NAs filled
 
-#' @importFrom matrixStats rowMins rowMeans2
 
 #' @keywords internal
 .halfmin_impute <- function(dat) {
