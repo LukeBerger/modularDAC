@@ -158,6 +158,7 @@ true_fuzzy <- function(m, g){
 
 #' @return a module object
 
+#' @importFrom WGCNA pickSoftThreshold adjacency TOMdist bicor mergeCloseModules
 #' @importFrom stats as.dist
 #' @importFrom methods new
 

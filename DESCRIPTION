@@ -15,6 +15,7 @@ Imports:
     igraph,
     dplyr,
     stringr,
+    WGCNA,
     foreach,
     parallel,
     doParallel
@@ -28,7 +29,6 @@ Suggests:
     BDgraph,
     tmvtnorm,
     MASS,
-    WGCNA,
     fastICA,
     MCL,
     SILGGM,
