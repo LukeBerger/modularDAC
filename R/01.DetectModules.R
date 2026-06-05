@@ -156,7 +156,7 @@ true_fuzzy <- function(m, g){
 #' @param merging.cut a numeric between 0 and 1, the eigengene dissimilarity threshold for WGCNA::mergeCloseModules
 #' @param iterate a logical, if TRUE module detection is run iteratively to break up any modules exceeding max.size
 
-#' @return a module object
+#' @return a list containing: the WGCNA thresholded adj matrix, the initial modules after merge/iteration, the final modules after max.size fitting
 
 #' @importFrom WGCNA pickSoftThreshold adjacency TOMdist bicor mergeCloseModules
 #' @importFrom stats as.dist
