@@ -360,18 +360,18 @@ divide_and_conquer <- function(x,
   # return a list of packaged args,
   lapply(sub.x, function(x){
     list(dat = t(x), # transform to fit n x p matrix required by silggm
-         num_iteration = 1,
-         boot = FALSE,
-         sub_ratio = 1,
-         sample_class = NULL,
-         correlated = FALSE,
-         cluster_ratio = 1,
-         estimate_CI = TRUE,
-         method = "B_NW_SL",
-         n_cores =NULL,
-         CI = 0.95,
-         filter = "pval",
-         threshold = 0.005)
+         num_iteration = num_iteration,
+         boot = boot,
+         sub_ratio = sub_ratio,
+         sample_class = sample_class,
+         correlated = correlated,
+         cluster_ratio = cluster_ratio,
+         estimate_CI = estimate_CI,
+         method = method,
+         n_cores = n_cores,
+         CI = CI,
+         filter = filter,
+         threshold = threshold)
   })
 }
 
@@ -420,7 +420,7 @@ divide_and_conquer <- function(x,
                                  cluster_ratio,
                                  estimate_CI,
                                  method,
-                                 n_cores
+                                 n_cores = n_cores
   ))
   conc.nets <-  RSNet::capture_all(RSNet::consensus_net_ggm(ggm_networks = ens.net,
                                         CI = CI,
