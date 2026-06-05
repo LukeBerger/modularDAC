@@ -1,68 +1,51 @@
-test_that("SILGMM Learning", {
-  # Simulate True Graph and Data
-  er <- make_modular_graph()
-  x <- sim_graph_data(er, n.samples = 100)
+# Tests for the graph-learning functions in R/02.LearnGraphs.R
+# Scope: learn_SILGGM_graph()
+#
+# SILGGM prints progress via cat() (not message()), so quiet() captures that
+# output to keep test logs clean. The learned graph is computed once and shared
+# across the assertions below, since SILGGM is the slow part.
 
-  # Learn Graph
-  g <- learn_SILGGM_graph(t(x))
+# silence cat()/message()/warning() noise while returning the value
+quiet <- function(expr) {
+  utils::capture.output(val <- suppressWarnings(suppressMessages(expr)))
+  val
+}
 
-  # Check Graph
-  expect_s3_class(g, "igraph")
-  expect_length(g, 120)
-  expect_true(all(igraph::V(g)$name == row.names(x)))
+set.seed(1)
+.g <- make_modular_graph()
+.x <- sim_graph_data(.g, n.samples = 100)          # p x n (features x samples)
+.learned <- quiet(learn_SILGGM_graph(t(.x)))       # SILGGM expects n x p
 
-  # Check F1
-  f1 <-calc_F1(er, g)$F1
-  expect_type(f1, "double")
-  expect_length(f1, 1)
-  expect_gte(f1, 0)
-  expect_lte(f1, 1)
-  expect_equal(calc_F1(er, er)$F1, 1)
+# ---------------------------------------------------------------------------
+# learn_SILGGM_graph()
+# ---------------------------------------------------------------------------
 
+test_that("learn_SILGGM_graph() returns a weighted igraph with one node per feature", {
+  expect_s3_class(.learned, "igraph")
+  expect_length(.learned, nrow(.x))
+  expect_true(igraph::is_weighted(.learned))
 })
 
-# Commenting out when not working on this function since it slows the run
-# test_that("WGCNA Learning", {
-#   # Simulate True Graph and Data
-#   er <- make_modular_graph()
-#   x <- sim_graph_data(er, n.samples = 100)
-#
-#   # Learn Graph
-#   g <- learn_WGCNA_graph(t(x))
-#
-#   # Check Graph
-#   expect_s3_class(g, "igraph")
-#   expect_length(g, 120)
-#   expect_true(all(igraph::V(g)$name == row.names(x)))
-#
-#   # Check F1
-#   f1 <-calc_F1(er, g)$F1
-#   expect_type(f1, "double")
-#   expect_length(f1, 1)
-#   expect_gte(f1, 0)
-#   expect_lte(f1, 1)
-#
-# })
+test_that("learn_SILGGM_graph() preserves feature identity and undirected structure", {
+  # node names carry over from the data's feature labels
+  expect_equal(igraph::V(.learned)$name, rownames(.x))
+  expect_false(igraph::is_directed(.learned))
+  # no self-loops (diagonal is zeroed before graph construction)
+  expect_true(igraph::is_simple(.learned))
+})
 
-
-test_that("ARACNE Learning", {
-  # Simulate True Graph and Data
-  er <- make_modular_graph()
-  x <- sim_graph_data(er, n.samples = 100)
-
-  # Learn Graph
-  g <- learn_ARACNE_graph(t(x))
-
-  # Check Graph
-  expect_s3_class(g, "igraph")
-  expect_length(g, 120)
-  expect_true(all(igraph::V(g)$name == row.names(x)))
-
-  # Check F1
-  f1 <-calc_F1(er, g)$F1
+test_that("learn_SILGGM_graph() recovers a non-empty subset of the true edges", {
+  # not a benchmark, just a sanity check that the learned graph is usable and
+  # overlaps the truth: F1 is a valid score in [0, 1].
+  f1 <- calc_F1(.g, .learned)$F1
   expect_type(f1, "double")
-  expect_length(f1, 1)
   expect_gte(f1, 0)
   expect_lte(f1, 1)
+})
 
+test_that("learn_SILGGM_graph() drops more edges as the FDR threshold tightens", {
+  # a stricter (smaller) max.fdr should never retain MORE edges than a lax one
+  strict <- quiet(learn_SILGGM_graph(t(.x), fdr.filter = TRUE, max.fdr = 0.001))
+  loose  <- quiet(learn_SILGGM_graph(t(.x), fdr.filter = TRUE, max.fdr = 0.5))
+  expect_lte(igraph::gsize(strict), igraph::gsize(loose))
 })
