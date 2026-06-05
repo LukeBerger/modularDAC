@@ -45,7 +45,7 @@ find_WGCNA_mods(
 \item{iterate}{a logical, if TRUE module detection is run iteratively to break up any modules exceeding max.size}
 }
 \value{
-a module object
+a list containing: the WGCNA thresholded adj matrix, the initial modules after merge/iteration, the final modules after max.size fitting
 }
 \description{
 Detect co-expression modules from a data matrix using WGCNA
