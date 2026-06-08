@@ -333,50 +333,53 @@ find_WGCNA_mods <- function(x,
     to.big <- as.numeric(names(which(table(initial.index.vector) > max.size)))
     to.big <- to.big[to.big!=0]
 
-    cat("The first iterations of modules",to.big, "are too large, attempting to split... \n")
+    if(length(to.big > 0)){
+      cat("The first iterations of modules",to.big, "are too large, attempting to split... \n")
 
-    # rerun flast cluster for each module that is to large
-    for(m in to.big){
-      # subset distance matrix
-      m.nodes <- which(initial.index.vector == m)
-      m.dis <- dis[m.nodes,m.nodes, drop = F]
+      # rerun flast cluster for each module that is to large
+      for(m in to.big){
+        # subset distance matrix
+        m.nodes <- which(initial.index.vector == m)
+        m.dis <- dis[m.nodes,m.nodes, drop = F]
 
-      # regenerate modules
-      dendro <- flashClust::flashClust(
-        d=stats::as.dist(m.dis),
-        method=hclust.method)
-      m.index.vector <- dynamicTreeCut::cutreeDynamic(
-        dendro=dendro,
-        cutHeight = cut.height,
-        method="hybrid",
-        distM=m.dis,
-        deepSplit=4,
-        pamRespectsDendro=FALSE,
-        minClusterSize=min.size,
-        verbose = F)
+        # regenerate modules
+        dendro <- flashClust::flashClust(
+          d=stats::as.dist(m.dis),
+          method=hclust.method)
+        m.index.vector <- dynamicTreeCut::cutreeDynamic(
+          dendro=dendro,
+          cutHeight = cut.height,
+          method="hybrid",
+          distM=m.dis,
+          deepSplit=4,
+          pamRespectsDendro=FALSE,
+          minClusterSize=min.size,
+          verbose = F)
 
-      # check new modules...
-      pass = T
-      # arent mostly zero
-      if(sum(m.index.vector ==0) > length(m.index.vector) / 2){
-        pass = F
-        cat("Module", m, "failed to split due to high number of unassigned nodes. \n")
-      }
-      # have at least two non zero values
-      if(length(unique(m.index.vector[m.index.vector != 0])) < 2){
-        pass = F
-        cat("Module", m,"failed to spilt into at least two new modules. \n")
-      }
+        # check new modules...
+        pass = T
+        # arent mostly zero
+        if(sum(m.index.vector ==0) > length(m.index.vector) / 2){
+          pass = F
+          cat("Module", m, "failed to split due to high number of unassigned nodes. \n")
+        }
+        # have at least two non zero values
+        if(length(unique(m.index.vector[m.index.vector != 0])) < 2){
+          pass = F
+          cat("Module", m,"failed to spilt into at least two new modules. \n")
+        }
 
-      # if the module passes checks,
-      if(pass){
-        # split module
-        cat("Spliting module" ,m, "into", length(unique(m.index.vector[m.index.vector!=0])), "new modules. \n")
-        initial.index.vector[m.nodes] <- ifelse(m.index.vector  ==0,
-                                                0,  m.index.vector  + max(initial.index.vector)) # adding max ensures no overlaps)
+        # if the module passes checks,
+        if(pass){
+          # split module
+          cat("Spliting module" ,m, "into", length(unique(m.index.vector[m.index.vector!=0])), "new modules. \n")
+          initial.index.vector[m.nodes] <- ifelse(m.index.vector  ==0,
+                                                  0,  m.index.vector  + max(initial.index.vector)) # adding max ensures no overlaps)
+        }
       }
     }
   }
+
 
   # assign remaining unassigned nodes based on adj...
   cat("Assinging unassinged nodes based on WGNCA adjacency... \n")
