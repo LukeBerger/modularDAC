@@ -129,7 +129,7 @@ divide_and_conquer <- function(x,
 
   # stitch graphs back together
 
-  final.graph <- .connect_subgraphs(parsed.outputs$learned.graphs, keep.all.edges)
+  final.graph <- .connect_subgraphs(x, parsed.outputs$learned.graphs, keep.all.edges)
 
   # return sub graphs and final graphs
   return(
@@ -142,6 +142,7 @@ divide_and_conquer <- function(x,
 }
 
 #' Combine a list of sub-graphs with overlapping nodes into a single graph by reconciling edge disagreements
+#' @param x a numeric matrix with p features (rows) and n samples (columns)
 #' @param sub.graphs a list of igraph objects with overlapping node names
 #' @param keep.all.edges a logical, if TRUE all edges are retained; if FALSE edges that appear in only one of two overlapping sub-graphs are removed
 
@@ -153,7 +154,7 @@ divide_and_conquer <- function(x,
 #' @return an igraph object comprised of the combine subgraphs
 
 #' @keywords internal
-.connect_subgraphs <- function(sub.graphs, keep.all.edges = FALSE){
+.connect_subgraphs <- function(x, sub.graphs, keep.all.edges = FALSE){
   # new graph containing all edges
   full.graph <- do.call(igraph::union, sub.graphs)
 
@@ -162,9 +163,8 @@ divide_and_conquer <- function(x,
 
   # rebuild from adj matrix to properly reorder nodes and remove unwanted attributes
   adj <- as.matrix(igraph::as_adjacency_matrix(full.graph))
-  adj <- adj[
-    order(as.numeric(stringr::str_remove(rownames(adj), "Node_"))),
-    order(as.numeric(stringr::str_remove(colnames(adj), "Node_")))]
+  original.order <- match(rownames(x), rownames(adj))
+  adj <- adj[original.order , original.order]
   full.graph <- igraph::graph_from_adjacency_matrix(adj, mode = "undirected")
 
   # remove non overlap edges
