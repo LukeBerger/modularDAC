@@ -276,18 +276,18 @@ divide_and_conquer <- function(x,
   })
 }
 
-#' Default output parser for divide_and_conquer: returns the graph learning outputs as learned graphs with no other outputs
+#' Default output parser for divide_and_conquer: splits each learner's output into the learned graph and the partial correlation matrix
 
-#' @param graph.learning.outputs a list of outputs, one per sub-graph, returned by graph.learning.func
+#' @param graph.learning.outputs a list of outputs, one per sub-graph, returned by graph.learning.func; each output is a list with a 'graph' (igraph) and a 'partial.cor' (matrix) element
 
-#' @return a list containing the learned subgraphs and any other outputs of graph learning
+#' @return a list with 'learned.graphs', a list of the learned igraph objects, and 'other.outputs', a list of the corresponding partial correlation matrices
 
 #' @keywords internal
 .default_output_parser <- function(graph.learning.outputs){
   return(
     list(
-      learned.graphs = graph.learning.outputs,
-      other.outputs = NULL
+      learned.graphs = lapply(graph.learning.outputs, function(o) o$graph),
+      other.outputs  = lapply(graph.learning.outputs, function(o) o$partial.cor)
     )
   )
 }

@@ -30,8 +30,10 @@ test_that("divide_and_conquer() returns subgraphs, a final graph, and other outp
   expect_length(.dac$modular.subgraphs, length(.fuzzy@index.list))
   expect_true(all(vapply(.dac$modular.subgraphs, igraph::is_igraph, logical(1))))
 
-  # default output parser carries no extra outputs
-  expect_null(.dac$other.outputs)
+  # the default (SILGGM) parser now returns one partial correlation matrix per module
+  expect_type(.dac$other.outputs, "list")
+  expect_length(.dac$other.outputs, length(.fuzzy@index.list))
+  expect_true(all(vapply(.dac$other.outputs, is.matrix, logical(1))))
 })
 
 test_that("divide_and_conquer() stitches modules back into the full feature set", {

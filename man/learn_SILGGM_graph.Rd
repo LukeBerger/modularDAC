@@ -36,7 +36,7 @@ learn_SILGGM_graph(
 \item{...}{additional arguments passed to SILGGM::SILGGM}
 }
 \value{
-an igraph object
+a named list with two elements: 'graph', the learned weighted igraph object, and 'partial.cor', the symmetric partial correlation matrix
 }
 \description{
 Learn a gene co-expression graph from a data matrix using SILGGM

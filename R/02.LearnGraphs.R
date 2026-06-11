@@ -21,7 +21,7 @@ utils::globalVariables(".")
 #' @param neg.cut a numeric, the minimum absolute partial correlation for a negative edge to be retained
 #' @param ... additional arguments passed to SILGGM::SILGGM
 
-#' @return an igraph object
+#' @return a named list with two elements: 'graph', the learned weighted igraph object, and 'partial.cor', the symmetric partial correlation matrix
 
 #' @importFrom igraph graph_from_adjacency_matrix
 #' @importFrom dplyr  %>%
@@ -82,7 +82,13 @@ learn_SILGGM_graph <- function(x,
                                             mode = "undirected",
                                             weighted = TRUE)
 
-  return(g)
+  # return the learned graph and the partial correlation matrix
+  return(
+    list(
+      graph       = g,
+      partial.cor = pcor.avg
+    )
+  )
 }
 
 # helpers to simpleSILGGM graph taken from RSCGGM

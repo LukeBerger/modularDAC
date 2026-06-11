@@ -14,7 +14,8 @@ quiet <- function(expr) {
 set.seed(1)
 .g <- make_modular_graph()
 .x <- sim_graph_data(.g, n.samples = 100)          # p x n (features x samples)
-.learned <- quiet(learn_SILGGM_graph(t(.x)))       # SILGGM expects n x p
+.out     <- quiet(learn_SILGGM_graph(t(.x)))       # SILGGM expects n x p
+.learned <- .out$graph                             # the learned igraph
 
 # ---------------------------------------------------------------------------
 # learn_SILGGM_graph()
@@ -24,6 +25,21 @@ test_that("learn_SILGGM_graph() returns a weighted igraph with one node per feat
   expect_s3_class(.learned, "igraph")
   expect_length(.learned, nrow(.x))
   expect_true(igraph::is_weighted(.learned))
+})
+
+test_that("learn_SILGGM_graph() returns the graph alongside the partial correlation matrix", {
+  expect_type(.out, "list")
+  expect_named(.out, c("graph", "partial.cor"))
+  expect_s3_class(.out$graph, "igraph")
+
+  pcor <- .out$partial.cor
+  # symmetric p x p matrix, feature-named, with a unit diagonal
+  expect_true(is.matrix(pcor))
+  expect_equal(dim(pcor), c(nrow(.x), nrow(.x)))
+  expect_equal(rownames(pcor), rownames(.x))
+  expect_equal(colnames(pcor), rownames(.x))
+  expect_equal(unname(diag(pcor)), rep(1, nrow(.x)))
+  expect_equal(pcor, t(pcor))
 })
 
 test_that("learn_SILGGM_graph() preserves feature identity and undirected structure", {
@@ -45,7 +61,7 @@ test_that("learn_SILGGM_graph() recovers a non-empty subset of the true edges", 
 
 test_that("learn_SILGGM_graph() drops more edges as the FDR threshold tightens", {
   # a stricter (smaller) max.fdr should never retain MORE edges than a lax one
-  strict <- quiet(learn_SILGGM_graph(t(.x), fdr.filter = TRUE, max.fdr = 0.001))
-  loose  <- quiet(learn_SILGGM_graph(t(.x), fdr.filter = TRUE, max.fdr = 0.5))
+  strict <- quiet(learn_SILGGM_graph(t(.x), fdr.filter = TRUE, max.fdr = 0.001))$graph
+  loose  <- quiet(learn_SILGGM_graph(t(.x), fdr.filter = TRUE, max.fdr = 0.5))$graph
   expect_lte(igraph::gsize(strict), igraph::gsize(loose))
 })
