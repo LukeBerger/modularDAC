@@ -2,7 +2,7 @@
 % Please edit documentation in R/01.DetectModules.R
 \name{module_contiguity}
 \alias{module_contiguity}
-\title{Calculate the fraction of nodes in a module that have more edges within the module than outside of it}
+\title{Measure how self-contained each module is within a graph}
 \usage{
 module_contiguity(g, test.module)
 }
@@ -12,8 +12,8 @@ module_contiguity(g, test.module)
 \item{test.module}{a module S4 object containing module membership assignments}
 }
 \value{
-an integer between 0 and 100
+a list with two elements: 'overall.contiguity', a single score from 0 to 100 giving the edge-weighted percentage of module-incident edges that stay within their module; and 'module.edges', a data frame with one row per module (row names are the module labels) holding 'within.edges' (edges with both endpoints in the module), 'between.edges' (edges with exactly one endpoint in the module) and 'percent.within' (100 * within / (within + between))
 }
 \description{
-Calculate the fraction of nodes in a module that have more edges within the module than outside of it
+Measure how self-contained each module is within a graph
 }

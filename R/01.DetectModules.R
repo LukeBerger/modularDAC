@@ -1175,29 +1175,77 @@ module_match <- function(m1, m2){
   return(matched)
 }
 
-#' Calculate the fraction of nodes in a module that have more edges within the module than outside of it
+#' Measure how self-contained each module is within a graph
 #' @param g an igraph object whose node names match the node names stored in test.module
 #' @param test.module a module S4 object containing module membership assignments
 
-#' @return an integer between 0 and 100
+#' @return a list with two elements: 'overall.contiguity', a single score from 0 to 100 giving the edge-weighted percentage of module-incident edges that stay within their module; and 'module.edges', a data frame with one row per module (row names are the module labels) holding 'within.edges' (edges with both endpoints in the module), 'between.edges' (edges with exactly one endpoint in the module) and 'percent.within' (100 * within / (within + between))
 
-#' @importFrom igraph as_adjacency_matrix
+#' @importFrom igraph is_igraph as_edgelist V
+#' @importFrom methods is
 
 #' @export
 module_contiguity <- function(g, test.module){
-  # get module assignments
-  index.vector <- test.module@index.vector
-  adj <- as.matrix(igraph::as_adjacency_matrix(g))
+  # --- validate inputs ---
+  if(!igraph::is_igraph(g)){
+    stop("'g' must be an igraph object.")
+  }
+  if(!methods::is(test.module, "module")){
+    stop("'test.module' must be a 'module' object.")
+  }
+  # module membership is matched to the graph by node name
+  v.names <- igraph::V(g)$name
+  module.names <- test.module@name.list
+  if(!all(unlist(module.names) %in% v.names)){
+    stop("'test.module' contains node names that are not present in 'g'.")
+  }
 
-  # get number nodes with more neighbors within module than between modules
-  more.within <- length(which(unlist(
-    lapply(1:nrow(adj), function(row){
-      node.mod <- index.vector[row]
-      edge.mod <- index.vector[which(adj[row,] == 1)]
-      length(which(edge.mod == node.mod)) > length(which(edge.mod != node.mod))
-    })
-  )))
-  return(round((more.within / length(g)) * 100, 4))
+  # module labels used for the output rows
+  labels <- names(module.names)
+  if(is.null(labels)) labels <- as.character(seq_along(module.names))
+
+  # graph edges as integer endpoint pairs (each undirected edge appears once)
+  edges <- igraph::as_edgelist(g, names = FALSE)
+
+  # --- per-module within / between edge counts ---
+  counts <- lapply(module.names, function(nm){
+    # membership indicator over the graph's vertices
+    member <- v.names %in% nm
+    if(nrow(edges) == 0){
+      return(c(within = 0, between = 0))
+    }
+    a.in <- member[edges[, 1]]
+    b.in <- member[edges[, 2]]
+    c(within  = sum(a.in & b.in),       # both endpoints inside the module
+      between = sum(xor(a.in, b.in)))   # exactly one endpoint inside the module
+  })
+
+  within.edges   <- vapply(counts, function(z) as.numeric(z["within"]),  numeric(1))
+  between.edges  <- vapply(counts, function(z) as.numeric(z["between"]), numeric(1))
+  total.edges    <- within.edges + between.edges
+  percent.within <- ifelse(total.edges > 0, 100 * within.edges / total.edges, NA_real_)
+
+  module.edges <- data.frame(
+    within.edges   = within.edges,
+    between.edges  = between.edges,
+    percent.within = percent.within,
+    row.names      = labels,
+    stringsAsFactors = FALSE
+  )
+
+  # --- overall contiguity: edge-weighted fraction of module edges kept internal ---
+  overall.contiguity <- if(sum(total.edges) > 0){
+    100 * sum(within.edges) / sum(total.edges)
+  }else{
+    NA_real_
+  }
+
+  return(
+    list(
+      overall.contiguity = overall.contiguity,
+      module.edges       = module.edges
+    )
+  )
 }
 
 
