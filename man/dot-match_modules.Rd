@@ -2,23 +2,17 @@
 % Please edit documentation in R/01.DetectModules.R
 \name{.match_modules}
 \alias{.match_modules}
-\title{Find the best-matching module pairs between two sets of modules based on node membership overlap}
+\title{Greedily pair modules between two sets using a precomputed overlap matrix}
 \usage{
-.match_modules(m1.nodes, m2.nodes, m1.names, m2.names)
+.match_modules(overlap.matrix)
 }
 \arguments{
-\item{m1.nodes}{an integer vector, the node index assignments from m1}
-
-\item{m2.nodes}{an integer vector, the node index assignments from m2}
-
-\item{m1.names}{a character vector, the node names from m1}
-
-\item{m2.names}{a character vector, the node names from m2}
+\item{overlap.matrix}{an n1 x n2 integer matrix of shared-node counts; rows are set-1 modules and columns are set-2 modules}
 }
 \value{
-a list of all the best modules matched based on node membership
+an integer matrix with one row per matched pair and columns 'row' (set-1 module index), 'col' (set-2 module index) and 'overlap' (shared-node count)
 }
 \description{
-Find the best-matching module pairs between two sets of modules based on node membership overlap
+Greedily pair modules between two sets using a precomputed overlap matrix
 }
 \keyword{internal}
