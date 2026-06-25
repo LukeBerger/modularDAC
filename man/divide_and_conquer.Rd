@@ -7,7 +7,7 @@
 divide_and_conquer(
   x,
   subgraph.module,
-  keep.all.edges = FALSE,
+  weight.summary = c("min", "mean"),
   n.cores = 1,
   graph.learning.func = learn_SILGGM_graph,
   arg.wrapping.func = .default_arg_wrapper,
@@ -23,7 +23,7 @@ divide_and_conquer(
 
 \item{subgraph.module}{a module S4 object with overlapping index sets defining which feature subsets to use for each sub-graph}
 
-\item{keep.all.edges}{a logical, if TRUE all edges from all sub-graphs are retained; if FALSE only edges consistent across overlapping sub-graphs are kept}
+\item{weight.summary}{a character, how to reconcile the weight of an edge that is possible in multiple sub-graphs; 'min' (default) keeps the smallest-magnitude weight across the sub-graphs where the edge is possible (an absent edge counts as weight 0, so an edge missing from any possible sub-graph is dropped), while 'mean' keeps the average of the signed weights across those sub-graphs (so an edge present in only some possible sub-graphs survives with a reduced weight)}
 
 \item{n.cores}{an integer, the number of cores to use for parallel processing}
 

@@ -5,7 +5,7 @@
 #' Learn a network from a data matrix using a divide-and-conquer strategy: data is split into overlapping modules, graphs are learned per module, and the results are stitched back together
 #' @param x a numeric matrix with p features (rows) and n samples (columns)
 #' @param subgraph.module a module S4 object with overlapping index sets defining which feature subsets to use for each sub-graph
-#' @param keep.all.edges a logical, if TRUE all edges from all sub-graphs are retained; if FALSE only edges consistent across overlapping sub-graphs are kept
+#' @param weight.summary a character, how to reconcile the weight of an edge that is possible in multiple sub-graphs; 'min' (default) keeps the smallest-magnitude weight across the sub-graphs where the edge is possible (an absent edge counts as weight 0, so an edge missing from any possible sub-graph is dropped), while 'mean' keeps the average of the signed weights across those sub-graphs (so an edge present in only some possible sub-graphs survives with a reduced weight)
 #' @param n.cores an integer, the number of cores to use for parallel processing
 #' @param graph.learning.func a function that accepts a data matrix and returns an igraph object
 #' @param arg.wrapping.func a function that packages each module's data subset and additional arguments into a list ready for graph.learning.func
@@ -22,7 +22,7 @@
 #' @export
 divide_and_conquer <- function(x,
                                subgraph.module,
-                               keep.all.edges = FALSE,
+                               weight.summary = c("min", "mean"),
                                n.cores = 1,
                                graph.learning.func = learn_SILGGM_graph,
                                arg.wrapping.func = .default_arg_wrapper,
@@ -129,7 +129,8 @@ divide_and_conquer <- function(x,
 
   # stitch graphs back together
 
-  final.graph <- .connect_subgraphs(x, parsed.outputs$learned.graphs, keep.all.edges)
+  weight.summary <- match.arg(weight.summary)
+  final.graph <- .connect_subgraphs(x, parsed.outputs$learned.graphs, weight.summary)
 
   # return sub graphs and final graphs
   return(
@@ -141,99 +142,95 @@ divide_and_conquer <- function(x,
   )
 }
 
-#' Combine a list of sub-graphs with overlapping nodes into a single graph by reconciling edge disagreements
+#' Combine a list of sub-graphs with overlapping nodes into a single weighted graph by reconciling edge weights
 #' @param x a numeric matrix with p features (rows) and n samples (columns)
-#' @param sub.graphs a list of igraph objects with overlapping node names
-#' @param keep.all.edges a logical, if TRUE all edges are retained; if FALSE edges that appear in only one of two overlapping sub-graphs are removed
+#' @param sub.graphs a list of weighted igraph objects with overlapping node names
+#' @param weight.summary a character, how to reconcile the weight of an edge that is possible in multiple sub-graphs; 'min' (default) keeps, by absolute value, the smallest weight across every sub-graph in which the edge is possible (an absent edge counts as weight 0, so an edge missing from any possible sub-graph is dropped) and stores that edge's signed value, while 'mean' keeps the average of the signed weights across those sub-graphs (an absent edge again counting as 0, so an edge present in only some possible sub-graphs survives with a reduced weight)
 
-#' @importFrom igraph union as_adjacency_matrix graph_from_adjacency_matrix V as_edgelist delete_edges get_edge_ids
-#' @importFrom stringr str_remove
-#' @importFrom utils combn
-#' @importFrom dplyr bind_rows anti_join %>%
+#' @importFrom igraph as_adjacency_matrix graph_from_adjacency_matrix V is_weighted
 
-#' @return an igraph object comprised of the combine subgraphs
+#' @return a weighted igraph object comprised of the combined sub-graphs
 
 #' @keywords internal
-.connect_subgraphs <- function(x, sub.graphs, keep.all.edges = FALSE){
-  # new graph containing all edges
-  full.graph <- do.call(igraph::union, sub.graphs)
+.connect_subgraphs <- function(x, sub.graphs, weight.summary = c("min", "mean")){
+  weight.summary <- match.arg(weight.summary)
 
-  # if keeping all edges, return that graph
-  if(keep.all.edges){return(full.graph)}
+  # the full node set, in the order of the input data
+  nodes <- rownames(x)
+  p <- length(nodes)
 
-  # rebuild from adj matrix to properly reorder nodes and remove unwanted attributes
-  adj <- as.matrix(igraph::as_adjacency_matrix(full.graph))
-  original.order <- match(rownames(x), rownames(adj))
-  adj <- adj[original.order , original.order]
-  full.graph <- igraph::graph_from_adjacency_matrix(adj, mode = "undirected")
+  # accumulators over all node pairs (p x p), built up one sub-graph at a time:
+  #  - min.abs / min.signed track the smallest-magnitude weight and its signed
+  #    value (used when weight.summary == "min")
+  #  - weight.sum tracks the summed signed weight (used when weight.summary == "mean")
+  #  - possible.count tracks, for each pair, the number of sub-graphs in which
+  #    both endpoints are present (i.e. the edge is "possible")
+  #  - pos.count / neg.count tally how many sub-graphs gave the edge a positive
+  #    vs negative weight, so sign disagreements can be flagged
+  min.abs        <- matrix(Inf, p, p, dimnames = list(nodes, nodes))
+  min.signed     <- matrix(0,   p, p, dimnames = list(nodes, nodes))
+  weight.sum     <- matrix(0,   p, p, dimnames = list(nodes, nodes))
+  possible.count <- matrix(0,   p, p, dimnames = list(nodes, nodes))
+  pos.count      <- matrix(0,   p, p, dimnames = list(nodes, nodes))
+  neg.count      <- matrix(0,   p, p, dimnames = list(nodes, nodes))
 
-  # remove non overlap edges
-  sg.pairs <- utils::combn(seq_along(sub.graphs), m = 2, simplify = F) # get all pairs of subgraphs
-  edges.to.remove <- lapply(sg.pairs, function(pr){ # for each pair of subgraphs
-    # get index for 'left' and 'right' subgraphs
-    left = pr[1]
-    right = pr[2]
+  for (sg in sub.graphs) {
+    sg.nodes <- igraph::V(sg)$name
 
-    # get set of nodes that are in both graphs
-    overlapping.nodes <- intersect(
-      igraph::V(sub.graphs[[left]])$name, igraph::V(sub.graphs[[right]])$name
-    )
-
-    # if there are overlapping nodes
-    if(length(overlapping.nodes) > 1){
-      # get edge list for these nodes
-      left.edges <- igraph::as_edgelist(sub.graphs[[left]])
-      right.edges <- igraph::as_edgelist(sub.graphs[[right]])
-
-      # if both graphs contain edges
-      if(nrow(left.edges) > 0 && nrow(right.edges) > 0){
-        left.edges <-left.edges[
-          which(
-            apply(left.edges, 1, function(row){
-              all(row %in% overlapping.nodes)
-            })
-          )
-          ,] # take only edges between overlap nodes
-
-        right.edges <-right.edges[
-          which(
-            apply(right.edges, 1, function(row){
-              all(row %in% overlapping.nodes)
-            })
-          )
-          ,] # for both sets of edges
-
-        # this will return a vector in the edge case in which there is only one edge with overlap nodes
-        if(!is.matrix(left.edges) && length(left.edges) == 2){
-          left.edges <- matrix(left.edges, ncol = 2, byrow = T)
-        }
-        if(!is.matrix(right.edges) && length(right.edges) == 2){
-          right.edges <- matrix(right.edges, ncol = 2, byrow = T)
-        }
-
-        # if these matrixes have at least one row
-        if(nrow(left.edges) > 0 && nrow(right.edges) > 0){
-          # get the edges that dont occur in both sets
-          sym.diff <- dplyr::bind_rows(
-            as.data.frame(left.edges) %>% dplyr::anti_join(as.data.frame(right.edges), by = c("V1","V2")),
-            as.data.frame(right.edges) %>% dplyr::anti_join(as.data.frame(left.edges), by = c("V1","V2"))
-          )
-          # return the matrix of edges to remove
-          return(as.matrix(sym.diff))
-        }
-
-      }
+    # weighted adjacency for this sub-graph, placed into the full node frame
+    # (0 wherever the sub-graph has no edge or does not contain the node)
+    w.sub <- matrix(0, p, p, dimnames = list(nodes, nodes))
+    if (igraph::is_weighted(sg)) {
+      adj.sub <- as.matrix(igraph::as_adjacency_matrix(sg, attr = "weight"))
+    } else {
+      adj.sub <- as.matrix(igraph::as_adjacency_matrix(sg))
     }
-    return(matrix(nrow = 0 , ncol = 2))
-  })
+    w.sub[sg.nodes, sg.nodes] <- adj.sub[sg.nodes, sg.nodes]
 
-  # convert list of matrixs into single matrix containing edge information
-  edges.to.remove <-as.matrix(unique(do.call(rbind, edges.to.remove)))
+    # pairs that are possible in this sub-graph (both endpoints present)
+    present  <- nodes %in% sg.nodes
+    possible <- outer(present, present)
 
-  # remove these edges from combined graoh
-  full.graph <- igraph::delete_edges(full.graph, igraph::get_edge_ids(full.graph, as.vector(t(edges.to.remove)), directed = FALSE))
+    # smallest-magnitude update, restricted to pairs possible in this sub-graph;
+    # an absent edge contributes magnitude 0 and so wins the minimum, which is
+    # what drops edges that are missing from a possible sub-graph
+    a   <- abs(w.sub)
+    upd <- possible & (a < min.abs)
+    min.abs[upd]    <- a[upd]
+    min.signed[upd] <- w.sub[upd]
 
-  return(full.graph)
+    # running sums for the mean, the possible counts, and the sign tallies
+    weight.sum     <- weight.sum + w.sub
+    possible.count <- possible.count + possible
+    pos.count      <- pos.count + (w.sub > 0)
+    neg.count      <- neg.count + (w.sub < 0)
+  }
+
+  # reconcile to a single weighted adjacency matrix
+  if (weight.summary == "min") {
+    adj <- min.signed
+    adj[is.infinite(min.abs)] <- 0          # pairs possible in no sub-graph
+  } else {
+    adj <- weight.sum / possible.count
+    adj[possible.count == 0] <- 0           # avoid 0 / 0 = NaN
+  }
+
+  # no self-loops
+  diag(adj) <- 0
+
+  # warn if any retained edge had conflicting signs across the sub-graphs it
+  # appeared in (its stored weight then reflects only the reconciliation rule)
+  conflict <- (pos.count > 0) & (neg.count > 0) & (adj != 0)
+  n.conflict <- sum(conflict[upper.tri(conflict)])
+  if (n.conflict > 0) {
+    warning(sprintf(
+      "%d edge(s) in the final graph had different signs across the sub-graphs in which they appeared.",
+      n.conflict
+    ))
+  }
+
+  # build and return the combined weighted graph
+  igraph::graph_from_adjacency_matrix(adj, mode = "undirected", weighted = TRUE)
 }
 
 #####################################################
@@ -276,18 +273,18 @@ divide_and_conquer <- function(x,
   })
 }
 
-#' Default output parser for divide_and_conquer: splits each learner's output into the learned graph and the partial correlation matrix
+#' Default output parser for divide_and_conquer: splits each learner's output into the learned graph and the weight matrix
 
-#' @param graph.learning.outputs a list of outputs, one per sub-graph, returned by graph.learning.func; each output is a list with a 'graph' (igraph) and a 'partial.cor' (matrix) element
+#' @param graph.learning.outputs a list of outputs, one per sub-graph, returned by graph.learning.func; each output is a list with a 'graph' (igraph) and a 'weights' (matrix) element
 
-#' @return a list with 'learned.graphs', a list of the learned igraph objects, and 'other.outputs', a list of the corresponding partial correlation matrices
+#' @return a list with 'learned.graphs', a list of the learned igraph objects, and 'other.outputs', a list of the corresponding weight matrices
 
 #' @keywords internal
 .default_output_parser <- function(graph.learning.outputs){
   return(
     list(
       learned.graphs = lapply(graph.learning.outputs, function(o) o$graph),
-      other.outputs  = lapply(graph.learning.outputs, function(o) o$partial.cor)
+      other.outputs  = lapply(graph.learning.outputs, function(o) o$weights)
     )
   )
 }

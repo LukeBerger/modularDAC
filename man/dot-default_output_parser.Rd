@@ -2,17 +2,17 @@
 % Please edit documentation in R/03.Multithreaded_DaC.R
 \name{.default_output_parser}
 \alias{.default_output_parser}
-\title{Default output parser for divide_and_conquer: splits each learner's output into the learned graph and the partial correlation matrix}
+\title{Default output parser for divide_and_conquer: splits each learner's output into the learned graph and the weight matrix}
 \usage{
 .default_output_parser(graph.learning.outputs)
 }
 \arguments{
-\item{graph.learning.outputs}{a list of outputs, one per sub-graph, returned by graph.learning.func; each output is a list with a 'graph' (igraph) and a 'partial.cor' (matrix) element}
+\item{graph.learning.outputs}{a list of outputs, one per sub-graph, returned by graph.learning.func; each output is a list with a 'graph' (igraph) and a 'weights' (matrix) element}
 }
 \value{
-a list with 'learned.graphs', a list of the learned igraph objects, and 'other.outputs', a list of the corresponding partial correlation matrices
+a list with 'learned.graphs', a list of the learned igraph objects, and 'other.outputs', a list of the corresponding weight matrices
 }
 \description{
-Default output parser for divide_and_conquer: splits each learner's output into the learned graph and the partial correlation matrix
+Default output parser for divide_and_conquer: splits each learner's output into the learned graph and the weight matrix
 }
 \keyword{internal}

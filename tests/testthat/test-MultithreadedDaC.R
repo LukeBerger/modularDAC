@@ -118,3 +118,89 @@ test_that("divide_and_conquer() works with the RSNet helper functions", {
   expect_false(is.null(dac$other.outputs))
   expect_length(dac$other.outputs, length(.fuzzy@index.list))
 })
+
+# ---------------------------------------------------------------------------
+# .connect_subgraphs(): weight reconciliation
+# ---------------------------------------------------------------------------
+
+# small helper: build a weighted, undirected igraph from a symmetric matrix
+.mk_wg <- function(m) {
+  igraph::graph_from_adjacency_matrix(m, mode = "undirected", weighted = TRUE)
+}
+
+# two sub-graphs over the same three nodes {a, b, c}. Only the row names of x
+# matter to .connect_subgraphs(), so its values are arbitrary.
+.xc <- matrix(0, nrow = 3, ncol = 2, dimnames = list(c("a", "b", "c"), NULL))
+
+.A1 <- matrix(0, 3, 3, dimnames = list(c("a","b","c"), c("a","b","c")))
+.A1["a","b"] <- .A1["b","a"] <- 0.5
+.A1["b","c"] <- .A1["c","b"] <- 0.8
+.A1["a","c"] <- .A1["c","a"] <- 0.3   # present only in sub-graph 1
+
+.A2 <- matrix(0, 3, 3, dimnames = list(c("a","b","c"), c("a","b","c")))
+.A2["a","b"] <- .A2["b","a"] <- 0.4
+.A2["b","c"] <- .A2["c","b"] <- 0.2
+# no a-c edge in sub-graph 2
+
+.g1 <- .mk_wg(.A1)
+.g2 <- .mk_wg(.A2)
+
+wmat <- function(g) {
+  m <- as.matrix(igraph::as_adjacency_matrix(g, attr = "weight"))
+  m[c("a","b","c"), c("a","b","c")]
+}
+
+test_that(".connect_subgraphs() min keeps the smallest-magnitude weight and drops non-consensus edges", {
+  g <- .connect_subgraphs(.xc, list(.g1, .g2), "min")
+  expect_s3_class(g, "igraph")
+  expect_true(igraph::is_weighted(g))
+  expect_false(igraph::is_directed(g))
+
+  W <- wmat(g)
+  expect_equal(W["a","b"], 0.4)   # min(|0.5|, |0.4|)
+  expect_equal(W["b","c"], 0.2)   # min(|0.8|, |0.2|)
+  expect_equal(W["a","c"], 0)     # possible in both, present in one -> dropped
+})
+
+test_that(".connect_subgraphs() mean averages signed weights and keeps soft edges", {
+  g <- .connect_subgraphs(.xc, list(.g1, .g2), "mean")
+  W <- wmat(g)
+  expect_equal(W["a","b"], 0.45)            # (0.5 + 0.4) / 2
+  expect_equal(W["b","c"], 0.5)             # (0.8 + 0.2) / 2
+  expect_equal(W["a","c"], 0.3 / 2)         # (0.3 + 0) / 2, survives softly
+})
+
+test_that(".connect_subgraphs() defaults to min", {
+  expect_equal(wmat(.connect_subgraphs(.xc, list(.g1, .g2))),
+               wmat(.connect_subgraphs(.xc, list(.g1, .g2), "min")))
+})
+
+test_that(".connect_subgraphs() warns on sign disagreement and keeps the signed min-magnitude value", {
+  A2neg <- .A2
+  A2neg["a","b"] <- A2neg["b","a"] <- -0.4   # disagrees in sign with g1 (+0.5)
+  g2neg <- .mk_wg(A2neg)
+
+  expect_warning(
+    g <- .connect_subgraphs(.xc, list(.g1, g2neg), "min"),
+    "different signs"
+  )
+  W <- suppressWarnings(wmat(.connect_subgraphs(.xc, list(.g1, g2neg), "min")))
+  expect_equal(W["a","b"], -0.4)   # smaller magnitude wins, sign retained
+})
+
+test_that(".connect_subgraphs() rejects an unknown weight.summary", {
+  expect_error(.connect_subgraphs(.xc, list(.g1, .g2), "median"))
+})
+
+# ---------------------------------------------------------------------------
+# divide_and_conquer(): weight.summary plumbing
+# ---------------------------------------------------------------------------
+
+test_that("divide_and_conquer() returns a weighted final graph and respects weight.summary", {
+  expect_true(igraph::is_weighted(.dac$final.graph))   # .dac uses the default (min)
+
+  dac.mean <- quiet(divide_and_conquer(.x, .fuzzy, weight.summary = "mean"))
+  # mean keeps every edge present in any possible sub-graph, so it is a superset
+  # of the consensus (min) edge set
+  expect_gte(igraph::gsize(dac.mean$final.graph), igraph::gsize(.dac$final.graph))
+})

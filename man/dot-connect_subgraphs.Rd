@@ -2,21 +2,21 @@
 % Please edit documentation in R/03.Multithreaded_DaC.R
 \name{.connect_subgraphs}
 \alias{.connect_subgraphs}
-\title{Combine a list of sub-graphs with overlapping nodes into a single graph by reconciling edge disagreements}
+\title{Combine a list of sub-graphs with overlapping nodes into a single weighted graph by reconciling edge weights}
 \usage{
-.connect_subgraphs(x, sub.graphs, keep.all.edges = FALSE)
+.connect_subgraphs(x, sub.graphs, weight.summary = c("min", "mean"))
 }
 \arguments{
 \item{x}{a numeric matrix with p features (rows) and n samples (columns)}
 
-\item{sub.graphs}{a list of igraph objects with overlapping node names}
+\item{sub.graphs}{a list of weighted igraph objects with overlapping node names}
 
-\item{keep.all.edges}{a logical, if TRUE all edges are retained; if FALSE edges that appear in only one of two overlapping sub-graphs are removed}
+\item{weight.summary}{a character, how to reconcile the weight of an edge that is possible in multiple sub-graphs; 'min' (default) keeps, by absolute value, the smallest weight across every sub-graph in which the edge is possible (an absent edge counts as weight 0, so an edge missing from any possible sub-graph is dropped) and stores that edge's signed value, while 'mean' keeps the average of the signed weights across those sub-graphs (an absent edge again counting as 0, so an edge present in only some possible sub-graphs survives with a reduced weight)}
 }
 \value{
-an igraph object comprised of the combine subgraphs
+a weighted igraph object comprised of the combined sub-graphs
 }
 \description{
-Combine a list of sub-graphs with overlapping nodes into a single graph by reconciling edge disagreements
+Combine a list of sub-graphs with overlapping nodes into a single weighted graph by reconciling edge weights
 }
 \keyword{internal}
