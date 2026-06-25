@@ -21,7 +21,7 @@ utils::globalVariables(".")
 #' @param neg.cut a numeric, the minimum absolute partial correlation for a negative edge to be retained
 #' @param ... additional arguments passed to SILGGM::SILGGM
 
-#' @return a named list with two elements: 'graph', the learned weighted igraph object, and 'partial.cor', the symmetric partial correlation matrix
+#' @return a named list with two elements: 'graph', the learned weighted igraph object, and 'weights', the symmetric partial correlation matrix
 
 #' @importFrom igraph graph_from_adjacency_matrix
 #' @importFrom dplyr  %>%
@@ -85,8 +85,8 @@ learn_SILGGM_graph <- function(x,
   # return the learned graph and the partial correlation matrix
   return(
     list(
-      graph       = g,
-      partial.cor = pcor.avg
+      graph   = g,
+      weights = pcor.avg
     )
   )
 }
@@ -239,7 +239,7 @@ learn_SILGGM_graph <- function(x,
 #' @param powers an integer vector, candidate soft-thresholding powers evaluated by WGCNA::pickSoftThreshold
 #' @param threshold a numeric, the adjacency value above which an edge is retained; if NULL the 99.9th percentile is used
 
-#' @return an igraph object
+#' @return a named list with two elements: 'graph', the learned weighted igraph object, and 'weights', the WGCNA co-expression adjacency matrix
 
 #' @importFrom igraph graph_from_adjacency_matrix
 #' @importFrom stats quantile
@@ -283,15 +283,23 @@ learn_WGCNA_graph <- function(x,
                           type="unsigned",
                           corOptions=cor.options)
 
-  # binarize based on threshold
+  # threshold to select edges, but keep the adjacency values as edge weights
   if(is.null(threshold)){threshold <- quantile(.upper_tri_vec(adj), .999)}
-  binary.adj <- (adj > threshold) * 1
+  weighted.adj <- adj * (adj > threshold)
 
   # remove looped edges
-  diag(binary.adj) <- 0
+  diag(weighted.adj) <- 0
 
-  # return as igraph object
-  return(igraph::graph_from_adjacency_matrix(binary.adj, mode = "undirected"))
+  # build the weighted graph and return it alongside the full adjacency matrix
+  g <- igraph::graph_from_adjacency_matrix(weighted.adj,
+                                           mode = "undirected",
+                                           weighted = TRUE)
+  return(
+    list(
+      graph   = g,
+      weights = adj
+    )
+  )
 }
 
 #' Learn a gene co-expression graph from a data matrix using the ARACNE algorithm
@@ -299,7 +307,7 @@ learn_WGCNA_graph <- function(x,
 #' @param threshold a numeric, the mutual information value above which an edge is retained
 #' @param eps a numeric, the data processing inequality threshold used by ARACNE to remove indirect edges
 
-#' @return an igraph object
+#' @return a named list with two elements: 'graph', the learned weighted igraph object, and 'weights', the mutual information (ARACNE) matrix
 
 #' @importFrom igraph graph_from_adjacency_matrix
 
@@ -312,11 +320,25 @@ learn_ARACNE_graph <- function(x, eps=0, threshold = 0.05) {
   # build mutual information matrix
   mim <- minet::build.mim(dataset = x)
 
-  # apply ARANCE alogrithm
+  # apply ARACNE algorithm
   aracne.mat <- minet::aracne(mim, eps=eps)
 
-  # binarize and convert to graph object
-  return(igraph::graph_from_adjacency_matrix((aracne.mat > threshold ) * 1, mode = "undirected"))
+  # threshold to select edges, but keep the mutual information values as edge weights
+  weighted.mim <- aracne.mat * (aracne.mat > threshold)
+
+  # remove looped edges
+  diag(weighted.mim) <- 0
+
+  # build the weighted graph and return it alongside the full mutual information matrix
+  g <- igraph::graph_from_adjacency_matrix(weighted.mim,
+                                           mode = "undirected",
+                                           weighted = TRUE)
+  return(
+    list(
+      graph   = g,
+      weights = aracne.mat
+    )
+  )
 }
 
 ######################

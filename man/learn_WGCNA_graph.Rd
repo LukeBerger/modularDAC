@@ -27,7 +27,7 @@ learn_WGCNA_graph(
 \item{threshold}{a numeric, the adjacency value above which an edge is retained; if NULL the 99.9th percentile is used}
 }
 \value{
-an igraph object
+a named list with two elements: 'graph', the learned weighted igraph object, and 'weights', the WGCNA co-expression adjacency matrix
 }
 \description{
 Learn a gene co-expression graph from a data matrix using WGCNA

@@ -14,7 +14,7 @@ learn_ARACNE_graph(x, eps = 0, threshold = 0.05)
 \item{threshold}{a numeric, the mutual information value above which an edge is retained}
 }
 \value{
-an igraph object
+a named list with two elements: 'graph', the learned weighted igraph object, and 'weights', the mutual information (ARACNE) matrix
 }
 \description{
 Learn a gene co-expression graph from a data matrix using the ARACNE algorithm

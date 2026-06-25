@@ -29,10 +29,10 @@ test_that("learn_SILGGM_graph() returns a weighted igraph with one node per feat
 
 test_that("learn_SILGGM_graph() returns the graph alongside the partial correlation matrix", {
   expect_type(.out, "list")
-  expect_named(.out, c("graph", "partial.cor"))
+  expect_named(.out, c("graph", "weights"))
   expect_s3_class(.out$graph, "igraph")
 
-  pcor <- .out$partial.cor
+  pcor <- .out$weights
   # symmetric p x p matrix, feature-named, with a unit diagonal
   expect_true(is.matrix(pcor))
   expect_equal(dim(pcor), c(nrow(.x), nrow(.x)))
@@ -64,4 +64,60 @@ test_that("learn_SILGGM_graph() drops more edges as the FDR threshold tightens",
   strict <- quiet(learn_SILGGM_graph(t(.x), fdr.filter = TRUE, max.fdr = 0.001))$graph
   loose  <- quiet(learn_SILGGM_graph(t(.x), fdr.filter = TRUE, max.fdr = 0.5))$graph
   expect_lte(igraph::gsize(strict), igraph::gsize(loose))
+})
+
+# ---------------------------------------------------------------------------
+# learn_WGCNA_graph()
+# ---------------------------------------------------------------------------
+
+test_that("learn_WGCNA_graph() returns a weighted igraph alongside the adjacency matrix", {
+  out <- quiet(learn_WGCNA_graph(t(.x)))   # WGCNA expects n x p (samples x features)
+
+  expect_type(out, "list")
+  expect_named(out, c("graph", "weights"))
+
+  g <- out$graph
+  expect_s3_class(g, "igraph")
+  expect_length(g, nrow(.x))                # one node per feature
+  expect_true(igraph::is_weighted(g))
+  expect_false(igraph::is_directed(g))
+  expect_true(igraph::is_simple(g))         # no self-loops (diagonal zeroed)
+  expect_equal(igraph::V(g)$name, rownames(.x))
+
+  adj <- out$weights
+  # symmetric p x p adjacency, feature-named
+  expect_true(is.matrix(adj))
+  expect_equal(dim(adj), c(nrow(.x), nrow(.x)))
+  expect_equal(rownames(adj), rownames(.x))
+  expect_equal(colnames(adj), rownames(.x))
+  expect_equal(adj, t(adj))
+})
+
+test_that("learn_WGCNA_graph() retains fewer edges as the threshold rises", {
+  loose  <- quiet(learn_WGCNA_graph(t(.x), threshold = 0.01))$graph
+  strict <- quiet(learn_WGCNA_graph(t(.x), threshold = 0.5))$graph
+  expect_lte(igraph::gsize(strict), igraph::gsize(loose))
+})
+
+# ---------------------------------------------------------------------------
+# learn_ARACNE_graph()
+# ---------------------------------------------------------------------------
+
+test_that("learn_ARACNE_graph() returns a weighted igraph alongside the MI matrix", {
+  skip_if_not_installed("minet")
+  out <- quiet(learn_ARACNE_graph(t(.x)))  # mutual information over features
+
+  expect_type(out, "list")
+  expect_named(out, c("graph", "weights"))
+
+  g <- out$graph
+  expect_s3_class(g, "igraph")
+  expect_length(g, nrow(.x))
+  expect_true(igraph::is_weighted(g))
+  expect_false(igraph::is_directed(g))
+  expect_true(igraph::is_simple(g))
+
+  mim <- out$weights
+  expect_true(is.matrix(mim))
+  expect_equal(dim(mim), c(nrow(.x), nrow(.x)))
 })
