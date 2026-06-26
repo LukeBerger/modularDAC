@@ -6,7 +6,7 @@
 \usage{
 .merge_modules(
   index.vector,
-  datExpr,
+  t.x,
   cor.FN,
   cor.options,
   merging.cut,
@@ -17,7 +17,7 @@
 \arguments{
 \item{index.vector}{an integer vector of length p assigning each node to a module (0 = unassigned)}
 
-\item{datExpr}{a samples x features numeric matrix (i.e. t(x))}
+\item{t.x}{a samples x features numeric matrix (i.e. t(x))}
 
 \item{cor.FN}{a character, the correlation function ('bicor' or 'cor')}
 
