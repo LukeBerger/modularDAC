@@ -236,7 +236,7 @@ find_WGCNA_mods <- function(x,
   min.mods <- max(1, ceiling(nrow(x) / max.size))
 
   # construct co-expression similarity, TOM distance, and hierarchical clustering
-  adj <- WGCNA::adjacency(t.x = t.x,
+  adj <- WGCNA::adjacency(datExpr = t.x,
                           power = beta,
                           corFnc = cor.FN,
                           type = "unsigned",
@@ -481,7 +481,7 @@ find_WGCNA_mods <- function(x,
     n.mods <- length(unique(index.vector[index.vector != 0]))
   }
   message("Final cut height ", round(cut.height, 4), " produced ", n.mods, " modules.")
-  list(index.vector = index.vector, cut.height = cut.height)
+  return(list(index.vector = index.vector, cut.height = cut.height))
 }
 
 #' Helper to find_WGCNA_mods that splits modules exceeding max.size by
@@ -544,7 +544,7 @@ find_WGCNA_mods <- function(x,
                                       0, m.index.vector + max(index.vector))
     }
   }
-  index.vector
+  return(index.vector)
 }
 
 #' Helper to find_WGCNA_mods that assigns unassigned nodes (module 0) to an
@@ -579,20 +579,18 @@ find_WGCNA_mods <- function(x,
   # iteratively recruit each unassigned node to its best-scoring module,
   # lowering the threshold whenever a pass recruits nothing
   threshold <- start.threshold
-  repeat{
+  stalled <- FALSE
+  while (any(index.vector == 0) && any(index.vector != 0) && !stalled) {
     unassigned <- which(index.vector == 0)
-    if(length(unassigned) == 0) break
-
     assigned <- which(index.vector != 0)
-    if(length(assigned) == 0) break # no module to grow from
 
-    if(method == "adjacency"){
+    if (method == "adjacency") {
       # for each unassigned node, find its single best-connected assigned node
       score <- adj[unassigned, assigned, drop = FALSE]
       best.col <- max.col(score, ties.method = "first")
       best.score <- score[cbind(seq_along(unassigned), best.col)]
       best.module <- index.vector[assigned[best.col]]
-    }else{
+    } else {
       # represent each module by its eigengene (first PC of member expression),
       # then score each unassigned node by its absolute correlation to each eigengene
       mods <- sort(unique(index.vector[assigned]))
@@ -608,15 +606,17 @@ find_WGCNA_mods <- function(x,
 
     # recruit only the nodes whose best score clears the current threshold
     recruit <- best.score > threshold
-    if(any(recruit)){
+    if (any(recruit)) {
       index.vector[unassigned[recruit]] <- best.module[recruit]
-      if(verbose){
+      if (verbose) {
         message("Assigned ", sum(recruit), " node(s) at ", method, " threshold ", threshold)
       }
-    }else{
-      # nothing clears the threshold; lower it, stopping once it reaches 0
-      if(threshold <= 0) break
+    } else if (threshold > 0) {
+      # nothing clears the threshold; lower it
       threshold <- round(threshold - step, 2)
+    } else {
+      # threshold exhausted and nothing was recruited; stop
+      stalled <- TRUE
     }
   }
 
@@ -670,7 +670,7 @@ find_WGCNA_mods <- function(x,
   } else {
     message("Merged modules in ", n.merges, " round(s), resulting in ", n.mods, " modules.")
   }
-  index.vector
+  return(index.vector)
 }
 
 #' Simple helper that extracts a p x p feature-similarity matrix for node trading
@@ -704,7 +704,7 @@ find_WGCNA_mods <- function(x,
                                       RsquaredCut = min.sft, powerVector = powers)
       beta <- .sft_check(sft)
     }
-    sim <- WGCNA::adjacency(t.x = t.x, power = beta, corFnc = cor.FN,
+    sim <- WGCNA::adjacency(datExpr = t.x, power = beta, corFnc = cor.FN,
                             type = "unsigned", corOptions = cor.options)
   } else {
     if (!requireNamespace("minet", quietly = TRUE)) {
@@ -713,7 +713,7 @@ find_WGCNA_mods <- function(x,
     sim <- minet::build.mim(dataset = t(x))
   }
   rownames(sim) <- colnames(sim) <- rownames(x)
-  sim
+  return(sim)
 }
 
 #' Helper to find_ICA_mods that splits modules exceeding max.size by re-running ICA
@@ -747,7 +747,7 @@ find_WGCNA_mods <- function(x,
     # offset new labels by the current max so they do not collide with existing modules
     index.vector[m.nodes] <- sub.index + max(index.vector)
   }
-  index.vector
+  return(index.vector)
 }
 
 #' Detect co-expression modules from a data matrix using Independent Component Analysis (ICA)
