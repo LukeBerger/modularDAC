@@ -2,6 +2,9 @@
 ### Define Modules ###
 ######################
 
+# silence R CMD check NOTE for ggplot2 aes() non-standard evaluation in module_correlation
+utils::globalVariables(c("module", "correlation"))
+
 # declare module object
 setClass("module",
          slots = list(
