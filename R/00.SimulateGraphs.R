@@ -21,7 +21,7 @@
 #' @export
 make_modular_graph <- function(g.type=c("er", "sf"),
                                n.mods=3, n.nodes=120, n.mod.links=3,
-                               no.uncon =T, link.all = T,
+                               no.uncon = TRUE, link.all = TRUE,
                                p.edge = 0.05, power=1, z.appeal=1, ...){
 
   # match args
@@ -34,13 +34,13 @@ make_modular_graph <- function(g.type=c("er", "sf"),
   modules <- vector(mode = "list", length = n.mods)
 
   # create modules and add them to the list
-  for (i in 1:n.mods) {
+  for (i in seq_len(n.mods)) {
     if(g.type == "er"){
-      temp <-  igraph::sample_gnp(n = n.nodes,
+      temp <- igraph::sample_gnp(n = n.nodes,
                                   p = p.edge,
                                   ...)
     }else if(g.type == "sf"){
-      temp <-  igraph::sample_pa(n.nodes,
+      temp <- igraph::sample_pa(n.nodes,
                                  power=power,
                                  zero.appeal=z.appeal,
                                  directed=FALSE,
@@ -54,7 +54,7 @@ make_modular_graph <- function(g.type=c("er", "sf"),
 
     if(no.uncon){
       # check for unconnected nodes
-      no.edge <-  igraph::V(temp)[igraph::degree(temp) == 0]
+      no.edge <- igraph::V(temp)[igraph::degree(temp) == 0]
 
       # if any exist
       if(length(no.edge) > 0){
@@ -78,34 +78,35 @@ make_modular_graph <- function(g.type=c("er", "sf"),
   }
 
   # merge modules
-  mg <- Reduce("+", modules) # taking advantage the fact that igraphs are just fancy lists
+  mg <- Reduce("+", modules) # taking advantage of the fact that igraphs are just fancy lists
 
   if(link.all){
     # add edges between each pair of modules
-    mod.pairs <- utils::combn(1:n.mods, m = 2, simplify = F)
+    mod.pairs <- utils::combn(seq_len(n.mods), m = 2, simplify = FALSE)
   }else{
-    mod.chain <- c(1:n.mods)
+    mod.chain <- seq_len(n.mods)
     mod.pairs <- mapply(c, mod.chain, c(mod.chain[-1], mod.chain[1]), SIMPLIFY = FALSE)
   }
 
   # for each pair
+  mg.module <- igraph::V(mg)$module # module labels are fixed while we only add edges
   for (pair in mod.pairs) {
     # get node indexes based on modules
-    i.nodes <- which(igraph::V(mg)$module == pair[1]) # first half of pair
-    j.nodes <- which(igraph::V(mg)$module == pair[2]) # second half of nodes
+    i.nodes <- which(mg.module == pair[1]) # nodes in the first module of the pair
+    j.nodes <- which(mg.module == pair[2]) # nodes in the second module of the pair
 
     # link i and j by adding edges between random nodes
     mg <- igraph::add_edges(mg,
                             as.vector(
                               rbind(
-                                sample(i.nodes, n.mod.links, replace =  T),
-                                sample(j.nodes, n.mod.links, replace =  T)
+                                sample(i.nodes, n.mod.links, replace = TRUE),
+                                sample(j.nodes, n.mod.links, replace = TRUE)
                               )
                             )
     )
   }
 
-  # removes any loops and multiples resulting from randomness (will in some cases result in less edges then intended)
+  # removes any loops and multiples resulting from randomness (will in some cases result in fewer edges than intended)
   mg <- igraph::simplify(mg, remove.multiple=TRUE, remove.loops=TRUE)
 
   # label nodes
@@ -188,7 +189,7 @@ sim_graph_data <- function(g, n.samples, mean.vec = NULL, b = 3){
   # if mean.vec is not set, default to a zero vector
   if(is.null(mean.vec)){
     # zero mean for all features
-    mean.vec = rep(0, length(g))
+    mean.vec <- rep(0, length(g))
   }
   # derive the covariance matrix implied by the graph structure: sample a
   # precision matrix from the G-Wishart distribution constrained to the graph
@@ -205,7 +206,7 @@ sim_graph_data <- function(g, n.samples, mean.vec = NULL, b = 3){
   # sim.data <- Biobase::ExpressionSet(t(sim.data))
 
   # add row and column names
-  colnames(sim.data) <- paste("Sample", 1:ncol(sim.data), sep="_")
+  colnames(sim.data) <- paste("Sample", seq_len(ncol(sim.data)), sep = "_")
   rownames(sim.data) <- igraph::V(g)$name
 
   # return data
@@ -213,76 +214,47 @@ sim_graph_data <- function(g, n.samples, mean.vec = NULL, b = 3){
 }
 
 #' Plot a modular graph with nodes colored by module membership using visNetwork
-#' @param g an igraph object whose nodes have a module (and optionally subgraph) vertex attribute
+#' @param g an igraph object whose nodes have a module vertex attribute
 #' @param module.name a character, the name of the vertex attribute storing module membership (default 'module')
-#' @param subgraphs a logical, if TRUE nodes are colored by module and can be filtered by subgraph membership
-#' @param subname a character, the name of the vertex attribute storing subgraph membership (default 'subgraph')
 
 #' @return a visNetwork HTML widget
 #' @importFrom dplyr %>%
 
 #' @export
 modular_plot <- function(g,
-                         module.name = "module",
-                         subgraphs = FALSE,
-                         subname = "subgraph"){
+                         module.name = "module"){
   if (!requireNamespace("visNetwork", quietly = TRUE)) {
     stop("Package visNetwork is required. Install with: install.packages('visNetwork')", call. = FALSE)
   }
-  # get edges matrix
+  # build the edge data frame
   edge.list <- igraph::as_edgelist(g)
   edges <- data.frame(
     from = as.character(edge.list[, 1]),
     to = as.character(edge.list[, 2])
   )
 
-  # if there are subgraphs, color by module select by subgraph
-  if(subgraphs){
-    # get nodes matrix
-    nodes <- data.frame(
-      id = igraph::V(g)$name %||% as.character(igraph::V(g)),
-      label = igraph::V(g)$label %||% as.character(igraph::V(g)),
-      group = as.factor(igraph::vertex.attributes(g)[[module.name]]),  # color by module
-      subgraph = as.factor(igraph::vertex.attributes(g)[[subname]]) # select by subgraph
-    )
+  # colour and filter nodes by module membership
+  nodes <- data.frame(
+    id = igraph::V(g)$name %||% as.character(igraph::V(g)),
+    label = igraph::V(g)$label %||% as.character(igraph::V(g)),
+    group = as.factor(igraph::vertex.attributes(g)[[module.name]]), # color by module
+    module = as.factor(igraph::vertex.attributes(g)[[module.name]]) # select by module
+  )
 
-    # plot with visNetwork
-    visNetwork::visNetwork(nodes, edges) %>%
-      visNetwork::visOptions(
-        highlightNearest = TRUE,
-        nodesIdSelection = list(enabled = TRUE, useLabels = TRUE),  # iD/label selector
-        selectedBy = list(variable = "subgraph", multiple = TRUE) # subgraph selector
-      ) %>%
-      visNetwork::visLegend() %>%
-      visNetwork::visEdges(smooth=FALSE) %>%
-      visNetwork::visInteraction(hover = TRUE) %>%
-      visNetwork::visPhysics(stabilization = FALSE) %>%
-      visNetwork::visIgraphLayout(layout = "layout_with_fr") %>%
-      visNetwork::visLayout(randomSeed = 123)
+  # plot with visNetwork
+  plot <- visNetwork::visNetwork(nodes, edges) %>%
+    visNetwork::visOptions(
+      highlightNearest = TRUE,
+      nodesIdSelection = list(enabled = TRUE, useLabels = TRUE), # iD/label selector
+      selectedBy = list(variable = "module", multiple = TRUE) # module selector
+    ) %>%
+    visNetwork::visLegend() %>%
+    visNetwork::visEdges(smooth = FALSE) %>%
+    visNetwork::visInteraction(hover = TRUE) %>%
+    visNetwork::visPhysics(stabilization = FALSE) %>%
+    visNetwork::visIgraphLayout(layout = "layout_with_fr") %>%
+    visNetwork::visLayout(randomSeed = 123)
 
-    # else color and select by modules
-  }else{
-    # get nodes matrix
-    nodes <- data.frame(
-      id = igraph::V(g)$name %||% as.character(igraph::V(g)),
-      label = igraph::V(g)$label %||% as.character(igraph::V(g)),
-      group = as.factor(igraph::vertex.attributes(g)[[module.name]]), # color by module
-      module = as.factor(igraph::vertex.attributes(g)[[module.name]]) # select by module
-    )
-
-    # plot with visNetwork
-    visNetwork::visNetwork(nodes, edges) %>%
-      visNetwork::visOptions(
-        highlightNearest = TRUE,
-        nodesIdSelection = list(enabled = TRUE, useLabels = TRUE),  # iD/label selector
-        selectedBy = list(variable = "module", multiple = TRUE)      # group/module selector
-      ) %>%
-      visNetwork::visLegend() %>%
-      visNetwork::visEdges(smooth=FALSE) %>%
-      visNetwork::visInteraction(hover = TRUE) %>%
-      visNetwork::visPhysics(stabilization = FALSE) %>%
-      visNetwork::visIgraphLayout(layout = "layout_with_fr") %>%
-      visNetwork::visLayout(randomSeed = 123)
-  }
+  return(plot)
 }
 

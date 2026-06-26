@@ -4,21 +4,12 @@
 \alias{modular_plot}
 \title{Plot a modular graph with nodes colored by module membership using visNetwork}
 \usage{
-modular_plot(
-  g,
-  module.name = "module",
-  subgraphs = FALSE,
-  subname = "subgraph"
-)
+modular_plot(g, module.name = "module")
 }
 \arguments{
-\item{g}{an igraph object whose nodes have a module (and optionally subgraph) vertex attribute}
+\item{g}{an igraph object whose nodes have a module vertex attribute}
 
 \item{module.name}{a character, the name of the vertex attribute storing module membership (default 'module')}
-
-\item{subgraphs}{a logical, if TRUE nodes are colored by module and can be filtered by subgraph membership}
-
-\item{subname}{a character, the name of the vertex attribute storing subgraph membership (default 'subgraph')}
 }
 \value{
 a visNetwork HTML widget
