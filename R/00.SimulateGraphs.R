@@ -171,13 +171,14 @@ make_lfr <- function(n = 120,
 #' @param g an igraph object defining the dependency structure between features
 #' @param n.samples an integer, the number of samples to generate
 #' @param mean.vec a numeric vector of length p, the mean expression value for each feature; defaults to a zero vector if NULL
+#' @param b a numeric (> 2), the degrees-of-freedom parameter of the G-Wishart distribution used to sample the precision matrix (passed to BDgraph::rgwish)
 
 #' @return a p x n data matrix
 
 #' @importFrom igraph as_adjacency_matrix V
 
 #' @export
-sim_graph_data <- function(g, n.samples, mean.vec = NULL){
+sim_graph_data <- function(g, n.samples, mean.vec = NULL, b = 3){
   if (!requireNamespace("BDgraph", quietly = TRUE)) {
     stop("Package BDgraph is required. Install with: install.packages('BDgraph')", call. = FALSE)
   }
@@ -189,13 +190,13 @@ sim_graph_data <- function(g, n.samples, mean.vec = NULL){
     # zero mean for all features
     mean.vec = rep(0, length(g))
   }
-  # derive the covariance matrix implied by the graph structure
-  bdg <- .mod.bdgraph.sim(n=1,
-                         graph=as.matrix(igraph::as_adjacency_matrix(g)),
-                         type="Gaussian",
-                         mean = mean.vec[1]
-  )
-  sigma.mat <- bdg$sigma # get the covariance matrix from bdg.graph
+  # derive the covariance matrix implied by the graph structure: sample a
+  # precision matrix from the G-Wishart distribution constrained to the graph
+  # (forcing zeros at non-edges), then convert it to a correlation matrix
+  adj.mat <- as.matrix(igraph::as_adjacency_matrix(g))
+  diag(adj.mat) <- 0
+  K <- BDgraph::rgwish(adj = adj.mat, b = b, D = diag(nrow(adj.mat)), threshold = 1e-8)
+  sigma.mat <- stats::cov2cor(solve(K)) # correlation matrix implied by the graph
 
   # make n samples with MASS
   sim.data <- t(MASS::mvrnorm(n = n.samples, mu = mean.vec, Sigma =  sigma.mat))
@@ -283,237 +284,5 @@ modular_plot <- function(g,
       visNetwork::visIgraphLayout(layout = "layout_with_fr") %>%
       visNetwork::visLayout(randomSeed = 123)
   }
-}
-
-# bdgraph function with two lines removed which caused a bug when using a
-# adjency matrix as the graph parameter
-.mod.bdgraph.sim <- function (p = 10, graph = "random", n = 0, type = "Gaussian",
-                             prob = 0.2, size = NULL, mean = 0, class = NULL, cut = 4,
-                             b = 3, D = diag(p), K = NULL, sigma = NULL, q = exp(-1),
-                             beta = 1, vis = FALSE, rewire = 0.05, range.mu = c(3, 5),
-                             range.dispersion = c(0.01, 0.1), nu = 1)
-{
-  if (p < 2)
-    stop("'p' must be greater than 1")
-  if ((prob < 0) | (prob > 1))
-    stop("'prob' must be between ( 0, 1 )")
-  if (cut < 2)
-    stop("'cut' must be greater than 1")
-  if (b <= 2)
-    stop("'b' must be greater than 2")
-  if ((rewire < 0) | (rewire > 1))
-    stop("'rewire' must be between ( 0, 1 )")
-  if (length(range.mu) != 2)
-    stop("'range.mu' must be a vector with length 2")
-  if (length(range.dispersion) != 2)
-    stop("'range.dispersion' must be a vector with length 2")
-  if (inherits(graph, "graph"))
-    graph = unclass(graph)
-  if (is.matrix(graph) & is.matrix(K))
-    if (nrow(graph) != nrow(K))
-      stop("'graph' and 'K' have non-conforming size")
-  if (!is.null(size))
-    if ((sum(size) < 0) | (sum(size) > (p * (p - 1)/2)))
-      stop("'size' must be between ( 0, p*(p-1)/2 )")
-  if (is.matrix(K)) {
-    if (!isSymmetric(K))
-      stop("'K' must be a positive definite matrix")
-    graph <- "fixed"
-    p <- nrow(K)
-  }
-  if (type == "normal")
-    type = "Gaussian"
-  if (type == "non-normal")
-    type = "non-Gaussian"
-  if ((type == "categorical") & (cut == 2))
-    type = "binary"
-  if (is.matrix(graph)) {
-    if (!isSymmetric(graph))
-      stop("'graph' must be symmetric matrix")
-    p = nrow(graph)
-    if (!all(graph %in% c(0,1))) # if ((graph != 0) && (graph != 1))
-      stop("Elements of matrix 'graph' must be 0 or 1")
-    G <- graph
-    graph <- "fixed"
-  }
-  if (!any(graph == c("fixed", "AR1", "AR2", "circle")))
-    G <- BDgraph::graph.sim(p = p, graph = graph, prob = prob,
-                            size = size, class = class, rewire = rewire)
-  if (graph == "AR1") {
-    sigma = matrix(0, p, p)
-    for (i in 1:(p - 1)) for (j in (i + 1):p) sigma[i, j] = (0.7)^abs(i -
-                                                                        j)
-    sigma = sigma + t(sigma) + diag(p)
-    K = solve(sigma)
-    G = 1 * (abs(K) > 0.02)
-  }
-  if (graph == "AR2") {
-    K = stats::toeplitz(c(1, 0.5, 0.25, rep(0, p - 3)))
-    G = 1 * (abs(K) > 0.02)
-  }
-  if (graph == "circle") {
-    K <- stats::toeplitz(c(1, 0.5, rep(0, p - 2)))
-    K[1, p] <- 0.4
-    K[p, 1] <- 0.4
-    G = 1 * (abs(K) > 0.02)
-  }
-  if (n != 0) {
-    if (!is.null(sigma))
-      K <- solve(sigma)
-    if (is.matrix(K)) {
-      G = 1 * (abs(K) > 0.02)
-      diag(G) = 0
-      if (is.null(sigma))
-        sigma = stats::cov2cor(solve(K))
-    }
-    else {
-      if (!isSymmetric(D))
-        stop("'D' must be a positive definite matrix")
-      Ti = chol(solve(D))
-      diag(G) = 0
-      K = matrix(0, p, p)
-      threshold = 1e-08
-      K = BDgraph::rgwish(adj = G, b = b, D = Ti, threshold = threshold)
-      # K = matrix(result$K, p, p)
-      sigma = stats::cov2cor(solve(K))
-      K = solve(sigma)
-    }
-    d <- BDgraph::rmvnorm(n = n, mean = mean, sigma = sigma)
-    not.cont = numeric(p)
-    if (type == "mixed") {
-      ps = floor(p/5)
-      col_number <- c(1:ps)
-      prob <- stats::pnorm(d[, col_number])
-      d[, col_number] <- stats::qpois(p = prob, lambda = 10)
-      not.cont[1:ps] = 1
-      col_number <- c((ps + 1):(2 * ps))
-      prob <- stats::pnorm(d[, col_number])
-      d[, col_number] <- stats::qpois(p = prob, lambda = 2)
-      not.cont[c((ps + 1):(2 * ps))] = 1
-      col_number <- c((2 * ps + 1):(3 * ps))
-      prob <- stats::pnorm(d[, col_number])
-      d[, col_number] <- stats::qexp(p = prob, rate = 10)
-      col_number <- c((3 * ps + 1):(4 * ps))
-      prob <- stats::pnorm(d[, col_number])
-      d[, col_number] <- stats::qbinom(p = prob, size = 1,
-                                       prob = 0.5)
-      not.cont[c((3 * ps + 1):(4 * ps))] = 1
-    }
-    if (type == "non-Gaussian") {
-      prob <- stats::pnorm(d)
-      d <- stats::qexp(p = prob, rate = 10)
-    }
-    if (type == "t") {
-      tau_gamma = stats::rgamma(n, shape = nu/2, rate = nu/2)
-      d = mean + d/sqrt(tau_gamma)
-    }
-    if (type == "alternative-t") {
-      taugamma = stats::rgamma(n * p, shape = nu/2, rate = nu/2)
-      taugamma = matrix(taugamma, n, p)
-      d = mean + d/sqrt(taugamma)
-    }
-    if (type == "categorical") {
-      not.cont[1:p] = 1
-      runif_m = matrix(stats::runif(cut * p), nrow = p,
-                       ncol = cut)
-      marginals = apply(runif_m, 1, function(x) {
-        stats::qnorm(cumsum(x/sum(x))[-length(x)])
-      })
-      if (cut == 2)
-        marginals = matrix(marginals, nrow = 1, ncol = p)
-      for (j in 1:p) {
-        breaks <- c(min(d[, j]) - 1, marginals[, j],
-                    max(d[, j]) + 1)
-        d[, j] <- as.integer(cut(d[, j], breaks = breaks,
-                                 right = FALSE))
-      }
-      d = d - 1
-    }
-    if ((type == "dweibull") | (type == "dw")) {
-      if (length(q) == 1)
-        q = rep(q, time = p)
-      if (length(beta) == 1)
-        beta = rep(beta, time = p)
-      if (is.vector(q) && (length(q) != p))
-        stop("'q', as a vector, has non-conforming size with 'p'")
-      if (is.vector(beta) && (length(beta) != p))
-        stop("'beta', as a vector, has non-conforming size with 'p'")
-      if (is.matrix(q) && any(dim(q) != c(n, p)))
-        stop("'q', as a matrix, has non-conforming size with 'n' and 'p'")
-      if (is.matrix(beta) && any(dim(beta) != c(n, p)))
-        stop("'beta', as a matrix, has non-conforming size with 'n' and 'p'")
-      not.cont[1:p] = 1
-      Y_data <- matrix(c(0, 1), nrow = n, ncol = p)
-      Z = tmvtnorm::rtmvnorm(n = n, mean = rep(mean, p),
-                             sigma = sigma, lower = rep(-5, length = p),
-                             upper = rep(5, length = p))
-      pnorm_Z = stats::pnorm(Z)
-      if (is.matrix(q) && is.matrix(beta))
-        for (j in 1:p) Y_data[, j] = BDgraph::qdweibull(pnorm_Z[,
-                                                                j], q = q[, j], beta = beta[, j], zero = TRUE)
-      if (is.vector(q) && is.vector(beta))
-        for (j in 1:p) Y_data[, j] = BDgraph::qdweibull(pnorm_Z[,
-                                                                j], q = q[j], beta = beta[j], zero = TRUE)
-      if (any(apply(Y_data, 2, function(x) {
-        all(x %in% 0:1)
-      })))
-        cat(" Some of the variables are binary \n")
-      d = Y_data
-    }
-    if ((type == "nbinom") | (type == "NB")) {
-      not.cont[1:p] = 1
-      Y.star <- matrix(c(0, 1), nrow = n, ncol = p)
-      while (any(apply(Y.star, 2, function(x) {
-        all(x %in% 0:1)
-      })) == TRUE) {
-        d = tmvtnorm::rtmvnorm(n = n, mean = rep(mean,
-                                                 p), sigma = sigma, lower = rep(-5, length = p),
-                               upper = rep(5, length = p))
-        mu = stats::runif(n = p, min = range.mu[1],
-                          max = range.mu[2])
-        size = stats::runif(n = p, min = range.dispersion[1],
-                            max = range.dispersion[2])
-        for (j in 1:p) Y.star[, j] = stats::qnbinom(stats::pnorm(d[,
-                                                                   j]), size = size[j], mu = mu[j], lower.tail = TRUE,
-                                                    log.p = FALSE)
-      }
-      d = Y.star
-    }
-    if ((type == "pois") | (type == "count")) {
-      not.cont[1:p] = 1
-      Y.star = matrix(c(0, 1), nrow = n, ncol = p)
-      while (any(apply(Y.star, 2, function(x) {
-        all(x %in% 0:1)
-      })) == TRUE) {
-        d = tmvtnorm::rtmvnorm(n = n, mean = rep(mean,
-                                                 p), sigma = sigma, lower = rep(-5, length = p),
-                               upper = rep(5, length = p))
-        lambda = stats::runif(n = p, min = range.mu[1],
-                              max = range.mu[2])
-        for (j in 1:p) Y.star[, j] = stats::qpois(stats::pnorm(d[,
-                                                                 j]), lambda = lambda[j], lower.tail = TRUE,
-                                                  log.p = FALSE)
-      }
-      d = Y.star
-    }
-  }
-  if (n != 0) {
-    if (type != "dw") {
-      simulation <- list(G = G, graph = graph, data = d,
-                         sigma = sigma, K = K, type = type, not.cont = not.cont)
-    }
-    else {
-      simulation <- list(G = G, graph = graph, data = d,
-                         sigma = sigma, K = K, type = type, not.cont = not.cont,
-                         beta = beta, q = q)
-    }
-  }
-  else {
-    simulation <- list(G = G, graph = graph)
-  }
-  if (vis == TRUE)
-    BDgraph::plot.graph(G, main = "Graph structure")
-  class(simulation) <- "sim"
-  return(simulation)
 }
 

@@ -4,7 +4,7 @@
 \alias{sim_graph_data}
 \title{Simulate gene expression data for n.samples samples based on the covariance structure implied by a graph}
 \usage{
-sim_graph_data(g, n.samples, mean.vec = NULL)
+sim_graph_data(g, n.samples, mean.vec = NULL, b = 3)
 }
 \arguments{
 \item{g}{an igraph object defining the dependency structure between features}
@@ -12,6 +12,8 @@ sim_graph_data(g, n.samples, mean.vec = NULL)
 \item{n.samples}{an integer, the number of samples to generate}
 
 \item{mean.vec}{a numeric vector of length p, the mean expression value for each feature; defaults to a zero vector if NULL}
+
+\item{b}{a numeric (> 2), the degrees-of-freedom parameter of the G-Wishart distribution used to sample the precision matrix (passed to BDgraph::rgwish)}
 }
 \value{
 a p x n data matrix
