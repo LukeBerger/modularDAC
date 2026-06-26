@@ -200,7 +200,7 @@ find_WGCNA_mods <- function(x,
   cor.FN <- match.arg(cor.FN)
   assign.by <- match.arg(assign.by)
 
-  # treat an unconstrained max.size as Inf so the size checks below are explicit
+  # treat an unconstrained max.size as Inf (so the size checks below are explicit)
   if (is.null(max.size)) max.size <- Inf
 
   # merge / iterate relationship
@@ -221,11 +221,11 @@ find_WGCNA_mods <- function(x,
   }
 
   # transpose once (WGCNA expects samples x features) and reuse
-  datExpr <- t(x)
+  t.x <- t(x)
 
   # pick soft threshold via scale-free fit
   if (is.null(beta)) {
-    sft <- WGCNA::pickSoftThreshold(data = datExpr,
+    sft <- WGCNA::pickSoftThreshold(data = t.x,
                                     corFnc = cor.FN,
                                     RsquaredCut = min.sft,
                                     powerVector = powers)
@@ -236,7 +236,7 @@ find_WGCNA_mods <- function(x,
   min.mods <- max(1, ceiling(nrow(x) / max.size))
 
   # construct co-expression similarity, TOM distance, and hierarchical clustering
-  adj <- WGCNA::adjacency(datExpr = datExpr,
+  adj <- WGCNA::adjacency(t.x = t.x,
                           power = beta,
                           corFnc = cor.FN,
                           type = "unsigned",
@@ -268,7 +268,7 @@ find_WGCNA_mods <- function(x,
   # merge similar modules based on eigengene similarity
   if (merge) {
     initial.index.vector <- .merge_modules(index.vector = initial.index.vector,
-                                           datExpr = datExpr,
+                                           t.x = t.x,
                                            cor.FN = cor.FN,
                                            cor.options = cor.options,
                                            merging.cut = merging.cut,
@@ -631,7 +631,7 @@ find_WGCNA_mods <- function(x,
 
 #' Helper that merges similar modules by eigengene similarity (WGCNA::mergeCloseModules)
 #' @param index.vector an integer vector of length p assigning each node to a module (0 = unassigned)
-#' @param datExpr a samples x features numeric matrix (i.e. t(x))
+#' @param t.x a samples x features numeric matrix (i.e. t(x))
 #' @param cor.FN a character, the correlation function ('bicor' or 'cor')
 #' @param cor.options a list of correlation options passed to mergeCloseModules
 #' @param merging.cut a numeric, the eigengene dissimilarity threshold for merging
@@ -642,14 +642,14 @@ find_WGCNA_mods <- function(x,
 
 #' @importFrom WGCNA mergeCloseModules
 #' @keywords internal
-.merge_modules <- function(index.vector, datExpr, cor.FN, cor.options, merging.cut, min.mods, max.size) {
+.merge_modules <- function(index.vector, t.x, cor.FN, cor.options, merging.cut, min.mods, max.size) {
   message("Merging modules based on eigengene similarity...")
   n.mods <- length(unique(index.vector[index.vector != 0]))
   n.merges <- 0
   module.eigengenes <- NULL # reused across rounds to skip recomputing module eigengenes
   while (n.mods > min.mods && all(table(index.vector) < max.size)) {
     merged <- WGCNA::mergeCloseModules(
-      exprData = datExpr,
+      exprData = t.x,
       colors = index.vector,
       MEs = module.eigengenes,
       unassdColor = 0,
@@ -698,13 +698,13 @@ find_WGCNA_mods <- function(x,
       stop("Package WGCNA is required. Install with: install.packages('WGCNA')", call. = FALSE)
     }
     cor.options <- if (cor.FN == "cor") list(use = "p") else list(pearsonFallback = "individual")
-    datExpr <- t(x)
+    t.x <- t(x)
     if (is.null(beta)) {
-      sft <- WGCNA::pickSoftThreshold(data = datExpr, corFnc = cor.FN,
+      sft <- WGCNA::pickSoftThreshold(data = t.x, corFnc = cor.FN,
                                       RsquaredCut = min.sft, powerVector = powers)
       beta <- .sft_check(sft)
     }
-    sim <- WGCNA::adjacency(datExpr = datExpr, power = beta, corFnc = cor.FN,
+    sim <- WGCNA::adjacency(t.x = t.x, power = beta, corFnc = cor.FN,
                             type = "unsigned", corOptions = cor.options)
   } else {
     if (!requireNamespace("minet", quietly = TRUE)) {
@@ -799,7 +799,7 @@ find_ICA_mods <- function(x,
   # merge similar modules based on eigengene similarity
   if (merge) {
     initial.index.vector <- .merge_modules(index.vector = initial.index.vector,
-                                           datExpr = t(x),
+                                           t.x = t(x),
                                            cor.FN = cor.FN,
                                            cor.options = cor.options,
                                            merging.cut = merging.cut,
