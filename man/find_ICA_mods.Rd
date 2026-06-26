@@ -4,17 +4,42 @@
 \alias{find_ICA_mods}
 \title{Detect co-expression modules from a data matrix using Independent Component Analysis (ICA)}
 \usage{
-find_ICA_mods(x, n.comp, ...)
+find_ICA_mods(
+  x,
+  n.comp,
+  max.size = NULL,
+  merge = FALSE,
+  merging.cut = 0.2,
+  iterate = FALSE,
+  cor.FN = c("bicor", "cor"),
+  trade.by = c("adjacency", "eigengene"),
+  network = c("WGCNA", "ARACNE"),
+  ...
+)
 }
 \arguments{
 \item{x}{a numeric matrix with p features (rows) and n samples (columns)}
 
 \item{n.comp}{an integer, the number of independent components (modules) to extract}
 
+\item{max.size}{an integer or NULL, the maximum number of nodes allowed in a module (NULL = unconstrained)}
+
+\item{merge}{a logical, if TRUE similar modules are merged by eigengene similarity (WGCNA::mergeCloseModules)}
+
+\item{merging.cut}{a numeric, the eigengene dissimilarity threshold for merging}
+
+\item{iterate}{a logical, if TRUE modules exceeding max.size are split by re-running ICA on their features}
+
+\item{cor.FN}{a character, the correlation function used for merging and WGCNA-based trading ('bicor' or 'cor')}
+
+\item{trade.by}{a character, how oversized modules are trimmed to max.size: 'adjacency' (a learned similarity matrix) or 'eigengene' (correlation with module eigengenes)}
+
+\item{network}{a character, the method used to learn the similarity matrix when trade.by = 'adjacency': 'WGCNA' or 'ARACNE'}
+
 \item{...}{additional arguments passed to fastICA::fastICA}
 }
 \value{
-a module object
+a list with: the learned similarity matrix (or NULL), the initial modules, and the final modules after splitting/trading
 }
 \description{
 Detect co-expression modules from a data matrix using Independent Component Analysis (ICA)

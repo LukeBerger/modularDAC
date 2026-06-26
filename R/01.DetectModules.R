@@ -154,6 +154,7 @@ true_fuzzy <- function(m, g){
 #' @param merge a logical, if TRUE adjacent modules are merged using WGCNA::mergeCloseModules
 #' @param merging.cut a numeric between 0 and 1, the eigengene dissimilarity threshold for WGCNA::mergeCloseModules
 #' @param iterate a logical, if TRUE module detection is run iteratively to break up any modules exceeding max.size
+#' @param assign.by a character, how unassigned nodes are recruited to modules: 'adjacency' uses WGCNA adjacency, 'eigengene' uses correlation with module eigengenes
 
 #' @return a list containing: the WGCNA thresholded adj matrix, the initial modules after merge/iteration, the final modules after max.size fitting
 
@@ -171,9 +172,10 @@ find_WGCNA_mods <- function(x,
                             powers=c(seq(1, 10, by = 1), seq(12, 20, by = 2)),
                             hclust.method="average",
                             cut.height = NULL,
-                            merge = F,
+                            merge = FALSE,
                             merging.cut = 0.2,
-                            iterate = T
+                            iterate = TRUE,
+                            assign.by = c("adjacency", "eigengene")
 ) {
   if (!requireNamespace("WGCNA", quietly = TRUE)) {
     stop("Package WGCNA is required. Install with: install.packages('WGCNA')", call. = FALSE)
@@ -193,259 +195,129 @@ find_WGCNA_mods <- function(x,
 
   # handle arguments
   cor.FN <- match.arg(cor.FN)
+  assign.by <- match.arg(assign.by)
+
+  # treat an unconstrained max.size as Inf so the size checks below are explicit
+  if (is.null(max.size)) max.size <- Inf
 
   # merge / iterate relationship
-  if(merge & iterate){
-    cat("Note: Using both the 'merge' and 'iterate' options, may result in some modules being merged then immediately split, use with caution. \n ")
+  if (merge && iterate) {
+    message("Note: using both 'merge' and 'iterate' may merge then immediately split some modules; use with caution.")
   }
 
   # correlation options
-  if (cor.FN == "cor") cor.options = list(use="p")
-  if (cor.FN == "bicor") cor.options = list(pearsonFallback="individual")
+  cor.options <- if (cor.FN == "cor") list(use = "p") else list(pearsonFallback = "individual")
 
-  # check that all rows have variance
+  # drop features with no variance (they cannot be placed in any module)
   rv <- MatrixGenerics::rowVars(x)
-  if(any(rv == 0)){
-    warning("Warning: some matrix elements have zero variance. They will be removed from consideration as they would not be placed in any module")
+  if (any(rv == 0)) {
     rm.r <- which(rv == 0)
-    cat("Removed rows: ", rm.r  )
+    warning("Some features have zero variance and were removed; they could not be placed in any module.")
+    message("Removed rows: ", paste(rm.r, collapse = ", "))
     x <- x[-rm.r, , drop = FALSE]
   }
 
+  # transpose once (WGCNA expects samples x features) and reuse
+  datExpr <- t(x)
+
   # pick soft threshold via scale-free fit
   if (is.null(beta)) {
-    sft <- WGCNA::pickSoftThreshold(data=t(x),
-                                    corFnc=cor.FN,
-                                    RsquaredCut=min.sft,
-                                    powerVector=powers)
-
-    # check selected power
+    sft <- WGCNA::pickSoftThreshold(data = datExpr,
+                                    corFnc = cor.FN,
+                                    RsquaredCut = min.sft,
+                                    powerVector = powers)
     beta <- .sft_check(sft)
   }
 
-  # if max size is constrained
-  if(!is.null(max.size)){
-    # determine the minimum number of modules needed to fit all nodes
-    min.mods <- ceiling(nrow(x) / max.size)
-  }else{ min.mods <- 1}
+  # minimum number of modules needed to fit all nodes within max.size
+  min.mods <- max(1, ceiling(nrow(x) / max.size))
 
-  # construct co-expression similarity
-  adj <- WGCNA::adjacency(datExpr=t(x),
-                          power=beta,
-                          corFnc=cor.FN,
-                          type="unsigned",
-                          corOptions=cor.options)
+  # construct co-expression similarity, TOM distance, and hierarchical clustering
+  adj <- WGCNA::adjacency(datExpr = datExpr,
+                          power = beta,
+                          corFnc = cor.FN,
+                          type = "unsigned",
+                          corOptions = cor.options)
+  dis <- WGCNA::TOMdist(adjMat = adj, TOMType = "unsigned")
+  dendro <- flashClust::flashClust(d = stats::as.dist(dis), method = hclust.method)
 
-  # topological overlap distance transformation
-  dis <- WGCNA::TOMdist(adjMat=adj, TOMType="unsigned")
-
-  # fast hierarchical clustering of distance
-  dendro <- flashClust::flashClust(d=stats::as.dist(dis), method=hclust.method)
-
-  # module identification using dynamic tree cut algorithm
-  cat("Generating initial modules... \n")
-  initial.index.vector <- dynamicTreeCut::cutreeDynamic(dendro=dendro,
-                                           cutHeight = cut.height,
-                                           method="hybrid",
-                                           distM=dis,
-                                           deepSplit=4,
-                                           pamRespectsDendro=FALSE,
-                                           minClusterSize=min.size)
-
-  # if this produced less than the minimum number of mods
-  n.mods <- length(unique(initial.index.vector[initial.index.vector != 0]))
-  if( n.mods < min.mods ){
-    cat("Only ", n.mods, " modules produced in first cut. \n",
-        min.mods, " will be required with max.size == ", max.size, "\n",
-        "Lowering cut height... \n",
-        sep = "")
-
-    # if cut height is null
-    if(is.null(cut.height)){
-      # recalculate the default height used by cuttreeDynamic
-      qnt5 <-  quantile(dendro$heigh, probs= 0.05)
-      cut.height <- qnt5 + 0.99 * (max(dendro$height) - qnt5)
-    }
-
-    # lower height until the desired number of modules is met
-    while(n.mods < min.mods){
-      cut.height <- cut.height - 0.01
-      cat("Lowerin cut height to", cut.height, "and generating new modules... \n")
-      initial.index.vector <- dynamicTreeCut::cutreeDynamic(dendro=dendro,
+  # initial module identification via dynamic tree cut
+  message("Generating initial modules...")
+  initial.index.vector <- dynamicTreeCut::cutreeDynamic(dendro = dendro,
                                                         cutHeight = cut.height,
-                                                        method="hybrid",
-                                                        distM=dis,
-                                                        deepSplit=4,
-                                                        pamRespectsDendro=FALSE,
-                                                        minClusterSize=min.size)
-      # if producing all unassigned
-      if(sum(initial.index.vector == 0) == length(initial.index.vector) && cut.height < 0.8){
-        cat("Cut height reached " , cut.height, " and is no longer to producing meaningful clusters. \n",
-            "Consider increasing max.size or using another method to generate modules. \n",
-            sep = "")
-        stop("No modules found after lowering cut height")
-      }
-      n.mods <- length(unique(initial.index.vector[initial.index.vector != 0]))
-    }
-    cat("Final cut height" , cut.height, "produced", n.mods, "modules. \n")
-  }else{
-      cat("Initial WGCNA call produced", n.mods, "modules \n")
+                                                        method = "hybrid",
+                                                        distM = dis,
+                                                        deepSplit = 4,
+                                                        pamRespectsDendro = FALSE,
+                                                        minClusterSize = min.size)
+
+  # lower the cut height until enough modules are produced
+  lowered <- .lower_cut_height(index.vector = initial.index.vector,
+                               dendro = dendro,
+                               dis = dis,
+                               min.mods = min.mods,
+                               min.size = min.size,
+                               cut.height = cut.height,
+                               max.size = max.size)
+  initial.index.vector <- lowered$index.vector
+  cut.height <- lowered$cut.height
+
+  # merge similar modules based on eigengene similarity
+  if (merge) {
+    initial.index.vector <- .merge_modules(index.vector = initial.index.vector,
+                                           datExpr = datExpr,
+                                           cor.FN = cor.FN,
+                                           cor.options = cor.options,
+                                           merging.cut = merging.cut,
+                                           min.mods = min.mods,
+                                           max.size = max.size)
   }
 
-  # if merging
-  if(merge){
-    cat("Merging modules based on eigen gene similarity... \n")
-    n.merges <- 0
-    # while there are at least min.mods modules and they are all bellow maxsize
-    while(n.mods > min.mods && all(table(initial.index.vector  ) < max.size ) ){
-      # merge similar modules (single iteration)
-      merged <- WGCNA::mergeCloseModules(
-        exprData=t(x),
-        colors=initial.index.vector,
-        # mEs= ifelse(exists("merged"), merged$newMEs, NULL),
-        unassdColor=0,
-        corFnc=cor.FN,
-        corOptions=cor.options,
-        cutHeight=merging.cut
-      )
-
-      # if nothing changes, break loop
-      if(all(initial.index.vector == merged$colors)){ # this section of code is outdate, need to revise in later
-        break
-      }
-      # else, use merged modules and restart
-      initial.index.vector <- merged$colors
-      n.mods <- length(unique(initial.index.vector[initial.index.vector != 0]))
-      n.merges <- n.merges + 1
-    }
-    if(n.merges == 0){
-      cat("No modules were small/similiar enough to merge, using initial modules... \n")
-    }else{
-      cat("Merged" , n.merges, "modules, resulting in", n.mods, "new modules. \n")
-    }
-
+  # split any modules that exceed max.size
+  if (iterate) {
+    initial.index.vector <- .split_large_modules(index.vector = initial.index.vector,
+                                                 dis = dis,
+                                                 max.size = max.size,
+                                                 min.size = min.size,
+                                                 hclust.method = hclust.method,
+                                                 cut.height = cut.height)
   }
 
-  # if iterating
-  if(iterate){
-    # find modules that are too large
-    to.big <- as.numeric(names(which(table(initial.index.vector) > max.size)))
-    to.big <- to.big[to.big!=0]
-
-    if(length(to.big > 0)){
-      cat("The first iterations of modules",to.big, "are too large, attempting to split... \n")
-
-      # rerun flast cluster for each module that is to large
-      for(m in to.big){
-        # subset distance matrix
-        m.nodes <- which(initial.index.vector == m)
-        m.dis <- dis[m.nodes,m.nodes, drop = F]
-
-        # regenerate modules
-        dendro <- flashClust::flashClust(
-          d=stats::as.dist(m.dis),
-          method=hclust.method)
-        m.index.vector <- dynamicTreeCut::cutreeDynamic(
-          dendro=dendro,
-          cutHeight = cut.height,
-          method="hybrid",
-          distM=m.dis,
-          deepSplit=4,
-          pamRespectsDendro=FALSE,
-          minClusterSize=min.size,
-          verbose = F)
-
-        # check new modules...
-        pass = T
-        # arent mostly zero
-        if(sum(m.index.vector ==0) > length(m.index.vector) / 2){
-          pass = F
-          cat("Module", m, "failed to split due to high number of unassigned nodes. \n")
-        }
-        # have at least two non zero values
-        if(length(unique(m.index.vector[m.index.vector != 0])) < 2){
-          pass = F
-          cat("Module", m,"failed to spilt into at least two new modules. \n")
-        }
-
-        # if the module passes checks,
-        if(pass){
-          # split module
-          cat("Spliting module" ,m, "into", length(unique(m.index.vector[m.index.vector!=0])), "new modules. \n")
-          initial.index.vector[m.nodes] <- ifelse(m.index.vector  ==0,
-                                                  0,  m.index.vector  + max(initial.index.vector)) # adding max ensures no overlaps)
-        }
-      }
-    }
-  }
-
-
-  # assign remaining unassigned nodes based on adj...
-  cat("Assinging unassinged nodes based on WGNCA adjacency... \n")
+  # assign remaining unassigned nodes to a module
+  message("Assigning unassigned nodes by ", assign.by, " method...")
   diag(adj) <- 0
+  modified.index.vector <- .assign_unassigned(index.vector = initial.index.vector,
+                                              adj = adj,
+                                              x = x,
+                                              method = assign.by)
 
-  # iterative expansion by best neighbor with threshold
-  modified.index.vector <- initial.index.vector
-  last.mods <- modified.index.vector
-  unassigned <- which(modified.index.vector == 0)
-  threshold = 0.95
-  while(length(unassigned) > 0){ # there might be a more efficient way to check this
-    # for each assigned node
-    assigned <- which(modified.index.vector != 0)
-    unassigned <- which(modified.index.vector == 0)
-    for(node in assigned){
-      # find its best neighbor based on wgcna adj
-      best <- unassigned[which.max(adj[node, unassigned])]
-      # if that adj is above the current threshold
-      if(length(best) !=0){
-        if(adj[node,best] > threshold){
-          # assign node
-          modified.index.vector[best] <- modified.index.vector[node]
-        }
-      }
-    }
-    # if no changes
-    if(all(last.mods == modified.index.vector)){
-      # and not at min threshold
-      if(threshold >= 0){
-        # lower threshold
-        threshold <- round(threshold - 0.05, 2)
-      }else{
-        # break if at min threshold and no longer changing
-        break
-      }
-    }
-    last.mods <- modified.index.vector
+  # fit modules to max size via node trading
+  n.too.big <- sum(table(modified.index.vector) > max.size)
+  if (n.too.big > 0) {
+    message(n.too.big, " module(s) larger than ", max.size, " nodes; performing node trading based on adjacency...")
+    modified.index.vector <- .fit_to_max_size(index.vector = modified.index.vector,
+                                              adj = adj,
+                                              max.size = max.size)
   }
 
-  # fit modules to max size via trading
-  to.big  <- sum(table(modified.index.vector) > max.size)
-  if(to.big){
-    cat(to.big, "modules are larged than", max.size, "nodes. Preforming node trading based on adjacency... \n")
-    modified.index.vector <- .fit_to_max_size(
-      index.vector = modified.index.vector,
-      adj = adj,
-      max.size = max.size)
-  }
-
-  # create module object
+  # build module objects
   initial.index.vector <- as.numeric(initial.index.vector)
   modified.index.vector <- as.numeric(modified.index.vector)
-  initial.mods  <- methods::new("module",
-                     source = "find_WGCNA_mods initial mods",
-                     data.dim = dim(x),
-                     overlapping = FALSE,
-                     index.vector = initial.index.vector,
-                     index.list = split(1:nrow(x) , initial.index.vector),
-                     name.list = split(rownames(x), initial.index.vector)
+  initial.mods <- methods::new("module",
+                               source = "find_WGCNA_mods initial mods",
+                               data.dim = dim(x),
+                               overlapping = FALSE,
+                               index.vector = initial.index.vector,
+                               index.list = split(1:nrow(x), initial.index.vector),
+                               name.list = split(rownames(x), initial.index.vector)
   )
-  final.mods  <- methods::new("module",
-                                source = "find_WGCNA_mods traded mods",
-                                data.dim = dim(x),
-                                overlapping = FALSE,
-                                index.vector = modified.index.vector,
-                                index.list = split(1:nrow(x) , modified.index.vector),
-                                name.list = split(rownames(x), modified.index.vector)
+  final.mods <- methods::new("module",
+                             source = "find_WGCNA_mods traded mods",
+                             data.dim = dim(x),
+                             overlapping = FALSE,
+                             index.vector = modified.index.vector,
+                             index.list = split(1:nrow(x), modified.index.vector),
+                             name.list = split(rownames(x), modified.index.vector)
   )
 
   return(list(
@@ -465,104 +337,520 @@ find_WGCNA_mods <- function(x,
   beta <- sft$powerEstimate
   if (is.na(beta)) {
     beta <- 6 # default
-    cat("Using the following power:", beta, "\n")
+    message("Using the following power: ", beta)
   } else {
-    cat("Optimal power selected:", beta, "\n")
+    message("Optimal power selected: ", beta)
   }
   return(beta)
 }
 
-#' Helper to find_WGCNA_mods that subdivides modules exceeding a maximum size
+#' Helper that trims modules exceeding a maximum size by trading nodes to smaller modules
 #' @param index.vector an integer vector of length p, assigning each node to a module (0 = unassigned)
-#' @param adj a p x p numeric adjacency matrix produced by WGCNA::adjacency
 #' @param max.size an integer, the maximum number of nodes allowed in a module
-#' @param verbose a logical, if TRUE progress messages are printed for each split (useful for debugging)
+#' @param adj a p x p numeric similarity matrix (required when method = 'adjacency')
+#' @param x a numeric matrix with p features (rows) and n samples (columns) (required when method = 'eigengene')
+#' @param method a character, how a giving node is scored against receiving modules: 'adjacency' uses the similarity matrix, 'eigengene' uses correlation with module eigengenes
+#' @param verbose a logical, if TRUE progress messages are printed for each trade (useful for debugging)
 
 #' @return an integer vector of length p with the updated module assignments
 
+#' @importFrom stats prcomp cor
 #' @keywords internal
+.fit_to_max_size <- function(index.vector,
+                             max.size,
+                             adj = NULL,
+                             x = NULL,
+                             method = c("adjacency", "eigengene"),
+                             verbose = FALSE){
+  method <- match.arg(method)
+  if (method == "adjacency" && is.null(adj)) {
+    stop("method = 'adjacency' requires a similarity matrix 'adj'.")
+  }
+  if (method == "eigengene" && is.null(x)) {
+    stop("method = 'eigengene' requires the data matrix 'x'.")
+  }
 
-.fit_to_max_size <- function(
-    index.vector,
-    adj,
-    max.size,
-    verbose = F
-
-){
-  # determine which modules will give and receive nodes
   mod.size <- table(index.vector)
-
   giving <- as.numeric(names(which(mod.size > max.size)))
-  receiving <- as.numeric(names(which(mod.size < max.size)))
-
-  giving.nodes <- which(index.vector %in% giving)
-  receiving.nodes <- which(index.vector %in% receiving)
-
   n.trades <- 0
 
-  while(length(giving) > 0){
-    # find the giving node with the highest adj to a  receiving module
-    trade.scores <- adj[giving.nodes, receiving.nodes, drop = FALSE]
-    trade.giving <- giving.nodes[ which.max(matrixStats::rowMaxs(trade.scores)) ]
-    trade.receiving  <-  receiving.nodes[
-      which.max( adj[trade.giving,receiving.nodes] )
-      ]
-
-    # set giving nodes module to receiving module
-    if(verbose){cat("Trading", trade.giving, "to module", index.vector[ trade.receiving ], "\n" )}
-    index.vector[ trade.giving ] <- index.vector[ trade.receiving ]
-
-    # update module status
-    mod.size <- table(index.vector)
-
-    giving <- as.numeric(names(which(mod.size > max.size)))
-    receiving <- as.numeric(names(which(mod.size < max.size)))
-
+  while (length(giving) > 0) {
     giving.nodes <- which(index.vector %in% giving)
-    receiving.nodes <- which(index.vector %in% receiving)
+    receiving <- as.numeric(names(which(mod.size < max.size)))
+    if (length(receiving) == 0) {
+      warning("No module has room to receive nodes; some modules remain above max.size.")
+      break
+    }
 
+    if (method == "adjacency") {
+      # move the giving node most similar to any receiving module
+      receiving.nodes <- which(index.vector %in% receiving)
+      trade.scores <- adj[giving.nodes, receiving.nodes, drop = FALSE]
+      gi <- which.max(matrixStats::rowMaxs(trade.scores))
+      trade.giving <- giving.nodes[gi]
+      trade.to.module <- index.vector[ receiving.nodes[ which.max(adj[trade.giving, receiving.nodes]) ] ]
+    } else {
+      # score each giving node by its absolute correlation with each receiving module eigengene
+      eig <- vapply(receiving, function(m) {
+        stats::prcomp(t(x[which(index.vector == m), , drop = FALSE]), scale. = TRUE)$x[, 1]
+      }, numeric(ncol(x)))
+      cors <- abs(stats::cor(t(x[giving.nodes, , drop = FALSE]), eig))
+      cors[is.na(cors)] <- 0
+      best.col <- max.col(cors, ties.method = "first")
+      gi <- which.max(cors[cbind(seq_along(giving.nodes), best.col)])
+      trade.giving <- giving.nodes[gi]
+      trade.to.module <- receiving[best.col[gi]]
+    }
+
+    if (verbose) { message("Trading ", trade.giving, " to module ", trade.to.module) }
+    index.vector[trade.giving] <- trade.to.module
+
+    mod.size <- table(index.vector)
+    giving <- as.numeric(names(which(mod.size > max.size)))
     n.trades <- n.trades + 1
   }
-  cat("All modules fit within max size after",  n.trades, "trades. \n")
+  message("All modules fit within max size after ", n.trades, " trades.")
 
   return(index.vector)
+}
+
+#' Helper to find_WGCNA_mods that lowers the dynamic-tree-cut height until a
+#' minimum number of modules is produced
+#' @param index.vector an integer vector of length p, the modules from the initial cut (0 = unassigned)
+#' @param dendro a dendrogram (flashClust/hclust object) used for the cut
+#' @param dis a p x p TOM distance matrix passed to cutreeDynamic
+#' @param min.mods an integer, the minimum number of modules required
+#' @param min.size an integer, the minimum number of nodes allowed in a module
+#' @param cut.height a numeric or NULL, the starting cut height; recomputed from the dendrogram when NULL
+#' @param max.size a numeric, the maximum module size (used only for messaging)
+#' @param min.cut.height a numeric, the floor below which the cut height will not be lowered
+
+#' @return a list with the updated index.vector and the cut.height that produced it
+
+#' @importFrom stats quantile
+#' @keywords internal
+.lower_cut_height <- function(index.vector,
+                              dendro,
+                              dis,
+                              min.mods,
+                              min.size,
+                              cut.height = NULL,
+                              max.size = Inf,
+                              min.cut.height = 0) {
+  n.mods <- length(unique(index.vector[index.vector != 0]))
+  if (n.mods >= min.mods) {
+    message("Initial WGCNA call produced ", n.mods, " modules.")
+    return(list(index.vector = index.vector, cut.height = cut.height))
+  }
+
+  message("Only ", n.mods, " modules produced in first cut; ", min.mods,
+          " required with max.size == ", max.size, ". Lowering cut height...")
+
+  # recompute the default height used by cutreeDynamic when none was supplied
+  if (is.null(cut.height)) {
+    qnt5 <- stats::quantile(dendro$height, probs = 0.05)
+    cut.height <- qnt5 + 0.99 * (max(dendro$height) - qnt5)
+  }
+
+  while (n.mods < min.mods) {
+    cut.height <- cut.height - 0.01
+    # stop once the cut height hits its floor, even if min.mods was not reached
+    if (cut.height <= min.cut.height) {
+      message("Cut height reached its floor (", min.cut.height,
+              ") without producing ", min.mods, " modules; proceeding with the current cut.")
+      break
+    }
+    message("Lowering cut height to ", round(cut.height, 4), " and generating new modules...")
+    index.vector <- dynamicTreeCut::cutreeDynamic(dendro = dendro,
+                                                  cutHeight = cut.height,
+                                                  method = "hybrid",
+                                                  distM = dis,
+                                                  deepSplit = 4,
+                                                  pamRespectsDendro = FALSE,
+                                                  minClusterSize = min.size)
+    # bail out if cutting is no longer producing meaningful clusters
+    if (all(index.vector == 0) && cut.height < 0.8) {
+      message("Cut height reached ", round(cut.height, 4),
+              " and is no longer producing meaningful clusters. ",
+              "Consider increasing max.size or using another method to generate modules.")
+      stop("No modules found after lowering cut height")
+    }
+    n.mods <- length(unique(index.vector[index.vector != 0]))
+  }
+  message("Final cut height ", round(cut.height, 4), " produced ", n.mods, " modules.")
+  list(index.vector = index.vector, cut.height = cut.height)
+}
+
+#' Helper to find_WGCNA_mods that splits modules exceeding max.size by
+#' re-clustering each oversized module
+#' @param index.vector an integer vector of length p assigning each node to a module (0 = unassigned)
+#' @param dis a p x p TOM distance matrix
+#' @param max.size a numeric, the maximum number of nodes allowed in a module
+#' @param min.size an integer, the minimum number of nodes allowed in a module
+#' @param hclust.method a character, the agglomeration method passed to flashClust
+#' @param cut.height a numeric or NULL, the cut height passed to cutreeDynamic
+
+#' @return an integer vector of length p with oversized modules split where possible
+
+#' @keywords internal
+.split_large_modules <- function(index.vector,
+                                 dis,
+                                 max.size,
+                                 min.size,
+                                 hclust.method = "average",
+                                 cut.height = NULL) {
+  # find modules that are too large (ignoring the unassigned group, 0)
+  to.big <- as.numeric(names(which(table(index.vector) > max.size)))
+  to.big <- to.big[to.big != 0]
+  if (length(to.big) == 0) return(index.vector)
+
+  message("Modules ", paste(to.big, collapse = ", "),
+          " are too large; attempting to split...")
+
+  # re-cluster each oversized module on its own distance submatrix
+  for (m in to.big) {
+    m.nodes <- which(index.vector == m)
+    m.dis <- dis[m.nodes, m.nodes, drop = FALSE]
+
+    dendro <- flashClust::flashClust(d = stats::as.dist(m.dis), method = hclust.method)
+    m.index.vector <- dynamicTreeCut::cutreeDynamic(dendro = dendro,
+                                                    cutHeight = cut.height,
+                                                    method = "hybrid",
+                                                    distM = m.dis,
+                                                    deepSplit = 4,
+                                                    pamRespectsDendro = FALSE,
+                                                    minClusterSize = min.size,
+                                                    verbose = FALSE)
+
+    # only accept the split if it is mostly assigned and yields at least two modules
+    pass <- TRUE
+    if (sum(m.index.vector == 0) > length(m.index.vector) / 2) {
+      pass <- FALSE
+      message("Module ", m, " failed to split due to a high number of unassigned nodes.")
+    }
+    if (length(unique(m.index.vector[m.index.vector != 0])) < 2) {
+      pass <- FALSE
+      message("Module ", m, " failed to split into at least two new modules.")
+    }
+
+    if (pass) {
+      message("Splitting module ", m, " into ",
+              length(unique(m.index.vector[m.index.vector != 0])), " new modules.")
+      # offset new labels by the current max so they do not collide with existing modules
+      index.vector[m.nodes] <- ifelse(m.index.vector == 0,
+                                      0, m.index.vector + max(index.vector))
+    }
+  }
+  index.vector
+}
+
+#' Helper to find_WGCNA_mods that assigns unassigned nodes (module 0) to an
+#' existing module, either by WGCNA adjacency or by correlation with module eigengenes
+#' @param index.vector an integer vector of length p, assigning each node to a module (0 = unassigned)
+#' @param adj a p x p numeric adjacency matrix produced by WGCNA::adjacency (diagonal expected to be 0); required when method = 'adjacency'
+#' @param x a numeric matrix with p features (rows) and n samples (columns); required when method = 'eigengene'
+#' @param method a character, how to score candidate modules for an unassigned node: 'adjacency' uses the maximum adjacency to an assigned node, 'eigengene' uses the maximum absolute correlation with a module eigengene
+#' @param start.threshold a numeric, the initial score a node must exceed to be recruited to a module
+#' @param step a numeric, the amount the threshold is lowered after a pass that recruits no nodes
+#' @param verbose a logical, if TRUE the number of nodes recruited at each threshold is printed
+
+#' @return an integer vector of length p with unassigned nodes assigned where possible
+
+#' @importFrom stats prcomp cor
+#' @keywords internal
+.assign_unassigned <- function(index.vector,
+                               adj = NULL,
+                               x = NULL,
+                               method = c("adjacency", "eigengene"),
+                               start.threshold = 0.95,
+                               step = 0.05,
+                               verbose = FALSE){
+  method <- match.arg(method)
+  if(method == "adjacency" && is.null(adj)){
+    stop("method = 'adjacency' requires an adjacency matrix 'adj'.")
+  }
+  if(method == "eigengene" && is.null(x)){
+    stop("method = 'eigengene' requires the data matrix 'x'.")
+  }
+
+  # iteratively recruit each unassigned node to its best-scoring module,
+  # lowering the threshold whenever a pass recruits nothing
+  threshold <- start.threshold
+  repeat{
+    unassigned <- which(index.vector == 0)
+    if(length(unassigned) == 0) break
+
+    assigned <- which(index.vector != 0)
+    if(length(assigned) == 0) break # no module to grow from
+
+    if(method == "adjacency"){
+      # for each unassigned node, find its single best-connected assigned node
+      score <- adj[unassigned, assigned, drop = FALSE]
+      best.col <- max.col(score, ties.method = "first")
+      best.score <- score[cbind(seq_along(unassigned), best.col)]
+      best.module <- index.vector[assigned[best.col]]
+    }else{
+      # represent each module by its eigengene (first PC of member expression),
+      # then score each unassigned node by its absolute correlation to each eigengene
+      mods <- sort(unique(index.vector[assigned]))
+      eigengenes <- vapply(mods, function(m){
+        stats::prcomp(t(x[which(index.vector == m), , drop = FALSE]), scale. = TRUE)$x[, 1]
+      }, numeric(ncol(x)))
+      score <- abs(stats::cor(t(x[unassigned, , drop = FALSE]), eigengenes))
+      score[is.na(score)] <- 0 # genes with no signal cannot be scored
+      best.col <- max.col(score, ties.method = "first")
+      best.score <- score[cbind(seq_along(unassigned), best.col)]
+      best.module <- mods[best.col]
+    }
+
+    # recruit only the nodes whose best score clears the current threshold
+    recruit <- best.score > threshold
+    if(any(recruit)){
+      index.vector[unassigned[recruit]] <- best.module[recruit]
+      if(verbose){
+        message("Assigned ", sum(recruit), " node(s) at ", method, " threshold ", threshold)
+      }
+    }else{
+      # nothing clears the threshold; lower it, stopping once it reaches 0
+      if(threshold <= 0) break
+      threshold <- round(threshold - step, 2)
+    }
+  }
+
+  # any node still in module 0 could not be scored against any module
+  leftover <- sum(index.vector == 0)
+  if(leftover > 0){
+    warning(leftover, " node(s) could not be connected to any module and remain unassigned (module 0).")
+  }
+
+  return(index.vector)
+}
+
+#' Helper that merges similar modules by eigengene similarity (WGCNA::mergeCloseModules)
+#' @param index.vector an integer vector of length p assigning each node to a module (0 = unassigned)
+#' @param datExpr a samples x features numeric matrix (i.e. t(x))
+#' @param cor.FN a character, the correlation function ('bicor' or 'cor')
+#' @param cor.options a list of correlation options passed to mergeCloseModules
+#' @param merging.cut a numeric, the eigengene dissimilarity threshold for merging
+#' @param min.mods an integer, the minimum number of modules to retain
+#' @param max.size a numeric, modules are only merged while all are below this size
+
+#' @return an integer vector of length p with merged module assignments
+
+#' @importFrom WGCNA mergeCloseModules
+#' @keywords internal
+.merge_modules <- function(index.vector, datExpr, cor.FN, cor.options, merging.cut, min.mods, max.size) {
+  message("Merging modules based on eigengene similarity...")
+  n.mods <- length(unique(index.vector[index.vector != 0]))
+  n.merges <- 0
+  module.eigengenes <- NULL # reused across rounds to skip recomputing module eigengenes
+  while (n.mods > min.mods && all(table(index.vector) < max.size)) {
+    merged <- WGCNA::mergeCloseModules(
+      exprData = datExpr,
+      colors = index.vector,
+      MEs = module.eigengenes,
+      unassdColor = 0,
+      corFnc = cor.FN,
+      corOptions = cor.options,
+      cutHeight = merging.cut
+    )
+    if (all(index.vector == merged$colors)) {
+      break
+    }
+    index.vector <- merged$colors
+    module.eigengenes <- merged$newMEs
+    n.mods <- length(unique(index.vector[index.vector != 0]))
+    n.merges <- n.merges + 1
+  }
+  if (n.merges == 0) {
+    message("No modules were small/similar enough to merge; using the initial modules.")
+  } else {
+    message("Merged modules in ", n.merges, " round(s), resulting in ", n.mods, " modules.")
+  }
+  index.vector
+}
+
+#' Simple helper that extracts a p x p feature-similarity matrix for node trading
+#' @param x a numeric matrix with p features (rows) and n samples (columns)
+#' @param method a character, 'WGCNA' (soft-thresholded co-expression adjacency) or 'ARACNE' (mutual information matrix from minet, the basis of ARACNE)
+#' @param cor.FN a character, the correlation function for WGCNA ('bicor' or 'cor')
+#' @param min.sft a numeric, the minimum R-squared for WGCNA soft-threshold selection
+#' @param beta an integer or NULL, the WGCNA soft-thresholding power (auto-selected when NULL)
+#' @param powers an integer vector, candidate powers for WGCNA::pickSoftThreshold
+
+#' @return a p x p numeric similarity matrix, rows/cols ordered as the rows of x
+
+#' @importFrom WGCNA pickSoftThreshold adjacency
+#' @keywords internal
+.feature_similarity <- function(x,
+                                method = c("WGCNA", "ARACNE"),
+                                cor.FN = c("bicor", "cor"),
+                                min.sft = 0.85,
+                                beta = NULL,
+                                powers = c(seq(1, 10, by = 1), seq(12, 20, by = 2))) {
+  method <- match.arg(method)
+  cor.FN <- match.arg(cor.FN)
+  if (method == "WGCNA") {
+    if (!requireNamespace("WGCNA", quietly = TRUE)) {
+      stop("Package WGCNA is required. Install with: install.packages('WGCNA')", call. = FALSE)
+    }
+    cor.options <- if (cor.FN == "cor") list(use = "p") else list(pearsonFallback = "individual")
+    datExpr <- t(x)
+    if (is.null(beta)) {
+      sft <- WGCNA::pickSoftThreshold(data = datExpr, corFnc = cor.FN,
+                                      RsquaredCut = min.sft, powerVector = powers)
+      beta <- .sft_check(sft)
+    }
+    sim <- WGCNA::adjacency(datExpr = datExpr, power = beta, corFnc = cor.FN,
+                            type = "unsigned", corOptions = cor.options)
+  } else {
+    if (!requireNamespace("minet", quietly = TRUE)) {
+      stop("Package minet is required for method = 'ARACNE'. Install with: install.packages('minet')", call. = FALSE)
+    }
+    sim <- minet::build.mim(dataset = t(x))
+  }
+  rownames(sim) <- colnames(sim) <- rownames(x)
+  sim
+}
+
+#' Helper to find_ICA_mods that splits modules exceeding max.size by re-running ICA
+#' @param index.vector an integer vector of length p assigning each node to a module
+#' @param x a numeric matrix with p features (rows) and n samples (columns)
+#' @param max.size a numeric, the maximum number of nodes allowed in a module
+#' @param ... additional arguments passed to fastICA::fastICA
+
+#' @return an integer vector of length p with oversized modules split where possible
+
+#' @keywords internal
+.split_large_modules_ICA <- function(index.vector, x, max.size, ...) {
+  to.big <- as.numeric(names(which(table(index.vector) > max.size)))
+  to.big <- to.big[to.big != 0]
+  if (length(to.big) == 0) return(index.vector)
+
+  message("Modules ", paste(to.big, collapse = ", "), " are too large; attempting to split with ICA...")
+  for (m in to.big) {
+    m.nodes <- which(index.vector == m)
+    # extract just enough components to bring sub-modules within max.size
+    n.split <- min(ceiling(length(m.nodes) / max.size), length(m.nodes), ncol(x))
+    if (n.split < 2) next
+
+    ica <- fastICA::fastICA(X = as.matrix(x[m.nodes, , drop = FALSE]), n.comp = n.split, ...)
+    sub.index <- apply(abs(ica$S), 1, which.max)
+    if (length(unique(sub.index)) < 2) {
+      message("Module ", m, " failed to split into at least two new modules.")
+      next
+    }
+    message("Splitting module ", m, " into ", length(unique(sub.index)), " new modules.")
+    # offset new labels by the current max so they do not collide with existing modules
+    index.vector[m.nodes] <- sub.index + max(index.vector)
+  }
+  index.vector
 }
 
 #' Detect co-expression modules from a data matrix using Independent Component Analysis (ICA)
 #' @param x a numeric matrix with p features (rows) and n samples (columns)
 #' @param n.comp an integer, the number of independent components (modules) to extract
+#' @param max.size an integer or NULL, the maximum number of nodes allowed in a module (NULL = unconstrained)
+#' @param merge a logical, if TRUE similar modules are merged by eigengene similarity (WGCNA::mergeCloseModules)
+#' @param merging.cut a numeric, the eigengene dissimilarity threshold for merging
+#' @param iterate a logical, if TRUE modules exceeding max.size are split by re-running ICA on their features
+#' @param cor.FN a character, the correlation function used for merging and WGCNA-based trading ('bicor' or 'cor')
+#' @param trade.by a character, how oversized modules are trimmed to max.size: 'adjacency' (a learned similarity matrix) or 'eigengene' (correlation with module eigengenes)
+#' @param network a character, the method used to learn the similarity matrix when trade.by = 'adjacency': 'WGCNA' or 'ARACNE'
 #' @param ... additional arguments passed to fastICA::fastICA
 
-#' @return a module object
+#' @return a list with: the learned similarity matrix (or NULL), the initial modules, and the final modules after splitting/trading
 
 #' @importFrom methods new
+#' @importFrom stats prcomp cor
 
 #' @export
 find_ICA_mods <- function(x,
                           n.comp,
-                          ...){
+                          max.size = NULL,
+                          merge = FALSE,
+                          merging.cut = 0.2,
+                          iterate = FALSE,
+                          cor.FN = c("bicor", "cor"),
+                          trade.by = c("adjacency", "eigengene"),
+                          network = c("WGCNA", "ARACNE"),
+                          ...) {
   if (!requireNamespace("fastICA", quietly = TRUE)) {
     stop("Package fastICA is required. Install with: install.packages('fastICA')", call. = FALSE)
   }
-  # run ica to decompose features into independent components
-  ICA.results <- fastICA::fastICA(X= as.matrix(x),
-                                  n.comp = n.comp,
-                                  ...
-  )
-  # assign each feature to the component with the highest absolute loading
-  index.vector <- apply(abs(ICA.results$S), 1, which.max)
+  cor.FN <- match.arg(cor.FN)
+  trade.by <- match.arg(trade.by)
+  network <- match.arg(network)
+  if (is.null(max.size)) max.size <- Inf
+  cor.options <- if (cor.FN == "cor") list(use = "p") else list(pearsonFallback = "individual")
 
-  # convert to module object and return
-  ICA.mods <- methods::new("module",
-                     source = "find_ICA_mods",
-                     data.dim = dim(x),
-                     overlapping = FALSE,
-                     index.vector = index.vector,
-                     score.vector = apply(abs(ICA.results$S), 1, max),
-                     index.list =split(1:nrow(x) , index.vector),
-                     name.list = split(rownames(x), index.vector))
+  # decompose features into independent components and assign each to its top component
+  ICA.results <- fastICA::fastICA(X = as.matrix(x), n.comp = n.comp, ...)
+  initial.index.vector <- apply(abs(ICA.results$S), 1, which.max)
+  score.vector <- apply(abs(ICA.results$S), 1, max)
+  message("ICA produced ", length(unique(initial.index.vector)), " modules.")
 
-  return(ICA.mods)
+  # minimum number of modules needed to satisfy max.size
+  min.mods <- max(1, ceiling(nrow(x) / max.size))
+
+  # merge similar modules based on eigengene similarity
+  if (merge) {
+    initial.index.vector <- .merge_modules(index.vector = initial.index.vector,
+                                           datExpr = t(x),
+                                           cor.FN = cor.FN,
+                                           cor.options = cor.options,
+                                           merging.cut = merging.cut,
+                                           min.mods = min.mods,
+                                           max.size = max.size)
+  }
+
+  # split modules that exceed max.size by re-running ICA on their features
+  if (iterate) {
+    initial.index.vector <- .split_large_modules_ICA(index.vector = initial.index.vector,
+                                                     x = x, max.size = max.size, ...)
+  }
+
+  # trade nodes to bring every module within max.size
+  modified.index.vector <- initial.index.vector
+  similarity <- NULL
+  if (sum(table(modified.index.vector) > max.size) > 0) {
+    if (trade.by == "adjacency") {
+      message("Learning a ", network, " similarity matrix for adjacency-based trading...")
+      similarity <- .feature_similarity(x, method = network, cor.FN = cor.FN)
+    }
+    message("Trimming oversized modules to max.size by ", trade.by, " trading...")
+    modified.index.vector <- .fit_to_max_size(index.vector = modified.index.vector,
+                                              max.size = max.size,
+                                              adj = similarity,
+                                              x = x,
+                                              method = trade.by)
+  }
+
+  # build module objects
+  initial.index.vector <- as.numeric(initial.index.vector)
+  modified.index.vector <- as.numeric(modified.index.vector)
+  initial.mods <- methods::new("module",
+                               source = "find_ICA_mods initial mods",
+                               data.dim = dim(x),
+                               overlapping = FALSE,
+                               index.vector = initial.index.vector,
+                               score.vector = score.vector,
+                               index.list = split(1:nrow(x), initial.index.vector),
+                               name.list = split(rownames(x), initial.index.vector))
+  final.mods <- methods::new("module",
+                             source = "find_ICA_mods traded mods",
+                             data.dim = dim(x),
+                             overlapping = FALSE,
+                             index.vector = modified.index.vector,
+                             score.vector = score.vector,
+                             index.list = split(1:nrow(x), modified.index.vector),
+                             name.list = split(rownames(x), modified.index.vector))
+
+  return(list(
+    similarity = similarity,
+    initial.mods = initial.mods,
+    final.mods = final.mods
+  ))
 }
 
 

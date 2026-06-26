@@ -1,5 +1,5 @@
 # Tests for the module detection functions in R/01.DetectModules.R
-# Scope: true_modules(), true_fuzzy(), find_WGCNA_mods(),
+# Scope: true_modules(), true_fuzzy(), find_WGCNA_mods(), find_ICA_mods(),
 #        eigen_fuzzy_modules(), adj_fuzzy_modules()
 #
 # Module objects are validated with the internal .module_check(), which enforces
@@ -123,6 +123,114 @@ test_that("find_WGCNA_mods() respects the max.size constraint after trading", {
   expect_equal(length(w$final.mods@index.vector), nrow(fx$x))
   # node trading should bring every final module within max.size
   expect_lte(max(lengths(w$final.mods@index.list)), 60)
+})
+
+# ---------------------------------------------------------------------------
+# find_ICA_mods()
+# ---------------------------------------------------------------------------
+
+test_that("find_ICA_mods() returns a similarity slot and two valid module objects", {
+  skip_if_not_installed("fastICA")
+  fx <- make_lfr_fixture()
+
+  w <- suppressWarnings(suppressMessages(find_ICA_mods(fx$x, n.comp = 6)))
+
+  expect_type(w, "list")
+  expect_named(w, c("similarity", "initial.mods", "final.mods"))
+
+  # no max.size constraint -> no network learned, nothing traded
+  expect_null(w$similarity)
+
+  # initial.mods / final.mods: valid non-overlapping module objects
+  expect_s4_class(w$initial.mods, "module")
+  expect_s4_class(w$final.mods, "module")
+  expect_false(w$initial.mods@overlapping)
+  expect_true(.module_check(fx$x, w$initial.mods))
+  expect_true(.module_check(fx$x, w$final.mods))
+
+  # every feature is assigned to one of the n.comp components (none unassigned)
+  expect_equal(length(w$initial.mods@index.vector), nrow(fx$x))
+  expect_true(all(w$initial.mods@index.vector %in% 1:6))
+  expect_length(w$initial.mods@score.vector, nrow(fx$x))
+
+  # with no constraint the final modules equal the initial modules
+  expect_equal(w$final.mods@index.vector, w$initial.mods@index.vector)
+})
+
+test_that("find_ICA_mods() respects max.size via eigengene trading without a network", {
+  skip_if_not_installed("fastICA")
+  fx <- make_lfr_fixture()
+
+  w <- suppressWarnings(suppressMessages(
+    find_ICA_mods(fx$x, n.comp = 6, max.size = 25, trade.by = "eigengene")))
+
+  # eigengene trading needs no similarity matrix
+  expect_null(w$similarity)
+  # 6 modules over 120 features leave room, so trading meets max.size
+  expect_lte(max(lengths(w$final.mods@index.list)), 25)
+  expect_true(.module_check(fx$x, w$final.mods))
+})
+
+test_that("find_ICA_mods() learns a WGCNA similarity matrix for adjacency trading", {
+  skip_if_not_installed("fastICA")
+  skip_if_not_installed("WGCNA")
+  fx <- make_lfr_fixture()
+
+  # 6 components over 120 features => the largest module is always >= 20 > 18,
+  # so adjacency trading always runs and a similarity matrix is learned
+  w <- suppressWarnings(suppressMessages(
+    find_ICA_mods(fx$x, n.comp = 6, max.size = 18, trade.by = "adjacency")))
+
+  expect_true(is.matrix(w$similarity))
+  expect_equal(dim(w$similarity), c(nrow(fx$x), nrow(fx$x)))
+  expect_equal(rownames(w$similarity), rownames(fx$x))
+  # trading never grows the largest module
+  expect_lte(max(lengths(w$final.mods@index.list)),
+             max(lengths(w$initial.mods@index.list)))
+  expect_true(.module_check(fx$x, w$final.mods))
+})
+
+test_that("find_ICA_mods() splits oversized modules when iterate = TRUE", {
+  skip_if_not_installed("fastICA")
+  skip_if_not_installed("WGCNA")
+  fx <- make_lfr_fixture()
+
+  # 2 components over 120 features => each module starts well above max.size,
+  # so iterative ICA must split them into more modules
+  w <- suppressWarnings(suppressMessages(
+    find_ICA_mods(fx$x, n.comp = 2, max.size = 40, iterate = TRUE)))
+
+  expect_gt(length(w$final.mods@index.list), 2)
+  expect_lte(max(lengths(w$final.mods@index.list)), 40)
+  expect_true(.module_check(fx$x, w$final.mods))
+})
+
+test_that("find_ICA_mods() merge = TRUE stays valid and never adds modules", {
+  skip_if_not_installed("fastICA")
+  skip_if_not_installed("WGCNA")
+  fx <- make_lfr_fixture()
+
+  w <- suppressWarnings(suppressMessages(
+    find_ICA_mods(fx$x, n.comp = 6, merge = TRUE)))
+
+  # merging can only reduce (or keep) the number of modules
+  expect_lte(length(w$initial.mods@index.list), 6)
+  expect_true(.module_check(fx$x, w$initial.mods))
+  expect_true(.module_check(fx$x, w$final.mods))
+})
+
+test_that("find_ICA_mods() can learn an ARACNE similarity matrix", {
+  skip_if_not_installed("fastICA")
+  skip_if_not_installed("minet")
+  fx <- make_lfr_fixture()
+
+  w <- suppressWarnings(suppressMessages(
+    find_ICA_mods(fx$x, n.comp = 6, max.size = 18,
+                  trade.by = "adjacency", network = "ARACNE")))
+
+  expect_true(is.matrix(w$similarity))
+  expect_equal(dim(w$similarity), c(nrow(fx$x), nrow(fx$x)))
+  expect_true(.module_check(fx$x, w$final.mods))
 })
 
 # ---------------------------------------------------------------------------

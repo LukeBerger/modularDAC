@@ -14,9 +14,10 @@ find_WGCNA_mods(
   powers = c(seq(1, 10, by = 1), seq(12, 20, by = 2)),
   hclust.method = "average",
   cut.height = NULL,
-  merge = F,
+  merge = FALSE,
   merging.cut = 0.2,
-  iterate = T
+  iterate = TRUE,
+  assign.by = c("adjacency", "eigengene")
 )
 }
 \arguments{
@@ -43,6 +44,8 @@ find_WGCNA_mods(
 \item{merging.cut}{a numeric between 0 and 1, the eigengene dissimilarity threshold for WGCNA::mergeCloseModules}
 
 \item{iterate}{a logical, if TRUE module detection is run iteratively to break up any modules exceeding max.size}
+
+\item{assign.by}{a character, how unassigned nodes are recruited to modules: 'adjacency' uses WGCNA adjacency, 'eigengene' uses correlation with module eigengenes}
 }
 \value{
 a list containing: the WGCNA thresholded adj matrix, the initial modules after merge/iteration, the final modules after max.size fitting

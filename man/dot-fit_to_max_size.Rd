@@ -2,23 +2,34 @@
 % Please edit documentation in R/01.DetectModules.R
 \name{.fit_to_max_size}
 \alias{.fit_to_max_size}
-\title{Helper to find_WGCNA_mods that subdivides modules exceeding a maximum size}
+\title{Helper that trims modules exceeding a maximum size by trading nodes to smaller modules}
 \usage{
-.fit_to_max_size(index.vector, adj, max.size, verbose = F)
+.fit_to_max_size(
+  index.vector,
+  max.size,
+  adj = NULL,
+  x = NULL,
+  method = c("adjacency", "eigengene"),
+  verbose = FALSE
+)
 }
 \arguments{
 \item{index.vector}{an integer vector of length p, assigning each node to a module (0 = unassigned)}
 
-\item{adj}{a p x p numeric adjacency matrix produced by WGCNA::adjacency}
-
 \item{max.size}{an integer, the maximum number of nodes allowed in a module}
 
-\item{verbose}{a logical, if TRUE progress messages are printed for each split (useful for debugging)}
+\item{adj}{a p x p numeric similarity matrix (required when method = 'adjacency')}
+
+\item{x}{a numeric matrix with p features (rows) and n samples (columns) (required when method = 'eigengene')}
+
+\item{method}{a character, how a giving node is scored against receiving modules: 'adjacency' uses the similarity matrix, 'eigengene' uses correlation with module eigengenes}
+
+\item{verbose}{a logical, if TRUE progress messages are printed for each trade (useful for debugging)}
 }
 \value{
 an integer vector of length p with the updated module assignments
 }
 \description{
-Helper to find_WGCNA_mods that subdivides modules exceeding a maximum size
+Helper that trims modules exceeding a maximum size by trading nodes to smaller modules
 }
 \keyword{internal}
