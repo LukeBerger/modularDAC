@@ -6,6 +6,7 @@
 utils::globalVariables(c("module", "correlation"))
 
 # declare module object
+#' @importFrom methods setClass
 setClass("module",
          slots = list(
            source = "character",

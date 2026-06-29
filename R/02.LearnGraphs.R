@@ -102,8 +102,6 @@ learn_SILGGM_graph <- function(x,
 
 #' @return a symmetric matrix
 
-#' @import methods utils
-
 #' @keywords internal
 .upper_tri_to_matrix <- function(upper_tri_values,
                                 variable_names =NULL,
@@ -135,8 +133,6 @@ learn_SILGGM_graph <- function(x,
 #' @param mx_p a p x p matrix, (i,j) represents the p-value of the partial correlation between node i and node j
 #'
 #' @return a p x p matrix, (i,j) represents the adjusted p-value of the partial correlation between node i and node j
-
-#' @import methods utils
 
 #' @keywords internal
 .matrix_p_adjust <- function( mx_p ) {

@@ -16,7 +16,7 @@
 
 #' @return an igraph object
 
-#' @importFrom igraph sample_gnp sample_pa V add_edges simplify
+#' @importFrom igraph sample_gnp sample_pa V add_edges simplify disjoint_union
 
 #' @export
 make_modular_graph <- function(g.type=c("er", "sf"),
@@ -30,55 +30,41 @@ make_modular_graph <- function(g.type=c("er", "sf"),
   # calculate the number of nodes per module
   n.nodes <- round(n.nodes / n.mods)
 
-  # initialize an empty list of modules
-  modules <- vector(mode = "list", length = n.mods)
-
   # create modules and add them to the list
-  for (i in seq_len(n.mods)) {
+  modules <- lapply(seq_len(n.mods), function(i){
     if(g.type == "er"){
       temp <- igraph::sample_gnp(n = n.nodes,
-                                  p = p.edge,
-                                  ...)
-    }else if(g.type == "sf"){
-      temp <- igraph::sample_pa(n.nodes,
-                                 power=power,
-                                 zero.appeal=z.appeal,
-                                 directed=FALSE,
+                                 p = p.edge,
                                  ...)
     }else{
-      stop("invalid graph type: submit 'er' or 'sf' ")
+      temp <- igraph::sample_pa(n.nodes,
+                                power=power,
+                                zero.appeal=z.appeal,
+                                directed=FALSE,
+                                ...)
     }
 
     # add module label
     igraph::V(temp)$module <- i
 
     if(no.uncon){
-      # check for unconnected nodes
-      no.edge <- igraph::V(temp)[igraph::degree(temp) == 0]
-
-      # if any exist
+      # give every unconnected node one edge to a connected node in the module
+      no.edge <- which(igraph::degree(temp) == 0)
       if(length(no.edge) > 0){
-        # give them each an edge
-        for(node in no.edge){
-          # get module
-          temp.mod <- igraph::V(temp)$module[node]
-
-          # get targets
-          targets <- igraph::V(temp)[igraph::V(temp)$module == temp.mod]
-          targets <- targets[!(targets %in% no.edge)]
-
-          # add edge
-          temp <- igraph::add_edges(temp, c(node, sample(targets, 1)))
+        targets <- setdiff(seq_len(n.nodes), no.edge)
+        if(length(targets) > 0){
+          # index into targets (avoids sample()'s single-value shortcut)
+          partners <- targets[sample.int(length(targets), length(no.edge), replace = TRUE)]
+          temp <- igraph::add_edges(temp, as.vector(rbind(no.edge, partners)))
         }
       }
     }
 
-    # add to list
-    modules[[i]] <- temp
-  }
+    temp
+  })
 
   # merge modules
-  mg <- Reduce("+", modules) # taking advantage of the fact that igraphs are just fancy lists
+  mg <- do.call(igraph::disjoint_union, modules) # disjoint union: combine modules, preserving the module vertex attribute
 
   if(link.all){
     # add edges between each pair of modules
@@ -88,23 +74,18 @@ make_modular_graph <- function(g.type=c("er", "sf"),
     mod.pairs <- mapply(c, mod.chain, c(mod.chain[-1], mod.chain[1]), SIMPLIFY = FALSE)
   }
 
-  # for each pair
+  # collect inter-module edges for every pair, then add them all in one call
   mg.module <- igraph::V(mg)$module # module labels are fixed while we only add edges
-  for (pair in mod.pairs) {
-    # get node indexes based on modules
+  new.edges <- unlist(lapply(mod.pairs, function(pair){
     i.nodes <- which(mg.module == pair[1]) # nodes in the first module of the pair
     j.nodes <- which(mg.module == pair[2]) # nodes in the second module of the pair
-
     # link i and j by adding edges between random nodes
-    mg <- igraph::add_edges(mg,
-                            as.vector(
-                              rbind(
-                                sample(i.nodes, n.mod.links, replace = TRUE),
-                                sample(j.nodes, n.mod.links, replace = TRUE)
-                              )
-                            )
+    rbind(
+      sample(i.nodes, n.mod.links, replace = TRUE),
+      sample(j.nodes, n.mod.links, replace = TRUE)
     )
-  }
+  }))
+  mg <- igraph::add_edges(mg, new.edges)
 
   # removes any loops and multiples resulting from randomness (will in some cases result in fewer edges than intended)
   mg <- igraph::simplify(mg, remove.multiple=TRUE, remove.loops=TRUE)
@@ -202,9 +183,6 @@ sim_graph_data <- function(g, n.samples, mean.vec = NULL, b = 3){
   # make n samples with MASS
   sim.data <- t(MASS::mvrnorm(n = n.samples, mu = mean.vec, Sigma =  sigma.mat))
 
-  # # format as eset
-  # sim.data <- Biobase::ExpressionSet(t(sim.data))
-
   # add row and column names
   colnames(sim.data) <- paste("Sample", seq_len(ncol(sim.data)), sep = "_")
   rownames(sim.data) <- igraph::V(g)$name
@@ -219,6 +197,7 @@ sim_graph_data <- function(g, n.samples, mean.vec = NULL, b = 3){
 
 #' @return a visNetwork HTML widget
 #' @importFrom dplyr %>%
+#' @importFrom rlang %||%
 
 #' @export
 modular_plot <- function(g,
@@ -233,12 +212,15 @@ modular_plot <- function(g,
     to = as.character(edge.list[, 2])
   )
 
+  # module membership for every node (used for both colouring and selection)
+  mod <- as.factor(igraph::vertex.attributes(g)[[module.name]])
+
   # colour and filter nodes by module membership
   nodes <- data.frame(
     id = igraph::V(g)$name %||% as.character(igraph::V(g)),
     label = igraph::V(g)$label %||% as.character(igraph::V(g)),
-    group = as.factor(igraph::vertex.attributes(g)[[module.name]]), # color by module
-    module = as.factor(igraph::vertex.attributes(g)[[module.name]]) # select by module
+    group = mod, # color by module
+    module = mod # select by module
   )
 
   # plot with visNetwork
