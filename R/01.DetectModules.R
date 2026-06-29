@@ -255,7 +255,7 @@ find_WGCNA_mods <- function(x,
 
   # split any modules that exceed max.size
   if (iterate) {
-    initial.index.vector <- .split_large_modules(index.vector = initial.index.vector,
+    initial.index.vector <- .split_large_modules_WGCNA(index.vector = initial.index.vector,
                                                  dis = dis,
                                                  max.size = max.size,
                                                  min.size = min.size,
@@ -479,7 +479,7 @@ find_WGCNA_mods <- function(x,
 #' @return an integer vector of length p with oversized modules split where possible
 
 #' @keywords internal
-.split_large_modules <- function(index.vector,
+.split_large_modules_WGCNA <- function(index.vector,
                                  dis,
                                  max.size,
                                  min.size,
@@ -699,40 +699,6 @@ find_WGCNA_mods <- function(x,
   return(sim)
 }
 
-#' Helper to find_ICA_mods that splits modules exceeding max.size by re-running ICA
-#' @param index.vector an integer vector of length p assigning each node to a module
-#' @param x a numeric matrix with p features (rows) and n samples (columns)
-#' @param max.size a numeric, the maximum number of nodes allowed in a module
-#' @param ... additional arguments passed to fastICA::fastICA
-
-#' @return an integer vector of length p with oversized modules split where possible
-
-#' @keywords internal
-.split_large_modules_ICA <- function(index.vector, x, max.size, ...) {
-  to.big <- as.numeric(names(which(table(index.vector) > max.size)))
-  to.big <- to.big[to.big != 0]
-  if (length(to.big) == 0) return(index.vector)
-
-  message("Modules ", paste(to.big, collapse = ", "), " are too large; attempting to split with ICA...")
-  for (m in to.big) {
-    m.nodes <- which(index.vector == m)
-    # extract just enough components to bring sub-modules within max.size
-    n.split <- min(ceiling(length(m.nodes) / max.size), length(m.nodes), ncol(x))
-    if (n.split < 2) next
-
-    ica <- fastICA::fastICA(X = as.matrix(x[m.nodes, , drop = FALSE]), n.comp = n.split, ...)
-    sub.index <- apply(abs(ica$S), 1, which.max)
-    if (length(unique(sub.index)) < 2) {
-      message("Module ", m, " failed to split into at least two new modules.")
-      next
-    }
-    message("Splitting module ", m, " into ", length(unique(sub.index)), " new modules.")
-    # offset new labels by the current max so they do not collide with existing modules
-    index.vector[m.nodes] <- sub.index + max(index.vector)
-  }
-  return(index.vector)
-}
-
 #' Detect co-expression modules from a data matrix using Independent Component Analysis (ICA)
 #' @param x a numeric matrix with p features (rows) and n samples (columns)
 #' @param n.comp an integer, the number of independent components (modules) to extract
@@ -772,9 +738,10 @@ find_ICA_mods <- function(x,
 
   # decompose features into independent components and assign each to its top component
   ICA.results <- fastICA::fastICA(X = as.matrix(x), n.comp = n.comp, ...)
-  initial.index.vector <- apply(abs(ICA.results$S), 1, which.max)
-  score.vector <- apply(abs(ICA.results$S), 1, max)
-  message("ICA produced ", length(unique(initial.index.vector)), " modules.")
+  abs.S <- abs(ICA.results$S)
+  initial.index.vector <- max.col(abs.S, ties.method = "first") # top component per feature
+  score.vector <- abs.S[cbind(seq_len(nrow(abs.S)), initial.index.vector)]
+  message("ICA produced ", .n_modules(initial.index.vector), " modules.")
 
   # minimum number of modules needed to satisfy max.size
   min.mods <- max(1, ceiling(nrow(x) / max.size))
@@ -815,28 +782,59 @@ find_ICA_mods <- function(x,
   # build module objects
   initial.index.vector <- as.numeric(initial.index.vector)
   modified.index.vector <- as.numeric(modified.index.vector)
-  initial.mods <- methods::new("module",
-                               source = "find_ICA_mods initial mods",
-                               data.dim = dim(x),
-                               overlapping = FALSE,
-                               index.vector = initial.index.vector,
-                               score.vector = score.vector,
-                               index.list = split(1:nrow(x), initial.index.vector),
-                               name.list = split(rownames(x), initial.index.vector))
-  final.mods <- methods::new("module",
-                             source = "find_ICA_mods traded mods",
-                             data.dim = dim(x),
-                             overlapping = FALSE,
-                             index.vector = modified.index.vector,
-                             score.vector = score.vector,
-                             index.list = split(1:nrow(x), modified.index.vector),
-                             name.list = split(rownames(x), modified.index.vector))
+  build_mods <- function(src, iv){
+    methods::new("module",
+                 source = src,
+                 data.dim = dim(x),
+                 overlapping = FALSE,
+                 index.vector = iv,
+                 score.vector = score.vector,
+                 index.list = split(seq_len(nrow(x)), iv),
+                 name.list = split(rownames(x), iv))
+  }
+  initial.mods <- build_mods("find_ICA_mods initial mods", initial.index.vector)
+  final.mods   <- build_mods("find_ICA_mods traded mods",  modified.index.vector)
 
   return(list(
     similarity = similarity,
     initial.mods = initial.mods,
     final.mods = final.mods
   ))
+}
+
+#' Helper to find_ICA_mods that splits modules exceeding max.size by re-running ICA
+#' @param index.vector an integer vector of length p assigning each node to a module
+#' @param x a numeric matrix with p features (rows) and n samples (columns)
+#' @param max.size a numeric, the maximum number of nodes allowed in a module
+#' @param ... additional arguments passed to fastICA::fastICA
+
+#' @return an integer vector of length p with oversized modules split where possible
+
+#' @keywords internal
+.split_large_modules_ICA <- function(index.vector, x, max.size, ...) {
+  to.big <- as.numeric(names(which(table(index.vector) > max.size)))
+  to.big <- to.big[to.big != 0]
+  if (length(to.big) == 0) return(index.vector)
+
+  message("Modules ", paste(to.big, collapse = ", "), " are too large; attempting to split with ICA...")
+  for (m in to.big) {
+    m.nodes <- which(index.vector == m)
+    # extract just enough components to bring sub-modules within max.size
+    n.split <- min(ceiling(length(m.nodes) / max.size), length(m.nodes), ncol(x))
+    if (n.split < 2) next
+
+    ica <- fastICA::fastICA(X = as.matrix(x[m.nodes, , drop = FALSE]), n.comp = n.split, ...)
+    sub.index <- apply(abs(ica$S), 1, which.max)
+    n.new <- .n_modules(sub.index)
+    if (n.new < 2) {
+      message("Module ", m, " failed to split into at least two new modules.")
+      next
+    }
+    message("Splitting module ", m, " into ", n.new, " new modules.")
+    # offset new labels by the current max so they do not collide with existing modules
+    index.vector[m.nodes] <- sub.index + max(index.vector)
+  }
+  return(index.vector)
 }
 
 
@@ -858,9 +856,9 @@ find_ICA_mods <- function(x,
 
 #' @export
 eigen_fuzzy_modules <- function(x, input.modules, max.size, n.pc = 2, ratio = 1.5){
-  # check if any modules are to large
-  if (any(lapply(input.modules@index.list, length) > max.size)) {
-    stop("Some modules are to large, increase maxsize.")
+  # check if any modules are too large
+  if (any(lengths(input.modules@index.list) > max.size)) {
+    stop("Some modules are too large, increase max.size.")
   }
 
   # create new index list (list of nodes in each fuzzy module by index)
@@ -871,32 +869,21 @@ eigen_fuzzy_modules <- function(x, input.modules, max.size, n.pc = 2, ratio = 1.
     if(f.size > max.size){f.size <- max.size}
     n.fuzzy.nodes <- f.size - length(mod.nodes)
 
-    # get the modules PC
-    mod.PC <- stats::prcomp(t(x[mod.nodes,]), scale. = TRUE)
-    # var.exp <- lapply(1:n.pc, function(i){
-    #   (mod.PC$sdev[i] / sum(mod.PC$sdev))*100
-    # })
-    # cat(
-    #   "First", n.pc, "principle componets used to define fuzzy modules explain",
-    #   round(do.call(sum, var.exp)), "% variance in module", m,
-    #   "\n"
-    # )
+    # get the module's principal components
+    mod.PC <- stats::prcomp(t(x[mod.nodes, , drop = FALSE]), scale. = TRUE)
 
-    # define eigen gene based on first n.pc principle components
-    mod.eigen <- lapply(1:n.pc, function(i){mod.PC$x[,i]})
-
-    # get genes outside the module the correlated with the eigen gene
-    eigen.cor <- lapply(mod.eigen, function(pc){
-      abs(apply(x[-mod.nodes,], 1, function(x) stats::cor(x, pc)))
-    })
-    eigen.cor <- Reduce('+', eigen.cor)
+    # score each gene outside the module by its summed absolute correlation
+    # with the module's first n.pc principal components
+    pc.cor <- stats::cor(t(x[-mod.nodes, , drop = FALSE]),
+                         mod.PC$x[, seq_len(n.pc), drop = FALSE])
+    eigen.cor <- rowSums(abs(pc.cor))
 
     corRank <- sort(eigen.cor, decreasing = TRUE) # ranked absolute correlation
-    fuzzy.nodes <- names(corRank[1:n.fuzzy.nodes]) # n.fuzzy.nodes nodes with the highest ranks
+    fuzzy.nodes <- names(corRank[seq_len(n.fuzzy.nodes)]) # highest-ranked fuzzy nodes
 
     # convert fuzzy nodes to numerics (stored naturally as names)
     fuzzy.nodes <- which(rownames(x) %in% fuzzy.nodes)
-    names(fuzzy.nodes) <- rownames(x[fuzzy.nodes,])
+    names(fuzzy.nodes) <- rownames(x)[fuzzy.nodes]
 
     # return fuzzy module combining original and fuzzy nodes
     sort(c(mod.nodes, fuzzy.nodes))
@@ -927,9 +914,9 @@ eigen_fuzzy_modules <- function(x, input.modules, max.size, n.pc = 2, ratio = 1.
 
 #' @export
 adj_fuzzy_modules <- function(x, adj, input.modules, max.size, ratio){
-  # check if any modules are to large
-  if (any(lapply(input.modules@index.list, length) > max.size)) {
-    stop("Some modules are to large, increase maxsize.")
+  # check if any modules are too large
+  if (any(lengths(input.modules@index.list) > max.size)) {
+    stop("Some modules are too large, increase max.size.")
   }
 
   # create new index list (list of nodes in each fuzzy module by index)
@@ -941,18 +928,18 @@ adj_fuzzy_modules <- function(x, adj, input.modules, max.size, ratio){
     n.fuzzy.nodes <- f.size - length(mod.nodes)
 
     # get matrix of nodes in module adj with nodes outside module
-    in.out.adj <- adj[mod.nodes, -mod.nodes]
+    in.out.adj <- adj[mod.nodes, -mod.nodes, drop = FALSE]
 
     # get max adj of node outside module with node inside module
-    out.max <- apply(in.out.adj,2 ,max)
+    out.max <- apply(in.out.adj, 2, max)
 
     # rank and select fuzzy nodes based on adj
     adj.rank <- order(out.max, decreasing = TRUE)
-    fuzzy.nodes <- colnames(in.out.adj)[adj.rank[1:n.fuzzy.nodes]]
+    fuzzy.nodes <- colnames(in.out.adj)[adj.rank[seq_len(n.fuzzy.nodes)]]
 
     # convert fuzzy nodes to numerics (stored naturally as names)
     fuzzy.nodes <- which(rownames(x) %in% fuzzy.nodes)
-    names(fuzzy.nodes) <- rownames(x[fuzzy.nodes,])
+    names(fuzzy.nodes) <- rownames(x)[fuzzy.nodes]
 
     # return fuzzy module combining original and fuzzy nodes
     sort(c(mod.nodes, fuzzy.nodes))
@@ -1025,13 +1012,14 @@ module_match <- function(m1, m2){
   size2 <- unname(lengths(idx2))
 
   # --- OUTPUT 1: overlap matrix of shared-node counts ---
-  overlap.matrix <- matrix(0L, nrow = n1, ncol = n2,
-                           dimnames = list(lab1, lab2))
-  for(i in seq_len(n1)){
-    for(j in seq_len(n2)){
-      overlap.matrix[i, j] <- length(intersect(idx1[[i]], idx2[[j]]))
-    }
+  # membership indicators over the shared node universe; the matrix product then
+  # counts, for each (i, j), the nodes shared between module i and module j
+  membership <- function(idx){
+    matrix(vapply(idx, function(s) as.integer(nodes1 %in% s), integer(length(nodes1))),
+           nrow = length(nodes1))
   }
+  overlap.matrix <- crossprod(membership(idx1), membership(idx2)) # t(A) %*% B
+  dimnames(overlap.matrix) <- list(lab1, lab2)
 
   # --- OUTPUT 2: best-match table ---
   # greedily pair modules using the precomputed overlap matrix
@@ -1137,7 +1125,7 @@ module_contiguity <- function(g, test.module){
   edges <- igraph::as_edgelist(g, names = FALSE)
 
   # --- per-module within / between edge counts ---
-  counts <- lapply(module.names, function(nm){
+  counts <- vapply(module.names, function(nm){
     # membership indicator over the graph's vertices
     member <- v.names %in% nm
     if(nrow(edges) == 0){
@@ -1147,10 +1135,10 @@ module_contiguity <- function(g, test.module){
     b.in <- member[edges[, 2]]
     c(within  = sum(a.in & b.in),       # both endpoints inside the module
       between = sum(xor(a.in, b.in)))   # exactly one endpoint inside the module
-  })
+  }, numeric(2))
 
-  within.edges   <- vapply(counts, function(z) as.numeric(z["within"]),  numeric(1))
-  between.edges  <- vapply(counts, function(z) as.numeric(z["between"]), numeric(1))
+  within.edges   <- counts["within", ]
+  between.edges  <- counts["between", ]
   total.edges    <- within.edges + between.edges
   percent.within <- ifelse(total.edges > 0, 100 * within.edges / total.edges, NA_real_)
 
@@ -1218,7 +1206,8 @@ module_correlation <- function(x, input.modules, cor.method = c("pearson", "spea
 
   # gather all upper triangular correlations into one long data frame for plotting
   plot.df <- do.call(rbind, lapply(seq_along(cor.list), function(i){
-    vals <- cor.list[[i]][upper.tri(cor.list[[i]])]
+    cm <- cor.list[[i]]
+    vals <- cm[upper.tri(cm)]
     # modules with a single feature contribute no pairwise correlations
     if(length(vals) == 0){return(NULL)}
     data.frame(
