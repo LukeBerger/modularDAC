@@ -19,25 +19,17 @@ setClass("module",
          ),
          validity = function(object){
            # check that each module has the same number of feature indexes and names
-           if(
-             !all(
-               unlist(
-                 lapply(seq_along(object@index.list), function(i){
-                   length(object@index.list[[i]]) == length(object@name.list[[i]])
-                 })
-               )
-             )
-           ){return("index list and name list must be the same length")}
-           # if not overlapping...
+           if(!all(lengths(object@index.list) == lengths(object@name.list))){
+             return("index list and name list must be the same length")
+           }
+           # if not overlapping, no index may appear in more than one module
            if(!object@overlapping){
-             # check that every module contains a unique index
-             if(any(unlist(
-               lapply(seq_along(object@index.list), function(i){
-                 any(unlist(object@index.list[i]) %in% unlist(object@index.list[-i]))
-               })
-             ))){return("All modules must contain overlaps with at least on other module")}
+             if(any(duplicated(unlist(object@index.list)))){
+               return("Non-overlapping modules must not share indices")
+             }
            }
 
+           TRUE
          }
 
 )
@@ -53,12 +45,13 @@ setClass("module",
 #' @export
 true_modules <- function(g){
   # build module object from ground-truth module vertex attribute
+  module <- igraph::V(g)$module
   methods::new("module",
                 source = "True Modules",
                 overlapping = FALSE,
-                index.vector = igraph::V(g)$module,
-                index.list = split(1:length(g) , igraph::V(g)$module),
-                name.list = split(igraph::V(g)$name , igraph::V(g)$module)
+                index.vector = module,
+                index.list = split(seq_len(igraph::vcount(g)), module),
+                name.list = split(igraph::V(g)$name, module)
   )
 }
 
@@ -73,16 +66,11 @@ true_modules <- function(g){
 
 #' @export
 true_fuzzy <- function(m, g){
+  node.names <- igraph::V(g)$name
   # collect all nodes within 2 graph hops of each module
-  f.index.list <- lapply(m@index.list, function(x){
+  f.index.list <- lapply(m@index.list, function(idx){
     sort(unique(unlist(
-      igraph::neighborhood(
-        g,
-        order = 2,
-        nodes = igraph::V(g)[x],
-        mode = "all",
-        mindist = 0
-      )
+      igraph::neighborhood(g, order = 2, nodes = idx, mode = "all", mindist = 0)
     )))
   })
   # build fuzzy module object with expanded index list
@@ -90,7 +78,7 @@ true_fuzzy <- function(m, g){
                source = "True Module Fuzzy",
                overlapping = TRUE,
                index.list = f.index.list,
-               name.list = lapply(f.index.list, function(m) igraph::V(g)$name[m])
+               name.list = lapply(f.index.list, function(idx) node.names[idx])
   )
 }
 
@@ -103,27 +91,20 @@ true_fuzzy <- function(m, g){
 #' @keywords internal
 .module_check <- function(x, m){
   if(m@overlapping){
-    # check that overlaps exist between all modules
-    if(!all(
-      unlist(
-        lapply(seq_along(m@index.list), function(i){
-          any(unlist(m@index.list[i]) %in% unlist(m@index.list[-i]))
-        })
-      )
-    )){stop(paste(m@source, "has mules with incomplete overlaps"))}
+    # every module must overlap with at least one other module
+    all.idx  <- unlist(m@index.list)
+    dup.idx  <- unique(all.idx[duplicated(all.idx)])           # indices in >1 module
+    overlaps <- vapply(m@index.list, function(idx) any(idx %in% dup.idx), logical(1))
+    if(!all(overlaps)){stop(paste(m@source, "has modules with incomplete overlaps"))}
   }else{
     # check feature number matches input data
     if(length(m@index.vector) != nrow(x)){
-      stop(paste(m@source, "produced a index vector with the incorrect number of features"))
+      stop(paste(m@source, "produced an index vector with the incorrect number of features"))
     }
-    # check that there are no overlaps
-    if(any(
-      unlist(
-        lapply(seq_along(m@index.list), function(i){
-          any(unlist(m@index.list[i]) %in% unlist(m@index.list[-i]))
-        })
-      )
-    )){stop(paste(m@source, "has mules with overlaps"))}
+    # no index may appear in more than one module
+    if(any(duplicated(unlist(m@index.list)))){
+      stop(paste(m@source, "has modules with overlaps"))
+    }
   }
 
   # check that all feature names in modules come from the data
@@ -131,13 +112,9 @@ true_fuzzy <- function(m, g){
     stop(paste(m@source, "feature names do not match input data"))
   }
   # check that each module has the same number of feature indexes and names
-  if(
-    !all(
-      unlist(
-        lapply(seq_along(m@index.list), function(i) length(m@index.list[[i]]) == length(m@name.list[[i]]))
-      )
-    )
-  ){stop(paste(m@source, "produced differnet length index and name lists"))}
+  if(!all(lengths(m@index.list) == lengths(m@name.list))){
+    stop(paste(m@source, "produced different length index and name lists"))
+  }
   return(TRUE)
 }
 
