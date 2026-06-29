@@ -190,9 +190,8 @@ find_WGCNA_mods <- function(x,
   cor.options <- if (cor.FN == "cor") list(use = "p") else list(pearsonFallback = "individual")
 
   # drop features with no variance (they cannot be placed in any module)
-  rv <- MatrixGenerics::rowVars(x)
-  if (any(rv == 0)) {
-    rm.r <- which(rv == 0)
+  rm.r <- which(MatrixGenerics::rowVars(x) == 0)
+  if (length(rm.r) > 0) {
     warning("Some features have zero variance and were removed; they could not be placed in any module.")
     message("Removed rows: ", paste(rm.r, collapse = ", "))
     x <- x[-rm.r, , drop = FALSE]
@@ -284,28 +283,33 @@ find_WGCNA_mods <- function(x,
   # build module objects
   initial.index.vector <- as.numeric(initial.index.vector)
   modified.index.vector <- as.numeric(modified.index.vector)
-  initial.mods <- methods::new("module",
-                               source = "find_WGCNA_mods initial mods",
-                               data.dim = dim(x),
-                               overlapping = FALSE,
-                               index.vector = initial.index.vector,
-                               index.list = split(1:nrow(x), initial.index.vector),
-                               name.list = split(rownames(x), initial.index.vector)
-  )
-  final.mods <- methods::new("module",
-                             source = "find_WGCNA_mods traded mods",
-                             data.dim = dim(x),
-                             overlapping = FALSE,
-                             index.vector = modified.index.vector,
-                             index.list = split(1:nrow(x), modified.index.vector),
-                             name.list = split(rownames(x), modified.index.vector)
-  )
+  build_mods <- function(src, iv){
+    methods::new("module",
+                 source = src,
+                 data.dim = dim(x),
+                 overlapping = FALSE,
+                 index.vector = iv,
+                 index.list = split(seq_len(nrow(x)), iv),
+                 name.list = split(rownames(x), iv))
+  }
+  initial.mods <- build_mods("find_WGCNA_mods initial mods", initial.index.vector)
+  final.mods   <- build_mods("find_WGCNA_mods traded mods",  modified.index.vector)
 
   return(list(
     wgcna.adj = adj,
     initial.mods = initial.mods,
     final.mods = final.mods
   ))
+}
+
+#' Count the modules in an index vector, excluding the unassigned group (0)
+#' @param index.vector an integer vector assigning each node to a module (0 = unassigned)
+
+#' @return an integer, the number of distinct non-zero modules
+
+#' @keywords internal
+.n_modules <- function(index.vector){
+  length(unique(index.vector[index.vector != 0]))
 }
 
 #' Select soft-thresholding power from WGCNA::pickSoftThreshold output
@@ -358,6 +362,7 @@ find_WGCNA_mods <- function(x,
   while (length(giving) > 0) {
     giving.nodes <- which(index.vector %in% giving)
     receiving <- as.numeric(names(which(mod.size < max.size)))
+    receiving <- receiving[receiving != 0] # never trade nodes into the unassigned group
     if (length(receiving) == 0) {
       warning("No module has room to receive nodes; some modules remain above max.size.")
       break
@@ -418,7 +423,7 @@ find_WGCNA_mods <- function(x,
                               cut.height = NULL,
                               max.size = Inf,
                               min.cut.height = 0) {
-  n.mods <- length(unique(index.vector[index.vector != 0]))
+  n.mods <- .n_modules(index.vector)
   if (n.mods >= min.mods) {
     message("Initial WGCNA call produced ", n.mods, " modules.")
     return(list(index.vector = index.vector, cut.height = cut.height))
@@ -456,7 +461,7 @@ find_WGCNA_mods <- function(x,
               "Consider increasing max.size or using another method to generate modules.")
       stop("No modules found after lowering cut height")
     }
-    n.mods <- length(unique(index.vector[index.vector != 0]))
+    n.mods <- .n_modules(index.vector)
   }
   message("Final cut height ", round(cut.height, 4), " produced ", n.mods, " modules.")
   return(list(index.vector = index.vector, cut.height = cut.height))
@@ -504,19 +509,19 @@ find_WGCNA_mods <- function(x,
                                                     verbose = FALSE)
 
     # only accept the split if it is mostly assigned and yields at least two modules
+    n.new <- .n_modules(m.index.vector)
     pass <- TRUE
     if (sum(m.index.vector == 0) > length(m.index.vector) / 2) {
       pass <- FALSE
       message("Module ", m, " failed to split due to a high number of unassigned nodes.")
     }
-    if (length(unique(m.index.vector[m.index.vector != 0])) < 2) {
+    if (n.new < 2) {
       pass <- FALSE
       message("Module ", m, " failed to split into at least two new modules.")
     }
 
     if (pass) {
-      message("Splitting module ", m, " into ",
-              length(unique(m.index.vector[m.index.vector != 0])), " new modules.")
+      message("Splitting module ", m, " into ", n.new, " new modules.")
       # offset new labels by the current max so they do not collide with existing modules
       index.vector[m.nodes] <- ifelse(m.index.vector == 0,
                                       0, m.index.vector + max(index.vector))
@@ -622,7 +627,7 @@ find_WGCNA_mods <- function(x,
 #' @keywords internal
 .merge_modules <- function(index.vector, t.x, cor.FN, cor.options, merging.cut, min.mods, max.size) {
   message("Merging modules based on eigengene similarity...")
-  n.mods <- length(unique(index.vector[index.vector != 0]))
+  n.mods <- .n_modules(index.vector)
   n.merges <- 0
   module.eigengenes <- NULL # reused across rounds to skip recomputing module eigengenes
   while (n.mods > min.mods && all(table(index.vector) < max.size)) {
@@ -640,7 +645,7 @@ find_WGCNA_mods <- function(x,
     }
     index.vector <- merged$colors
     module.eigengenes <- merged$newMEs
-    n.mods <- length(unique(index.vector[index.vector != 0]))
+    n.mods <- .n_modules(index.vector)
     n.merges <- n.merges + 1
   }
   if (n.merges == 0) {
