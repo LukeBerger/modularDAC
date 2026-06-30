@@ -14,7 +14,7 @@ quiet <- function(expr) {
 set.seed(1)
 .g <- make_modular_graph()
 .x <- sim_graph_data(.g, n.samples = 100)          # p x n (features x samples)
-.out     <- quiet(learn_SILGGM_graph(t(.x)))       # SILGGM expects n x p
+.out     <- quiet(learn_SILGGM_graph(.x))          # learn_* take p x n (features x samples)
 .learned <- .out$graph                             # the learned igraph
 
 # ---------------------------------------------------------------------------
@@ -61,8 +61,8 @@ test_that("learn_SILGGM_graph() recovers a non-empty subset of the true edges", 
 
 test_that("learn_SILGGM_graph() drops more edges as the FDR threshold tightens", {
   # a stricter (smaller) max.fdr should never retain MORE edges than a lax one
-  strict <- quiet(learn_SILGGM_graph(t(.x), fdr.filter = TRUE, max.fdr = 0.001))$graph
-  loose  <- quiet(learn_SILGGM_graph(t(.x), fdr.filter = TRUE, max.fdr = 0.5))$graph
+  strict <- quiet(learn_SILGGM_graph(.x, fdr.filter = TRUE, max.fdr = 0.001))$graph
+  loose  <- quiet(learn_SILGGM_graph(.x, fdr.filter = TRUE, max.fdr = 0.5))$graph
   expect_lte(igraph::gsize(strict), igraph::gsize(loose))
 })
 
@@ -71,7 +71,7 @@ test_that("learn_SILGGM_graph() drops more edges as the FDR threshold tightens",
 # ---------------------------------------------------------------------------
 
 test_that("learn_WGCNA_graph() returns a weighted igraph alongside the adjacency matrix", {
-  out <- quiet(learn_WGCNA_graph(t(.x)))   # WGCNA expects n x p (samples x features)
+  out <- quiet(learn_WGCNA_graph(.x))      # p x n (features x samples)
 
   expect_type(out, "list")
   expect_named(out, c("graph", "weights"))
@@ -94,8 +94,8 @@ test_that("learn_WGCNA_graph() returns a weighted igraph alongside the adjacency
 })
 
 test_that("learn_WGCNA_graph() retains fewer edges as the threshold rises", {
-  loose  <- quiet(learn_WGCNA_graph(t(.x), threshold = 0.01))$graph
-  strict <- quiet(learn_WGCNA_graph(t(.x), threshold = 0.5))$graph
+  loose  <- quiet(learn_WGCNA_graph(.x, threshold = 0.01))$graph
+  strict <- quiet(learn_WGCNA_graph(.x, threshold = 0.5))$graph
   expect_lte(igraph::gsize(strict), igraph::gsize(loose))
 })
 
@@ -105,7 +105,7 @@ test_that("learn_WGCNA_graph() retains fewer edges as the threshold rises", {
 
 test_that("learn_ARACNE_graph() returns a weighted igraph alongside the MI matrix", {
   skip_if_not_installed("minet")
-  out <- quiet(learn_ARACNE_graph(t(.x)))  # mutual information over features
+  out <- quiet(learn_ARACNE_graph(.x))     # mutual information over features (p x n input)
 
   expect_type(out, "list")
   expect_named(out, c("graph", "weights"))
