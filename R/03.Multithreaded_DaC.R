@@ -16,7 +16,7 @@
 
 #' @return a list with elements: modular.subgraphs (list of igraph objects, one per module), final.graph (igraph object combining all sub-graphs), and other.outputs (any additional outputs from graph learning)
 
-#' @importFrom foreach foreach %dopar%
+#' @importFrom foreach foreach %dopar% registerDoSEQ
 #' @importFrom igraph is_igraph
 
 #' @export
@@ -90,11 +90,18 @@ divide_and_conquer <- function(x,
 
   # set up multithreading
 
-  # if given access to multiple cores...
+  # set up the parallel backend; always release it on exit -- stop the workers AND
+  # reset foreach to the sequential backend -- so later parallel code starts clean
   if (n.cores > 1) {
     cl <- parallel::makeCluster(n.cores)
+    on.exit({
+      parallel::stopCluster(cl)
+      foreach::registerDoSEQ()
+    }, add = TRUE)
     doParallel::registerDoParallel(cl)
-    on.exit(parallel::stopCluster(cl))
+  } else {
+    # run sequentially without leaving (or relying on) a stale backend
+    foreach::registerDoSEQ()
   }
 
   # divide data and learn graphs
