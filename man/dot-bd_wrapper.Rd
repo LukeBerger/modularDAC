@@ -7,7 +7,7 @@
 .bd_wrapper(x)
 }
 \arguments{
-\item{x}{a numeric matrix with n samples (rows) and p features (columns), as prepared by .bd_arg_wrapper}
+\item{x}{a numeric matrix with p features (rows) and n samples (columns), as prepared by .bd_arg_wrapper}
 }
 \value{
 a list containing the learned subgraphs data transformed

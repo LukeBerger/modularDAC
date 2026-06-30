@@ -14,7 +14,7 @@ divide_and_conquer(
   out.parsing.func = .default_output_parser,
   packages.to.each = c("SILGGM", "igraph"),
   export.to.each = c("learn_SILGGM_graph", ".upper_tri_to_matrix", ".matrix_p_adjust",
-    ".upper_tri_vec", ".pcor_zscore", ".pvalue", ".abs_pcor_filter"),
+    ".upper_tri_vec", ".pcor_zscore", ".pvalue"),
   ...
 )
 }

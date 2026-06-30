@@ -21,7 +21,7 @@
 )
 }
 \arguments{
-\item{dat}{a numeric matrix with n samples (rows) and p features (columns), as prepared by .RSNet_arg_wrapper}
+\item{dat}{a numeric matrix with p features (rows) and n samples (columns), as prepared by .RSNet_arg_wrapper}
 
 \item{num_iteration}{an integer, the number of bootstrap/subsampling iterations to perform}
 

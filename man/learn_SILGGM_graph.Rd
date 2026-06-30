@@ -7,9 +7,9 @@
 learn_SILGGM_graph(
   x,
   method = "B_NW_SL",
-  global = T,
+  global = TRUE,
   alpha = 0.05,
-  fdr.filter = T,
+  fdr.filter = TRUE,
   max.fdr = 0.05,
   pos.cut = 0,
   neg.cut = 0,
@@ -36,7 +36,7 @@ learn_SILGGM_graph(
 \item{...}{additional arguments passed to SILGGM::SILGGM}
 }
 \value{
-a named list with two elements: 'graph', the learned weighted igraph object, and 'weights', the symmetric partial correlation matrix
+a named list with two elements: 'graph', the learned weighted igraph object, and 'weights', the symmetric partial correlation matrix (or, for the global-FDR methods 'GFC_SL'/'GFC_L', the symmetric test-statistic matrix)
 }
 \description{
 Learn a gene co-expression graph from a data matrix using SILGGM
