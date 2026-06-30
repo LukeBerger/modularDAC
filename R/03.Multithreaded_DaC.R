@@ -41,7 +41,7 @@ divide_and_conquer <- function(x,
 
   # check if data is a numeric matrix
   if (!is.matrix(x) || !is.numeric(x)) {
-    stop("'data' should be a p x n numeric matrix ")
+    stop("'x' should be a p x n numeric matrix")
   }
 
   # extract index list
@@ -51,10 +51,12 @@ divide_and_conquer <- function(x,
   if (!is.list(subgraph.index.list) || length(subgraph.index.list) == 0) {
     stop("'subgraph.index.list' must be a non-empty list of integer vectors.")
   }
-  row.range <- c(1:nrow(x)) # get rows of data  matrix
+  row.range <- seq_len(nrow(x)) # valid row indices of the data matrix
+  # indices shared by more than one subgraph (used for the overlap check below)
+  all.idx <- unlist(subgraph.index.list)
+  dup.idx <- unique(all.idx[duplicated(all.idx)])
   for (i in seq_along(subgraph.index.list)) { # for each subgraph
     sg <- subgraph.index.list[[i]] # get the subgraph node indices
-    other.indexs <- unlist(subgraph.index.list[-i]) # and the other graphs indices
     # check that all values are numeric
     if (!is.numeric(sg) || any(sg %% 1 != 0)) {
       stop(sprintf("Subgraph %d has non integer values.", i))
@@ -64,26 +66,17 @@ divide_and_conquer <- function(x,
       stop(sprintf("Subgraph %d contains invalid row indices.", i))
     }
     # check that the subgraphs all contain overlaps (necessary for reconnecting after learning)
-    if (!any(sg %in% other.indexs)){
+    if (!any(sg %in% dup.idx)){
       warning(sprintf("Subgraph %d has no overlaps with the other subgraphs.", i))
     }
   }
 
   # check every row index is in at least one subGraph
-  if (!all(row.range %in% unique(unlist(subgraph.index.list)))) {
+  if (!all(row.range %in% unique(all.idx))) {
     stop("Not all rows of data are covered by 'subgraph.index.list'.")
   }
 
-  # check if both functions exist
-  if (!is.function(arg.wrapping.func)){
-    stop("Argument wrapping function is not a function.")
-  }
-  if (!is.function(graph.learning.func)){
-    stop("Graph learning function is not a function.")
-  }
-  if (!is.function(out.parsing.func)){
-    stop("Output Parsing function is not a function.")
-  }
+  # resolve the supplied functions (match.fun accepts a function or a name)
   arg.wrapping.func <- match.fun(arg.wrapping.func)
   graph.learning.func <- match.fun(graph.learning.func)
   out.parsing.func <- match.fun(out.parsing.func)
@@ -108,16 +101,14 @@ divide_and_conquer <- function(x,
 
   # divide data based on subGraph indices
   sub.x  <- lapply(subgraph.index.list, function(sg){
-    x[sg,]
+    x[sg, , drop = FALSE]
   })
 
   # learn graphs in parallel
   # nOTE: this function can be substituted for any graph learning function that returns and Igraph object
+  # (foreach with no .combine returns a list of results, one per module)
   args <- arg.wrapping.func(sub.x, ...)
   graph.learning.outputs <- foreach::foreach(i = seq_along(args),
-                                             .combine = 'list',
-                                             .multicombine = TRUE,
-                                             .maxcombine = length(args),
                                              .packages = packages.to.each,
                                              .export = export.to.each
   ) %dopar% {
@@ -127,7 +118,7 @@ divide_and_conquer <- function(x,
   # separate outputs of graph learning into a list of learned igraph objects and other outputs
   parsed.outputs <- out.parsing.func(graph.learning.outputs)
 
-  if(!all(unlist(lapply(parsed.outputs$learned.graphs , igraph::is_igraph)))){
+  if(!all(vapply(parsed.outputs$learned.graphs, igraph::is_igraph, logical(1)))){
     stop("The 'learned graphs' within 'parsed outputs' are not all igraph objects.
          Check your graph learning and output parsing functions
          and ensure parsed.outputs$learned.graphs contains a list of igraphs with overlapping node names")
