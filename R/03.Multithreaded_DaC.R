@@ -174,33 +174,30 @@ divide_and_conquer <- function(x,
   for (sg in sub.graphs) {
     sg.nodes <- igraph::V(sg)$name
 
-    # weighted adjacency for this sub-graph, placed into the full node frame
-    # (0 wherever the sub-graph has no edge or does not contain the node)
-    w.sub <- matrix(0, p, p, dimnames = list(nodes, nodes))
-    if (igraph::is_weighted(sg)) {
-      adj.sub <- as.matrix(igraph::as_adjacency_matrix(sg, attr = "weight"))
-    } else {
-      adj.sub <- as.matrix(igraph::as_adjacency_matrix(sg))
-    }
-    w.sub[sg.nodes, sg.nodes] <- adj.sub[sg.nodes, sg.nodes]
+    # this sub-graph's weighted adjacency, in node order
+    adj.sub <- as.matrix(igraph::as_adjacency_matrix(
+      sg, attr = if (igraph::is_weighted(sg)) "weight" else NULL))
+    blk <- adj.sub[sg.nodes, sg.nodes]
+    a   <- abs(blk)
 
-    # pairs that are possible in this sub-graph (both endpoints present)
-    present  <- nodes %in% sg.nodes
-    possible <- outer(present, present)
+    # all updates are confined to this sub-graph's block of the global matrices:
+    # every pair within sg.nodes is "possible", pairs outside are untouched.
+    # An absent edge contributes magnitude 0 and so wins the smallest-magnitude
+    # update, which is what drops edges missing from a possible sub-graph.
+    cur.abs <- min.abs[sg.nodes, sg.nodes]
+    upd <- a < cur.abs
+    cur.abs[upd] <- a[upd]
+    min.abs[sg.nodes, sg.nodes] <- cur.abs
 
-    # smallest-magnitude update, restricted to pairs possible in this sub-graph;
-    # an absent edge contributes magnitude 0 and so wins the minimum, which is
-    # what drops edges that are missing from a possible sub-graph
-    a   <- abs(w.sub)
-    upd <- possible & (a < min.abs)
-    min.abs[upd]    <- a[upd]
-    min.signed[upd] <- w.sub[upd]
+    cur.signed <- min.signed[sg.nodes, sg.nodes]
+    cur.signed[upd] <- blk[upd]
+    min.signed[sg.nodes, sg.nodes] <- cur.signed
 
     # running sums for the mean, the possible counts, and the sign tallies
-    weight.sum     <- weight.sum + w.sub
-    possible.count <- possible.count + possible
-    pos.count      <- pos.count + (w.sub > 0)
-    neg.count      <- neg.count + (w.sub < 0)
+    weight.sum[sg.nodes, sg.nodes]     <- weight.sum[sg.nodes, sg.nodes] + blk
+    possible.count[sg.nodes, sg.nodes] <- possible.count[sg.nodes, sg.nodes] + 1
+    pos.count[sg.nodes, sg.nodes]      <- pos.count[sg.nodes, sg.nodes] + (blk > 0)
+    neg.count[sg.nodes, sg.nodes]      <- neg.count[sg.nodes, sg.nodes] + (blk < 0)
   }
 
   # reconcile to a single weighted adjacency matrix
@@ -250,9 +247,9 @@ divide_and_conquer <- function(x,
 #' @keywords internal
 .default_arg_wrapper <- function(sub.x,
                                  method  = "B_NW_SL",
-                                 global = T,
+                                 global = TRUE,
                                  alpha = 0.05,
-                                 fdr.filter = T,
+                                 fdr.filter = TRUE,
                                  max.fdr = 0.05,
                                  pos.cut = 0,
                                  neg.cut = 0){
@@ -288,10 +285,10 @@ divide_and_conquer <- function(x,
 }
 
 
-#' Argument wrapper for BDgraph: transposes each module data subset for use with BDgraph::bdgraph
+#' Argument wrapper for BDgraph: packages each module data subset for use with BDgraph::bdgraph
 #' @param sub.x a list of numeric matrices, each being a p_i x n subset of x for one module (features as rows)
 
-#' @return a list containing the learned subgraphs data transformed for bdgraph
+#' @return a list of argument lists, one per module, for .bd_wrapper
 
 #' @keywords internal
 .bd_arg_wrapper <- function(sub.x){
@@ -305,7 +302,7 @@ divide_and_conquer <- function(x,
 #' Graph learning wrapper for BDgraph: fits a Gaussian graphical model and returns an igraph object
 #' @param x a numeric matrix with p features (rows) and n samples (columns), as prepared by .bd_arg_wrapper
 
-#' @return a list containing the learned subgraphs data transformed
+#' @return an igraph object, the learned graph
 
 #' @importFrom igraph graph_from_adjacency_matrix
 
@@ -349,7 +346,7 @@ divide_and_conquer <- function(x,
                                cluster_ratio = 1,
                                estimate_CI = TRUE,
                                method = "B_NW_SL",
-                               n_cores =NULL,
+                               n_cores = NULL,
                                CI = 0.95,
                                filter = "pval",
                                threshold = 0.005){
@@ -401,7 +398,7 @@ divide_and_conquer <- function(x,
                                  cluster_ratio = 1,
                                  estimate_CI = TRUE,
                                  method = "B_NW_SL",
-                                 n_cores =NULL,
+                                 n_cores = NULL,
                                  CI = 0.95,
                                  filter = "pval",
                                  threshold = 0.05){
