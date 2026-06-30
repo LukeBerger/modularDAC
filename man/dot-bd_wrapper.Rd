@@ -10,7 +10,7 @@
 \item{x}{a numeric matrix with p features (rows) and n samples (columns), as prepared by .bd_arg_wrapper}
 }
 \value{
-a list containing the learned subgraphs data transformed
+an igraph object, the learned graph
 }
 \description{
 Graph learning wrapper for BDgraph: fits a Gaussian graphical model and returns an igraph object
