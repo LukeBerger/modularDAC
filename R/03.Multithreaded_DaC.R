@@ -33,8 +33,7 @@ divide_and_conquer <- function(x,
                                                   ".matrix_p_adjust",
                                                   ".upper_tri_vec",
                                                   ".pcor_zscore",
-                                                  ".pvalue",
-                                                  ".abs_pcor_filter"),
+                                                  ".pvalue"),
                                ...
 ){
 
@@ -260,16 +259,17 @@ divide_and_conquer <- function(x,
                                  pos.cut = 0,
                                  neg.cut = 0){
 
-  # return a list of packaged args
+  # return a list of packaged args (each module stays feature x sample;
+  # learn_SILGGM_graph transposes internally)
   lapply(sub.x, function(x){
-    list(x = t(x), # transform to fit n x p matrix required by silggm
+    list(x = x,
          method  = method,
          global = global,
          alpha = alpha,
          fdr.filter = fdr.filter,
          max.fdr = max.fdr,
          pos.cut = pos.cut,
-         neg.cut = pos.cut)
+         neg.cut = neg.cut)
   })
 }
 
@@ -299,13 +299,13 @@ divide_and_conquer <- function(x,
 .bd_arg_wrapper <- function(sub.x){
   lapply(sub.x, function(x){
     list(
-      x = t(x)
+      x = x
     )
   })
 }
 
 #' Graph learning wrapper for BDgraph: fits a Gaussian graphical model and returns an igraph object
-#' @param x a numeric matrix with n samples (rows) and p features (columns), as prepared by .bd_arg_wrapper
+#' @param x a numeric matrix with p features (rows) and n samples (columns), as prepared by .bd_arg_wrapper
 
 #' @return a list containing the learned subgraphs data transformed
 
@@ -316,7 +316,9 @@ divide_and_conquer <- function(x,
   if (!requireNamespace("BDgraph", quietly = TRUE)) {
     stop("Package BDgraph is required. Install with: install.packages('BDgraph')", call. = FALSE)
   }
-  bdFit <- BDgraph::bdgraph(x)
+  # BDgraph expects an n samples x p features matrix
+  t.x <- t(x)
+  bdFit <- BDgraph::bdgraph(t.x)
   postProb <- BDgraph::plinks(bdFit)
   adjMat <- BDgraph::select(postProb)
   igraph::graph_from_adjacency_matrix(adjMat, mode = "undirected") # can change this if I want to test edge directional update for .connect_subgraphs
@@ -354,9 +356,10 @@ divide_and_conquer <- function(x,
                                filter = "pval",
                                threshold = 0.005){
 
-  # return a list of packaged args,
+  # return a list of packaged args (each module stays feature x sample;
+  # .RSNet_full_learning transposes internally)
   lapply(sub.x, function(x){
-    list(dat = t(x), # transform to fit n x p matrix required by silggm
+    list(dat = x,
          num_iteration = num_iteration,
          boot = boot,
          sub_ratio = sub_ratio,
@@ -373,7 +376,7 @@ divide_and_conquer <- function(x,
 }
 
 #' Graph learning wrapper for RSNet: generates ensemble and consensus GGM networks from a module data subset
-#' @param dat a numeric matrix with n samples (rows) and p features (columns), as prepared by .RSNet_arg_wrapper
+#' @param dat a numeric matrix with p features (rows) and n samples (columns), as prepared by .RSNet_arg_wrapper
 #' @param num_iteration an integer, the number of bootstrap/subsampling iterations to perform
 #' @param boot a logical, if TRUE bootstrap resampling is used
 #' @param sub_ratio a numeric between 0 and 1, the subsampling ratio applied to samples
@@ -408,7 +411,10 @@ divide_and_conquer <- function(x,
     stop("Package RSNet is required. Install with: install.packages('RSNet')", call. = FALSE)
   }
 
-  ens.net <- RSNet::capture_all(RSNet::ensemble_ggm(dat,
+  # RSNet expects an n samples x p features matrix
+  t.dat <- t(dat)
+
+  ens.net <- RSNet::capture_all(RSNet::ensemble_ggm(t.dat,
                                  num_iteration,
                                  boot,
                                  sub_ratio,

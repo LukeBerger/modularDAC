@@ -21,7 +21,7 @@ utils::globalVariables(".")
 #' @param neg.cut a numeric, the minimum absolute partial correlation for a negative edge to be retained
 #' @param ... additional arguments passed to SILGGM::SILGGM
 
-#' @return a named list with two elements: 'graph', the learned weighted igraph object, and 'weights', the symmetric partial correlation matrix
+#' @return a named list with two elements: 'graph', the learned weighted igraph object, and 'weights', the symmetric partial correlation matrix (or, for the global-FDR methods 'GFC_SL'/'GFC_L', the symmetric test-statistic matrix)
 
 #' @importFrom igraph graph_from_adjacency_matrix
 #' @importFrom dplyr  %>%
@@ -29,9 +29,9 @@ utils::globalVariables(".")
 #' @export
 learn_SILGGM_graph <- function(x,
                                method  = "B_NW_SL",
-                               global = T,
+                               global = TRUE,
                                alpha = 0.05,
-                               fdr.filter = T,
+                               fdr.filter = TRUE,
                                max.fdr = 0.05,
                                pos.cut = 0,
                                neg.cut = 0,
@@ -40,38 +40,64 @@ learn_SILGGM_graph <- function(x,
     stop("Package SILGGM is required. Install with: install.packages('SILGGM')", call. = FALSE)
   }
 
+  # SILGGM expects an n samples x p features matrix
+  t.x <- t(x)
+
   # run silggm
   silggm.output <- suppressMessages(
-    SILGGM::SILGGM(x,
+    SILGGM::SILGGM(t.x,
                    method = method,
                    alpha = alpha,
                    global = global,
                    ...)
   )
-  # get partial.cor and zScore based on method
-  if(method == "D-S_NW_SL"){
-    partial.cor <- .upper_tri_vec(silggm.output$partialCor)
-    z.score.partial.cor <- sapply(partial.cor, .pcor_zscore, nrow(x))
-  }
-  if(method == "B_NW_SL"){
-    partial.cor <- .upper_tri_vec(silggm.output$partialCor)
-    z.score.partial.cor <- .upper_tri_vec(silggm.output$z_score_partialCor)
-  }
+  # build the returned weight matrix (pcor.avg) and the thresholded edge matrix
+  # (adj.mat) in a method-dependent way
+  if(method %in% c("GFC_SL", "GFC_L")){
+    # global-FDR methods report no partial correlations: weight edges by the test
+    # statistic and select them with SILGGM's own FDR-controlled global decision
+    pcor.avg <- silggm.output$T_stat
+    dimnames(pcor.avg) <- list(rownames(x), rownames(x))
+    adj.mat <- pcor.avg
+    if(fdr.filter){
+      # global_decision holds one binary edge set per supplied alpha level
+      lvl <- which(alpha == max.fdr)[1]
+      if(is.na(lvl)) lvl <- 1L
+      adj.mat <- adj.mat * silggm.output$global_decision[[lvl]]
+    }
+  } else {
+    # partial-correlation methods: extract partial correlations and edge z-scores
+    if(method == "B_NW_SL"){
+      # this method reports a partial-correlation z-score directly
+      partial.cor <- .upper_tri_vec(silggm.output$partialCor)
+      z.score.partial.cor <- .upper_tri_vec(silggm.output$z_score_partialCor)
+    } else if(method %in% c("D-S_NW_SL", "D-S_GL")){
+      # these report partialCor but no partial-correlation z-score, so derive it
+      partial.cor <- .upper_tri_vec(silggm.output$partialCor)
+      z.score.partial.cor <- .pcor_zscore(partial.cor, ncol(x))
+    } else {
+      stop("method '", method, "' is not supported by learn_SILGGM_graph.")
+    }
 
-  # estimate the adjusted p-value of each edge
-  qval.pcor <- sapply(z.score.partial.cor, .pvalue) %>%
-    .upper_tri_to_matrix(., variable_names = colnames(x), diagl = 1) %>%
-    .matrix_p_adjust(.)
+    # estimate the adjusted p-value of each edge
+    qval.pcor <- .pvalue(z.score.partial.cor) %>%
+      .upper_tri_to_matrix(., variable_names = rownames(x), diagl = 1) %>%
+      .matrix_p_adjust(.)
 
-  # build partial correlation adjacency matrix
-  pcor.avg <- partial.cor %>%
-    round(.,2) %>%
-    .upper_tri_to_matrix(., variable_names = colnames(x), diagl = 1)
-  adj.mat <- apply(pcor.avg, c(1,2), .abs_pcor_filter, pos.cut, neg.cut)
+    # build partial correlation adjacency matrix
+    pcor.avg <- partial.cor %>%
+      round(.,2) %>%
+      .upper_tri_to_matrix(., variable_names = rownames(x), diagl = 1)
 
-  # further filtering by significance
-  if(fdr.filter){
-    adj.mat[qval.pcor>=max.fdr] <- 0
+    # zero out edges whose effect size is below the positive/negative cutoffs
+    adj.mat <- pcor.avg
+    adj.mat[pcor.avg > 0 & abs(pcor.avg) <= abs(pos.cut)] <- 0
+    adj.mat[pcor.avg < 0 & abs(pcor.avg) <= abs(neg.cut)] <- 0
+
+    # further filtering by significance
+    if(fdr.filter){
+      adj.mat[qval.pcor>=max.fdr] <- 0
+    }
   }
 
   # diagonal to 0 before creating igraph object
@@ -107,7 +133,7 @@ learn_SILGGM_graph <- function(x,
                                 variable_names =NULL,
                                 diagl=1){
   p <- (1 + sqrt(1 + 8 * length(upper_tri_values))) / 2
-  if( (length(diagl)>1) & (length(diagl) != p) ) stop("invalid dignoal!")
+  if( (length(diagl)>1) && (length(diagl) != p) ) stop("invalid diagonal!")
 
   mat <- matrix(0, p, p)
 
@@ -144,14 +170,6 @@ learn_SILGGM_graph <- function(x,
   # copy to lower triangle
   mx_q[lower.tri(mx_q)] <-
     t(mx_q)[lower.tri(mx_q)]
-  # some checks
-  stopifnot(isTRUE(
-    all.equal(
-      mx_q[upper.tri(mx_q)],
-      t(mx_q)[upper.tri(mx_q)]
-    )
-  ))
-  stopifnot(!isTRUE(all.equal(mx_p,mx_q)))
   return( mx_q)
 }
 
@@ -177,20 +195,8 @@ learn_SILGGM_graph <- function(x,
 
 #' @keywords internal
 .pcor_zscore <- function(pcor,n){
-  std_new <- sqrt(.pow((1-.pow(pcor,2)),2)/n)
+  std_new <- sqrt((1 - pcor^2)^2 / n)
   return(pcor/std_new)
-}
-
-#' Raise of number to its n-th power
-#'
-#' @param x the input number
-#' @param n the order of power
-#'
-#' @return a number
-
-#' @keywords internal
-.pow <- function(x,n){
-  return(x^n)
 }
 
 #' Compute the two-sided p-value of a z-score
@@ -201,30 +207,6 @@ learn_SILGGM_graph <- function(x,
 #' @keywords internal
 .pvalue <- function(z_score){
   return(2*stats::pnorm(q=abs(z_score), lower.tail=FALSE))
-}
-
-#' Filter edges whose effect size is small
-#'
-#' @param x the average partial correlation
-#' @param pos_cut a threshold for positive partial correlation
-#' @param neg_cut a threshold for negative partial correlation
-
-#' @return the average value or 0
-
-#' @keywords internal
-.abs_pcor_filter <- function(x,
-                             pos_cut,
-                             neg_cut){
-
-  if( (x) > 0 & (abs(x) <= abs(pos_cut)) ){
-    return(0)
-  }
-
-  if( (x) < 0 & (abs(x) <= abs(neg_cut)) ){
-    return(0)
-  }
-
-  return(x)
 }
 
 #' Learn a gene co-expression graph from a data matrix using WGCNA
@@ -251,9 +233,6 @@ learn_WGCNA_graph <- function(x,
   if (!requireNamespace("WGCNA", quietly = TRUE)) {
     stop("Package WGCNA is required. Install with: install.packages('WGCNA')", call. = FALSE)
   }
-  if (!requireNamespace("matrixStats", quietly = TRUE)) {
-    stop("Package matrixStats is required. Install with: install.packages('matrixStats')", call. = FALSE)
-  }
   # handle arguments
   cor.FN <- match.arg(cor.FN)
 
@@ -261,9 +240,12 @@ learn_WGCNA_graph <- function(x,
   if (cor.FN == "cor") cor.options = list(use="p")
   if (cor.FN == "bicor") cor.options = list(pearsonFallback="individual")
 
+  # WGCNA expects an n samples x p features matrix
+  t.x <- t(x)
+
   # pick soft threshold via scale-free fit
   if (is.null(beta)) {
-    sft <- WGCNA::pickSoftThreshold(data=x,
+    sft <- WGCNA::pickSoftThreshold(data=t.x,
                                     corFnc=cor.FN,
                                     RsquaredCut=min.sft,
                                     powerVector=powers)
@@ -273,7 +255,7 @@ learn_WGCNA_graph <- function(x,
   }
 
   # construct co-expression similarity
-  adj <- WGCNA::adjacency(datExpr=x,
+  adj <- WGCNA::adjacency(datExpr=t.x,
                           power=beta,
                           corFnc=cor.FN,
                           type="unsigned",
@@ -313,8 +295,11 @@ learn_ARACNE_graph <- function(x, eps=0, threshold = 0.05) {
     stop("Package minet is required. Install with: install.packages('minet')", call. = FALSE)
   }
 
+  # minet expects an n samples x p features matrix
+  t.x <- t(x)
+
   # build mutual information matrix
-  mim <- minet::build.mim(dataset = x)
+  mim <- minet::build.mim(dataset = t.x)
 
   # apply ARACNE algorithm
   aracne.mat <- minet::aracne(mim, eps=eps)
