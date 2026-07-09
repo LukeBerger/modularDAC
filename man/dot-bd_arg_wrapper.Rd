@@ -2,7 +2,7 @@
 % Please edit documentation in R/03.Multithreaded_DaC.R
 \name{.bd_arg_wrapper}
 \alias{.bd_arg_wrapper}
-\title{Argument wrapper for BDgraph: transposes each module data subset for use with BDgraph::bdgraph}
+\title{Argument wrapper for BDgraph: packages each module data subset for use with BDgraph::bdgraph}
 \usage{
 .bd_arg_wrapper(sub.x)
 }
@@ -10,9 +10,9 @@
 \item{sub.x}{a list of numeric matrices, each being a p_i x n subset of x for one module (features as rows)}
 }
 \value{
-a list containing the learned subgraphs data transformed for bdgraph
+a list of argument lists, one per module, for .bd_wrapper
 }
 \description{
-Argument wrapper for BDgraph: transposes each module data subset for use with BDgraph::bdgraph
+Argument wrapper for BDgraph: packages each module data subset for use with BDgraph::bdgraph
 }
 \keyword{internal}

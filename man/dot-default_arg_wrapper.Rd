@@ -7,9 +7,9 @@
 .default_arg_wrapper(
   sub.x,
   method = "B_NW_SL",
-  global = T,
+  global = TRUE,
   alpha = 0.05,
-  fdr.filter = T,
+  fdr.filter = TRUE,
   max.fdr = 0.05,
   pos.cut = 0,
   neg.cut = 0
