@@ -4,7 +4,14 @@
 \alias{eigen_fuzzy_modules}
 \title{Expand non-overlapping modules to fuzzy (overlapping) modules by recruiting nodes correlated with each module's eigengene}
 \usage{
-eigen_fuzzy_modules(x, input.modules, max.size, n.pc = 2, ratio = 1.5)
+eigen_fuzzy_modules(
+  x,
+  input.modules,
+  max.size,
+  n.pc = 2,
+  ratio = 1.5,
+  min.cor = NULL
+)
 }
 \arguments{
 \item{x}{a numeric matrix with p features (rows) and n samples (columns)}
@@ -16,10 +23,17 @@ eigen_fuzzy_modules(x, input.modules, max.size, n.pc = 2, ratio = 1.5)
 \item{n.pc}{an integer, the number of principal components used to represent each module's eigengene}
 
 \item{ratio}{a numeric, the maximum ratio of fuzzy module size to original module size}
+
+\item{min.cor}{a numeric or NULL; if set, only features whose summed absolute correlation with the module eigengene exceeds this value are recruited (blanket-closure cutoff), so a module may grow by fewer than \code{ratio} implies}
 }
 \value{
 a module object
 }
 \description{
-Expand non-overlapping modules to fuzzy (overlapping) modules by recruiting nodes correlated with each module's eigengene
+The nodes of the input partition become the \emph{core} (owned) nodes of each
+fuzzy module; the recruited neighbours are auxiliary nodes, present only so the
+graph learned on the module can condition on each core node's Markov blanket.
+Growth stops at \code{ratio}/\code{max.size}, or earlier if \code{min.cor} is
+supplied and no external feature clears that correlation (an approximate
+blanket-closure criterion).
 }

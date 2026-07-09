@@ -2,45 +2,33 @@
 % Please edit documentation in R/01.DetectModules.R
 \name{find_ICA_mods}
 \alias{find_ICA_mods}
-\title{Detect co-expression modules from a data matrix using Independent Component Analysis (ICA)}
+\title{Detect overlapping co-expression modules from a data matrix using Independent Component Analysis (ICA)}
 \usage{
-find_ICA_mods(
-  x,
-  n.comp,
-  max.size = NULL,
-  merge = FALSE,
-  merging.cut = 0.2,
-  iterate = FALSE,
-  cor.FN = c("bicor", "cor"),
-  trade.by = c("adjacency", "eigengene"),
-  network = c("WGCNA", "ARACNE"),
-  ...
-)
+find_ICA_mods(x, n.comp, max.size = NULL, membership.z = 2, ...)
 }
 \arguments{
 \item{x}{a numeric matrix with p features (rows) and n samples (columns)}
 
 \item{n.comp}{an integer, the number of independent components (modules) to extract}
 
-\item{max.size}{an integer or NULL, the maximum number of nodes allowed in a module (NULL = unconstrained)}
+\item{max.size}{an integer or NULL, the maximum number of nodes allowed in a module (NULL = unconstrained); trims auxiliary members only}
 
-\item{merge}{a logical, if TRUE similar modules are merged by eigengene similarity (WGCNA::mergeCloseModules)}
-
-\item{merging.cut}{a numeric, the eigengene dissimilarity threshold for merging}
-
-\item{iterate}{a logical, if TRUE modules exceeding max.size are split by re-running ICA on their features}
-
-\item{cor.FN}{a character, the correlation function used for merging and WGCNA-based trading ('bicor' or 'cor')}
-
-\item{trade.by}{a character, how oversized modules are trimmed to max.size: 'adjacency' (a learned similarity matrix) or 'eigengene' (correlation with module eigengenes)}
-
-\item{network}{a character, the method used to learn the similarity matrix when trade.by = 'adjacency': 'WGCNA' or 'ARACNE'}
+\item{membership.z}{a numeric, the standardised absolute-loading threshold above which a feature becomes an auxiliary member of a non-dominant component}
 
 \item{...}{additional arguments passed to fastICA::fastICA}
 }
 \value{
-a list with: the learned similarity matrix (or NULL), the initial modules, and the final modules after splitting/trading
+a list with 'ica.loadings', the p x n.comp source (metagene) loading matrix, and 'mods', an overlapping module object whose core nodes are each feature's dominant component
 }
 \description{
-Detect co-expression modules from a data matrix using Independent Component Analysis (ICA)
+ICA decomposes the features into \code{n.comp} independent components
+(metagenes). Each feature is \emph{owned} by (is a core node of) its dominant
+component -- the component in which it has the largest absolute loading -- so
+the cores form a clean partition. A feature is additionally recruited as an
+\emph{auxiliary} member of every other component in which its standardised
+loading exceeds \code{membership.z}; this multi-membership is what makes the
+returned modules overlap, so ICA yields divide-and-conquer-ready fuzzy modules
+directly, without a separate growth step. \code{max.size} trims auxiliary
+members (weakest loadings first) but never core members, so a component with
+more than \code{max.size} cores signals that \code{n.comp} should be raised.
 }

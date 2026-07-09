@@ -6,6 +6,14 @@
 utils::globalVariables(c("module", "correlation"))
 
 # declare module object
+#'
+#' The optional `core.list` slot records, for each module, the subset of its
+#' nodes that the module *owns* ("core" nodes, whose Markov blanket is expected
+#' to lie inside the module so their edges are trustworthy) as opposed to
+#' auxiliary nodes that are only present to condition on for someone else. When
+#' populated, the core sets must partition the node universe: every node is a
+#' core (owned) node of exactly one module. This ownership is what makes the
+#' divide-and-conquer stitching well defined (see \code{.connect_subgraphs}).
 #' @importFrom methods setClass
 setClass("module",
          slots = list(
@@ -15,8 +23,10 @@ setClass("module",
            index.vector = "numeric",
            score.vector = "numeric",
            index.list = "list",
-           name.list = "list"
+           name.list = "list",
+           core.list = "list"
          ),
+         prototype = list(core.list = list()),
          validity = function(object){
            # check that each module has the same number of feature indexes and names
            if(!all(lengths(object@index.list) == lengths(object@name.list))){
@@ -26,6 +36,26 @@ setClass("module",
            if(!object@overlapping){
              if(any(duplicated(unlist(object@index.list)))){
                return("Non-overlapping modules must not share indices")
+             }
+           }
+           # core.list, when supplied, records node ownership for stitching
+           if(length(object@core.list) > 0){
+             if(length(object@core.list) != length(object@index.list)){
+               return("core.list must have one entry per module")
+             }
+             # each module's core must be a subset of its own nodes
+             in.mod <- mapply(function(cr, idx) all(cr %in% idx),
+                              object@core.list, object@index.list)
+             if(!all(in.mod)){
+               return("each module's core.list must be a subset of its index.list")
+             }
+             # cores must partition the node universe: owned by exactly one module
+             all.core <- unlist(object@core.list)
+             if(any(duplicated(all.core))){
+               return("core nodes must be owned by exactly one module (no duplicate cores)")
+             }
+             if(!setequal(all.core, unique(unlist(object@index.list)))){
+               return("every node must be a core (owned) node of exactly one module")
              }
            }
 
@@ -46,12 +76,15 @@ setClass("module",
 true_modules <- function(g){
   # build module object from ground-truth module vertex attribute
   module <- igraph::V(g)$module
+  index.list <- split(seq_len(igraph::vcount(g)), module)
   methods::new("module",
                 source = "True Modules",
                 overlapping = FALSE,
                 index.vector = module,
-                index.list = split(seq_len(igraph::vcount(g)), module),
-                name.list = split(igraph::V(g)$name, module)
+                index.list = index.list,
+                name.list = split(igraph::V(g)$name, module),
+                # a non-overlapping partition owns all of its own nodes
+                core.list = index.list
   )
 }
 
@@ -73,12 +106,14 @@ true_fuzzy <- function(m, g){
       igraph::neighborhood(g, order = 2, nodes = idx, mode = "all", mindist = 0)
     )))
   })
-  # build fuzzy module object with expanded index list
+  # build fuzzy module object with expanded index list; the original (pre-growth)
+  # nodes are the core nodes this module owns, the recruited neighbours are auxiliary
   methods::new("module",
                source = "True Module Fuzzy",
                overlapping = TRUE,
                index.list = f.index.list,
-               name.list = lapply(f.index.list, function(idx) node.names[idx])
+               name.list = lapply(f.index.list, function(idx) node.names[idx]),
+               core.list = m@index.list
   )
 }
 
@@ -90,13 +125,7 @@ true_fuzzy <- function(m, g){
 
 #' @keywords internal
 .module_check <- function(x, m){
-  if(m@overlapping){
-    # every module must overlap with at least one other module
-    all.idx  <- unlist(m@index.list)
-    dup.idx  <- unique(all.idx[duplicated(all.idx)])           # indices in >1 module
-    overlaps <- vapply(m@index.list, function(idx) any(idx %in% dup.idx), logical(1))
-    if(!all(overlaps)){stop(paste(m@source, "has modules with incomplete overlaps"))}
-  }else{
+  if(!m@overlapping){
     # check feature number matches input data
     if(length(m@index.vector) != nrow(x)){
       stop(paste(m@source, "produced an index vector with the incorrect number of features"))
@@ -114,6 +143,17 @@ true_fuzzy <- function(m, g){
   # check that each module has the same number of feature indexes and names
   if(!all(lengths(m@index.list) == lengths(m@name.list))){
     stop(paste(m@source, "produced different length index and name lists"))
+  }
+  # when node ownership is recorded, cores must partition the node universe:
+  # every node is a core (owned) node of exactly one module
+  if(length(m@core.list) > 0){
+    all.core <- unlist(m@core.list)
+    if(any(duplicated(all.core))){
+      stop(paste(m@source, "has core nodes owned by more than one module"))
+    }
+    if(!setequal(all.core, unique(unlist(m@index.list)))){
+      stop(paste(m@source, "cores do not cover every node exactly once"))
+    }
   }
   return(TRUE)
 }
@@ -134,10 +174,10 @@ true_fuzzy <- function(m, g){
 #' @param cut.height a numeric between 0 and 1, the dendrogram cut height used by cutreeDynamic
 #' @param merge a logical, if TRUE adjacent modules are merged using WGCNA::mergeCloseModules
 #' @param merging.cut a numeric between 0 and 1, the eigengene dissimilarity threshold for WGCNA::mergeCloseModules
-#' @param iterate a logical, if TRUE module detection is run iteratively to break up any modules exceeding max.size
+#' @param iterate a logical, if TRUE oversized modules are recursively split so every module fits within max.size
 #' @param assign.by a character, how unassigned nodes are recruited to modules: 'adjacency' uses WGCNA adjacency, 'eigengene' uses correlation with module eigengenes
 
-#' @return a list containing: the WGCNA thresholded adj matrix, the initial modules after merge/iteration, the final modules after max.size fitting
+#' @return a list containing: 'wgcna.adj', the WGCNA co-expression adjacency matrix; 'initial.mods', the natural modules after merging and unassigned-node recruitment; and 'final.mods', those modules after recursive splitting to satisfy max.size
 
 #' @importFrom WGCNA pickSoftThreshold adjacency TOMdist bicor mergeCloseModules
 #' @importFrom stats as.dist
@@ -209,7 +249,7 @@ find_WGCNA_mods <- function(x,
     beta <- .sft_check(sft)
   }
 
-  # minimum number of modules needed to fit all nodes within max.size
+  # minimum number of modules to retain when merging (a floor for .merge_modules)
   min.mods <- max(1, ceiling(nrow(x) / max.size))
 
   # construct co-expression similarity, TOM distance, and hierarchical clustering
@@ -221,7 +261,7 @@ find_WGCNA_mods <- function(x,
   dis <- WGCNA::TOMdist(adjMat = adj, TOMType = "unsigned")
   dendro <- flashClust::flashClust(d = stats::as.dist(dis), method = hclust.method)
 
-  # initial module identification via dynamic tree cut
+  # initial (natural) module identification via dynamic tree cut
   message("Generating initial modules...")
   initial.index.vector <- dynamicTreeCut::cutreeDynamic(dendro = dendro,
                                                         cutHeight = cut.height,
@@ -230,17 +270,6 @@ find_WGCNA_mods <- function(x,
                                                         deepSplit = 4,
                                                         pamRespectsDendro = FALSE,
                                                         minClusterSize = min.size)
-
-  # lower the cut height until enough modules are produced
-  lowered <- .lower_cut_height(index.vector = initial.index.vector,
-                               dendro = dendro,
-                               dis = dis,
-                               min.mods = min.mods,
-                               min.size = min.size,
-                               cut.height = cut.height,
-                               max.size = max.size)
-  initial.index.vector <- lowered$index.vector
-  cut.height <- lowered$cut.height
 
   # merge similar modules based on eigengene similarity
   if (merge) {
@@ -253,47 +282,54 @@ find_WGCNA_mods <- function(x,
                                            max.size = max.size)
   }
 
-  # split any modules that exceed max.size
-  if (iterate) {
-    initial.index.vector <- .split_large_modules_WGCNA(index.vector = initial.index.vector,
-                                                 dis = dis,
-                                                 max.size = max.size,
-                                                 min.size = min.size,
-                                                 hclust.method = hclust.method,
-                                                 cut.height = cut.height)
-  }
-
   # assign remaining unassigned nodes to a module
   message("Assigning unassigned nodes by ", assign.by, " method...")
   diag(adj) <- 0
-  modified.index.vector <- .assign_unassigned(index.vector = initial.index.vector,
-                                              adj = adj,
-                                              x = x,
-                                              method = assign.by)
+  initial.index.vector <- .assign_unassigned(index.vector = initial.index.vector,
+                                             adj = adj,
+                                             x = x,
+                                             method = assign.by)
 
-  # fit modules to max size via node trading
-  n.too.big <- sum(table(modified.index.vector) > max.size)
-  if (n.too.big > 0) {
-    message(n.too.big, " module(s) larger than ", max.size, " nodes; performing node trading based on adjacency...")
-    modified.index.vector <- .fit_to_max_size(index.vector = modified.index.vector,
-                                              adj = adj,
-                                              max.size = max.size)
+  # enforce max.size by recursively splitting oversized modules. A cutree split
+  # of an oversized module's own sub-dendrogram can always reach max.size without
+  # evicting nodes into a foreign module (unlike node trading), so we never break
+  # up genuinely connected features to satisfy the cap. Any pieces left below
+  # min.size are then merged back into their nearest neighbouring module.
+  final.index.vector <- initial.index.vector
+  if (iterate) {
+    final.index.vector <- .split_to_max_size(index.vector = final.index.vector,
+                                             dis = dis,
+                                             max.size = max.size,
+                                             min.size = min.size,
+                                             hclust.method = hclust.method)
+    final.index.vector <- .merge_small_modules(index.vector = final.index.vector,
+                                               dis = dis,
+                                               min.size = min.size,
+                                               max.size = max.size)
+  } else {
+    n.too.big <- sum(table(final.index.vector) > max.size)
+    if (n.too.big > 0) {
+      warning(n.too.big, " module(s) exceed max.size; set iterate = TRUE to split them.")
+    }
   }
 
-  # build module objects
+  # build module objects (a non-overlapping partition owns all of its own nodes,
+  # so core.list == index.list)
   initial.index.vector <- as.numeric(initial.index.vector)
-  modified.index.vector <- as.numeric(modified.index.vector)
+  final.index.vector   <- as.numeric(final.index.vector)
   build_mods <- function(src, iv){
+    il <- split(seq_len(nrow(x)), iv)
     methods::new("module",
                  source = src,
                  data.dim = dim(x),
                  overlapping = FALSE,
                  index.vector = iv,
-                 index.list = split(seq_len(nrow(x)), iv),
-                 name.list = split(rownames(x), iv))
+                 index.list = il,
+                 name.list = split(rownames(x), iv),
+                 core.list = il)
   }
   initial.mods <- build_mods("find_WGCNA_mods initial mods", initial.index.vector)
-  final.mods   <- build_mods("find_WGCNA_mods traded mods",  modified.index.vector)
+  final.mods   <- build_mods("find_WGCNA_mods sized mods",   final.index.vector)
 
   return(list(
     wgcna.adj = adj,
@@ -329,205 +365,88 @@ find_WGCNA_mods <- function(x,
   return(beta)
 }
 
-#' Helper that trims modules exceeding a maximum size by trading nodes to smaller modules
-#' @param index.vector an integer vector of length p, assigning each node to a module (0 = unassigned)
-#' @param max.size an integer, the maximum number of nodes allowed in a module
-#' @param adj a p x p numeric similarity matrix (required when method = 'adjacency')
-#' @param x a numeric matrix with p features (rows) and n samples (columns) (required when method = 'eigengene')
-#' @param method a character, how a giving node is scored against receiving modules: 'adjacency' uses the similarity matrix, 'eigengene' uses correlation with module eigengenes
-#' @param verbose a logical, if TRUE progress messages are printed for each trade (useful for debugging)
-
-#' @return an integer vector of length p with the updated module assignments
-
-#' @importFrom stats prcomp cor
-#' @keywords internal
-.fit_to_max_size <- function(index.vector,
-                             max.size,
-                             adj = NULL,
-                             x = NULL,
-                             method = c("adjacency", "eigengene"),
-                             verbose = FALSE){
-  method <- match.arg(method)
-  if (method == "adjacency" && is.null(adj)) {
-    stop("method = 'adjacency' requires a similarity matrix 'adj'.")
-  }
-  if (method == "eigengene" && is.null(x)) {
-    stop("method = 'eigengene' requires the data matrix 'x'.")
-  }
-
-  mod.size <- table(index.vector)
-  giving <- as.numeric(names(which(mod.size > max.size)))
-  n.trades <- 0
-
-  while (length(giving) > 0) {
-    giving.nodes <- which(index.vector %in% giving)
-    receiving <- as.numeric(names(which(mod.size < max.size)))
-    receiving <- receiving[receiving != 0] # never trade nodes into the unassigned group
-    if (length(receiving) == 0) {
-      warning("No module has room to receive nodes; some modules remain above max.size.")
-      break
-    }
-
-    if (method == "adjacency") {
-      # move the giving node most similar to any receiving module
-      receiving.nodes <- which(index.vector %in% receiving)
-      trade.scores <- adj[giving.nodes, receiving.nodes, drop = FALSE]
-      gi <- which.max(matrixStats::rowMaxs(trade.scores))
-      trade.giving <- giving.nodes[gi]
-      trade.to.module <- index.vector[ receiving.nodes[ which.max(adj[trade.giving, receiving.nodes]) ] ]
-    } else {
-      # score each giving node by its absolute correlation with each receiving module eigengene
-      eig <- vapply(receiving, function(m) {
-        stats::prcomp(t(x[which(index.vector == m), , drop = FALSE]), scale. = TRUE)$x[, 1]
-      }, numeric(ncol(x)))
-      cors <- abs(stats::cor(t(x[giving.nodes, , drop = FALSE]), eig))
-      cors[is.na(cors)] <- 0
-      best.col <- max.col(cors, ties.method = "first")
-      gi <- which.max(cors[cbind(seq_along(giving.nodes), best.col)])
-      trade.giving <- giving.nodes[gi]
-      trade.to.module <- receiving[best.col[gi]]
-    }
-
-    if (verbose) { message("Trading ", trade.giving, " to module ", trade.to.module) }
-    index.vector[trade.giving] <- trade.to.module
-
-    mod.size <- table(index.vector)
-    giving <- as.numeric(names(which(mod.size > max.size)))
-    n.trades <- n.trades + 1
-  }
-  message("All modules fit within max size after ", n.trades, " trades.")
-
-  return(index.vector)
-}
-
-#' Helper to find_WGCNA_mods that lowers the dynamic-tree-cut height until a
-#' minimum number of modules is produced
-#' @param index.vector an integer vector of length p, the modules from the initial cut (0 = unassigned)
-#' @param dendro a dendrogram (flashClust/hclust object) used for the cut
-#' @param dis a p x p TOM distance matrix passed to cutreeDynamic
-#' @param min.mods an integer, the minimum number of modules required
-#' @param min.size an integer, the minimum number of nodes allowed in a module
-#' @param cut.height a numeric or NULL, the starting cut height; recomputed from the dendrogram when NULL
-#' @param max.size a numeric, the maximum module size (used only for messaging)
-#' @param min.cut.height a numeric, the floor below which the cut height will not be lowered
-
-#' @return a list with the updated index.vector and the cut.height that produced it
-
-#' @importFrom stats quantile
-#' @keywords internal
-.lower_cut_height <- function(index.vector,
-                              dendro,
-                              dis,
-                              min.mods,
-                              min.size,
-                              cut.height = NULL,
-                              max.size = Inf,
-                              min.cut.height = 0) {
-  n.mods <- .n_modules(index.vector)
-  if (n.mods >= min.mods) {
-    message("Initial WGCNA call produced ", n.mods, " modules.")
-    return(list(index.vector = index.vector, cut.height = cut.height))
-  }
-
-  message("Only ", n.mods, " modules produced in first cut; ", min.mods,
-          " required with max.size == ", max.size, ". Lowering cut height...")
-
-  # recompute the default height used by cutreeDynamic when none was supplied
-  if (is.null(cut.height)) {
-    qnt5 <- stats::quantile(dendro$height, probs = 0.05)
-    cut.height <- qnt5 + 0.99 * (max(dendro$height) - qnt5)
-  }
-
-  while (n.mods < min.mods) {
-    cut.height <- cut.height - 0.01
-    # stop once the cut height hits its floor, even if min.mods was not reached
-    if (cut.height <= min.cut.height) {
-      message("Cut height reached its floor (", min.cut.height,
-              ") without producing ", min.mods, " modules; proceeding with the current cut.")
-      break
-    }
-    message("Lowering cut height to ", round(cut.height, 4), " and generating new modules...")
-    index.vector <- dynamicTreeCut::cutreeDynamic(dendro = dendro,
-                                                  cutHeight = cut.height,
-                                                  method = "hybrid",
-                                                  distM = dis,
-                                                  deepSplit = 4,
-                                                  pamRespectsDendro = FALSE,
-                                                  minClusterSize = min.size)
-    # bail out if cutting is no longer producing meaningful clusters
-    if (all(index.vector == 0) && cut.height < 0.8) {
-      message("Cut height reached ", round(cut.height, 4),
-              " and is no longer producing meaningful clusters. ",
-              "Consider increasing max.size or using another method to generate modules.")
-      stop("No modules found after lowering cut height")
-    }
-    n.mods <- .n_modules(index.vector)
-  }
-  message("Final cut height ", round(cut.height, 4), " produced ", n.mods, " modules.")
-  return(list(index.vector = index.vector, cut.height = cut.height))
-}
-
-#' Helper to find_WGCNA_mods that splits modules exceeding max.size by
-#' re-clustering each oversized module
+#' Helper to find_WGCNA_mods that enforces max.size by recursively splitting
+#' oversized modules on their own sub-dendrograms
+#'
+#' Unlike node trading, a cutree split can always reach max.size (in the limit,
+#' singletons) without moving a node into an unrelated module, so genuinely
+#' connected features are never separated to satisfy the cap.
 #' @param index.vector an integer vector of length p assigning each node to a module (0 = unassigned)
 #' @param dis a p x p TOM distance matrix
 #' @param max.size a numeric, the maximum number of nodes allowed in a module
-#' @param min.size an integer, the minimum number of nodes allowed in a module
+#' @param min.size an integer, the minimum module size (informational; small pieces are reconciled by .merge_small_modules)
 #' @param hclust.method a character, the agglomeration method passed to flashClust
-#' @param cut.height a numeric or NULL, the cut height passed to cutreeDynamic
 
-#' @return an integer vector of length p with oversized modules split where possible
+#' @return an integer vector of length p with every non-zero module within max.size
+
+#' @importFrom stats as.dist cutree
+#' @keywords internal
+.split_to_max_size <- function(index.vector,
+                               dis,
+                               max.size,
+                               min.size,
+                               hclust.method = "average") {
+  if (is.infinite(max.size)) return(index.vector)
+  repeat {
+    sizes <- table(index.vector)
+    big <- as.numeric(names(sizes[sizes > max.size]))
+    big <- big[big != 0]                       # never split the unassigned group
+    if (length(big) == 0) break
+
+    m <- big[1]                                # split one module, then re-evaluate
+    m.nodes <- which(index.vector == m)
+    dend <- flashClust::flashClust(stats::as.dist(dis[m.nodes, m.nodes, drop = FALSE]),
+                                   method = hclust.method)
+
+    # smallest number of cuts that brings every piece within max.size
+    k <- ceiling(length(m.nodes) / max.size)
+    repeat {
+      k <- min(k, length(m.nodes))
+      sub <- stats::cutree(dend, k = k)
+      if (max(table(sub)) <= max.size || k >= length(m.nodes)) break
+      k <- k + 1
+    }
+    message("Splitting module ", m, " (", length(m.nodes), " nodes) into ",
+            length(unique(sub)), " parts to satisfy max.size.")
+
+    # first piece keeps the id m, the others get fresh ids beyond the current max
+    offset <- max(index.vector)
+    index.vector[m.nodes] <- ifelse(sub == 1L, m, offset + sub - 1L)
+  }
+  index.vector
+}
+
+#' Helper to find_WGCNA_mods that merges modules below min.size into their
+#' nearest neighbouring module (by mean TOM distance) when there is room
+#' @param index.vector an integer vector of length p assigning each node to a module (0 = unassigned)
+#' @param dis a p x p TOM distance matrix
+#' @param min.size an integer, the minimum number of nodes allowed in a module
+#' @param max.size a numeric, the maximum module size a merge target may reach
+
+#' @return an integer vector of length p with undersized modules merged where possible
 
 #' @keywords internal
-.split_large_modules_WGCNA <- function(index.vector,
-                                 dis,
-                                 max.size,
-                                 min.size,
-                                 hclust.method = "average",
-                                 cut.height = NULL) {
-  # find modules that are too large (ignoring the unassigned group, 0)
-  to.big <- as.numeric(names(which(table(index.vector) > max.size)))
-  to.big <- to.big[to.big != 0]
-  if (length(to.big) == 0) return(index.vector)
+.merge_small_modules <- function(index.vector, dis, min.size, max.size) {
+  repeat {
+    sizes <- table(index.vector)
+    small <- as.numeric(names(sizes[sizes < min.size]))
+    small <- small[small != 0]
+    if (length(small) == 0) break
 
-  message("Modules ", paste(to.big, collapse = ", "),
-          " are too large; attempting to split...")
-
-  # re-cluster each oversized module on its own distance submatrix
-  for (m in to.big) {
+    m <- small[which.min(sizes[as.character(small)])]   # smallest undersized module first
     m.nodes <- which(index.vector == m)
-    m.dis <- dis[m.nodes, m.nodes, drop = FALSE]
+    others <- setdiff(unique(index.vector[index.vector != 0]), m)
+    if (length(others) == 0) break
 
-    dendro <- flashClust::flashClust(d = stats::as.dist(m.dis), method = hclust.method)
-    m.index.vector <- dynamicTreeCut::cutreeDynamic(dendro = dendro,
-                                                    cutHeight = cut.height,
-                                                    method = "hybrid",
-                                                    distM = m.dis,
-                                                    deepSplit = 4,
-                                                    pamRespectsDendro = FALSE,
-                                                    minClusterSize = min.size,
-                                                    verbose = FALSE)
+    # nearest other module by mean TOM distance that has room to absorb m
+    mean.d <- vapply(others, function(o) mean(dis[m.nodes, which(index.vector == o)]), numeric(1))
+    room   <- vapply(others, function(o) sum(index.vector == o) + length(m.nodes) <= max.size, logical(1))
+    if (!any(room)) break                                # nowhere to merge without exceeding max.size
 
-    # only accept the split if it is mostly assigned and yields at least two modules
-    n.new <- .n_modules(m.index.vector)
-    pass <- TRUE
-    if (sum(m.index.vector == 0) > length(m.index.vector) / 2) {
-      pass <- FALSE
-      message("Module ", m, " failed to split due to a high number of unassigned nodes.")
-    }
-    if (n.new < 2) {
-      pass <- FALSE
-      message("Module ", m, " failed to split into at least two new modules.")
-    }
-
-    if (pass) {
-      message("Splitting module ", m, " into ", n.new, " new modules.")
-      # offset new labels by the current max so they do not collide with existing modules
-      index.vector[m.nodes] <- ifelse(m.index.vector == 0,
-                                      0, m.index.vector + max(index.vector))
-    }
+    target <- others[room][which.min(mean.d[room])]
+    index.vector[m.nodes] <- target
   }
-  return(index.vector)
+  index.vector
 }
 
 #' Helper to find_WGCNA_mods that assigns unassigned nodes (module 0) to an
@@ -656,185 +575,97 @@ find_WGCNA_mods <- function(x,
   return(index.vector)
 }
 
-#' Simple helper that extracts a p x p feature-similarity matrix for node trading
-#' @param x a numeric matrix with p features (rows) and n samples (columns)
-#' @param method a character, 'WGCNA' (soft-thresholded co-expression adjacency) or 'ARACNE' (mutual information matrix from minet, the basis of ARACNE)
-#' @param cor.FN a character, the correlation function for WGCNA ('bicor' or 'cor')
-#' @param min.sft a numeric, the minimum R-squared for WGCNA soft-threshold selection
-#' @param beta an integer or NULL, the WGCNA soft-thresholding power (auto-selected when NULL)
-#' @param powers an integer vector, candidate powers for WGCNA::pickSoftThreshold
-
-#' @return a p x p numeric similarity matrix, rows/cols ordered as the rows of x
-
-#' @importFrom WGCNA pickSoftThreshold adjacency
-#' @keywords internal
-.feature_similarity <- function(x,
-                                method = c("WGCNA", "ARACNE"),
-                                cor.FN = c("bicor", "cor"),
-                                min.sft = 0.85,
-                                beta = NULL,
-                                powers = c(seq(1, 10, by = 1), seq(12, 20, by = 2))) {
-  method <- match.arg(method)
-  cor.FN <- match.arg(cor.FN)
-  if (method == "WGCNA") {
-    if (!requireNamespace("WGCNA", quietly = TRUE)) {
-      stop("Package WGCNA is required. Install with: install.packages('WGCNA')", call. = FALSE)
-    }
-    cor.options <- if (cor.FN == "cor") list(use = "p") else list(pearsonFallback = "individual")
-    t.x <- t(x)
-    if (is.null(beta)) {
-      sft <- WGCNA::pickSoftThreshold(data = t.x, corFnc = cor.FN,
-                                      RsquaredCut = min.sft, powerVector = powers)
-      beta <- .sft_check(sft)
-    }
-    sim <- WGCNA::adjacency(datExpr = t.x, power = beta, corFnc = cor.FN,
-                            type = "unsigned", corOptions = cor.options)
-  } else {
-    if (!requireNamespace("minet", quietly = TRUE)) {
-      stop("Package minet is required for method = 'ARACNE'. Install with: install.packages('minet')", call. = FALSE)
-    }
-    sim <- minet::build.mim(dataset = t(x))
-  }
-  rownames(sim) <- colnames(sim) <- rownames(x)
-  return(sim)
-}
-
-#' Detect co-expression modules from a data matrix using Independent Component Analysis (ICA)
+#' Detect overlapping co-expression modules from a data matrix using Independent Component Analysis (ICA)
+#'
+#' ICA decomposes the features into \code{n.comp} independent components
+#' (metagenes). Each feature is \emph{owned} by (is a core node of) its dominant
+#' component -- the component in which it has the largest absolute loading -- so
+#' the cores form a clean partition. A feature is additionally recruited as an
+#' \emph{auxiliary} member of every other component in which its standardised
+#' loading exceeds \code{membership.z}; this multi-membership is what makes the
+#' returned modules overlap, so ICA yields divide-and-conquer-ready fuzzy modules
+#' directly, without a separate growth step. \code{max.size} trims auxiliary
+#' members (weakest loadings first) but never core members, so a component with
+#' more than \code{max.size} cores signals that \code{n.comp} should be raised.
 #' @param x a numeric matrix with p features (rows) and n samples (columns)
 #' @param n.comp an integer, the number of independent components (modules) to extract
-#' @param max.size an integer or NULL, the maximum number of nodes allowed in a module (NULL = unconstrained)
-#' @param merge a logical, if TRUE similar modules are merged by eigengene similarity (WGCNA::mergeCloseModules)
-#' @param merging.cut a numeric, the eigengene dissimilarity threshold for merging
-#' @param iterate a logical, if TRUE modules exceeding max.size are split by re-running ICA on their features
-#' @param cor.FN a character, the correlation function used for merging and WGCNA-based trading ('bicor' or 'cor')
-#' @param trade.by a character, how oversized modules are trimmed to max.size: 'adjacency' (a learned similarity matrix) or 'eigengene' (correlation with module eigengenes)
-#' @param network a character, the method used to learn the similarity matrix when trade.by = 'adjacency': 'WGCNA' or 'ARACNE'
+#' @param max.size an integer or NULL, the maximum number of nodes allowed in a module (NULL = unconstrained); trims auxiliary members only
+#' @param membership.z a numeric, the standardised absolute-loading threshold above which a feature becomes an auxiliary member of a non-dominant component
 #' @param ... additional arguments passed to fastICA::fastICA
 
-#' @return a list with: the learned similarity matrix (or NULL), the initial modules, and the final modules after splitting/trading
+#' @return a list with 'ica.loadings', the p x n.comp source (metagene) loading matrix, and 'mods', an overlapping module object whose core nodes are each feature's dominant component
 
 #' @importFrom methods new
-#' @importFrom stats prcomp cor
 
 #' @export
 find_ICA_mods <- function(x,
                           n.comp,
                           max.size = NULL,
-                          merge = FALSE,
-                          merging.cut = 0.2,
-                          iterate = FALSE,
-                          cor.FN = c("bicor", "cor"),
-                          trade.by = c("adjacency", "eigengene"),
-                          network = c("WGCNA", "ARACNE"),
+                          membership.z = 2,
                           ...) {
   if (!requireNamespace("fastICA", quietly = TRUE)) {
     stop("Package fastICA is required. Install with: install.packages('fastICA')", call. = FALSE)
   }
-  cor.FN <- match.arg(cor.FN)
-  trade.by <- match.arg(trade.by)
-  network <- match.arg(network)
   if (is.null(max.size)) max.size <- Inf
-  cor.options <- if (cor.FN == "cor") list(use = "p") else list(pearsonFallback = "individual")
 
-  # decompose features into independent components and assign each to its top component
+  # decompose features into independent components; S has one row per feature and
+  # one column per component (the metagene loadings)
   ICA.results <- fastICA::fastICA(X = as.matrix(x), n.comp = n.comp, ...)
-  abs.S <- abs(ICA.results$S)
-  initial.index.vector <- max.col(abs.S, ties.method = "first") # top component per feature
-  score.vector <- abs.S[cbind(seq_len(nrow(abs.S)), initial.index.vector)]
-  message("ICA produced ", .n_modules(initial.index.vector), " modules.")
+  S <- ICA.results$S
+  rownames(S) <- rownames(x)
+  abs.S <- abs(S)
 
-  # minimum number of modules needed to satisfy max.size
-  min.mods <- max(1, ceiling(nrow(x) / max.size))
+  # ownership: each feature's core (dominant) component is its top absolute loading
+  core.assign  <- max.col(abs.S, ties.method = "first")
+  score.vector <- abs.S[cbind(seq_len(nrow(abs.S)), core.assign)]
 
-  # merge similar modules based on eigengene similarity
-  if (merge) {
-    initial.index.vector <- .merge_modules(index.vector = initial.index.vector,
-                                           t.x = t(x),
-                                           cor.FN = cor.FN,
-                                           cor.options = cor.options,
-                                           merging.cut = merging.cut,
-                                           min.mods = min.mods,
-                                           max.size = max.size)
-  }
+  # multi-membership: a feature is an auxiliary member of any other component in
+  # which its standardised loading clears membership.z (its own core is always in)
+  z <- scale(abs.S)
+  member <- z >= membership.z
+  member[is.na(member)] <- FALSE
+  member[cbind(seq_len(nrow(member)), core.assign)] <- TRUE
+  message("ICA produced ", n.comp, " components.")
 
-  # split modules that exceed max.size by re-running ICA on their features
-  if (iterate) {
-    initial.index.vector <- .split_large_modules_ICA(index.vector = initial.index.vector,
-                                                     x = x, max.size = max.size, ...)
-  }
-
-  # trade nodes to bring every module within max.size
-  modified.index.vector <- initial.index.vector
-  similarity <- NULL
-  if (sum(table(modified.index.vector) > max.size) > 0) {
-    if (trade.by == "adjacency") {
-      message("Learning a ", network, " similarity matrix for adjacency-based trading...")
-      similarity <- .feature_similarity(x, method = network, cor.FN = cor.FN)
+  # assemble per-component index (core + auxiliary) and core lists, trimming
+  # auxiliary members by loading to respect max.size (cores are never trimmed)
+  index.list <- vector("list", n.comp)
+  core.list  <- vector("list", n.comp)
+  for (cc in seq_len(n.comp)) {
+    cores   <- which(core.assign == cc)
+    members <- which(member[, cc])
+    if (length(members) > max.size) {
+      if (length(cores) > max.size) {
+        warning("Component ", cc, " has ", length(cores),
+                " core features (> max.size); raise n.comp to reduce module size.")
+      }
+      aux       <- setdiff(members, cores)
+      keep.n    <- max(0, max.size - length(cores))
+      aux.keep  <- aux[order(abs.S[aux, cc], decreasing = TRUE)][seq_len(min(keep.n, length(aux)))]
+      members   <- c(cores, aux.keep)
     }
-    message("Trimming oversized modules to max.size by ", trade.by, " trading...")
-    modified.index.vector <- .fit_to_max_size(index.vector = modified.index.vector,
-                                              max.size = max.size,
-                                              adj = similarity,
-                                              x = x,
-                                              method = trade.by)
+    index.list[[cc]] <- sort(members)
+    core.list[[cc]]  <- sort(cores)
   }
 
-  # build module objects
-  initial.index.vector <- as.numeric(initial.index.vector)
-  modified.index.vector <- as.numeric(modified.index.vector)
-  build_mods <- function(src, iv){
-    methods::new("module",
-                 source = src,
-                 data.dim = dim(x),
-                 overlapping = FALSE,
-                 index.vector = iv,
-                 score.vector = score.vector,
-                 index.list = split(seq_len(nrow(x)), iv),
-                 name.list = split(rownames(x), iv))
-  }
-  initial.mods <- build_mods("find_ICA_mods initial mods", initial.index.vector)
-  final.mods   <- build_mods("find_ICA_mods traded mods",  modified.index.vector)
+  # drop components that own no feature (their core partition entry is empty)
+  keep <- lengths(core.list) > 0
+  index.list <- index.list[keep]
+  core.list  <- core.list[keep]
+
+  mods <- methods::new("module",
+                       source = "find_ICA_mods",
+                       data.dim = dim(x),
+                       overlapping = TRUE,
+                       score.vector = score.vector,
+                       index.list = index.list,
+                       name.list = lapply(index.list, function(m) rownames(x)[m]),
+                       core.list = core.list)
 
   return(list(
-    similarity = similarity,
-    initial.mods = initial.mods,
-    final.mods = final.mods
+    ica.loadings = S,
+    mods = mods
   ))
-}
-
-#' Helper to find_ICA_mods that splits modules exceeding max.size by re-running ICA
-#' @param index.vector an integer vector of length p assigning each node to a module
-#' @param x a numeric matrix with p features (rows) and n samples (columns)
-#' @param max.size a numeric, the maximum number of nodes allowed in a module
-#' @param ... additional arguments passed to fastICA::fastICA
-
-#' @return an integer vector of length p with oversized modules split where possible
-
-#' @keywords internal
-.split_large_modules_ICA <- function(index.vector, x, max.size, ...) {
-  to.big <- as.numeric(names(which(table(index.vector) > max.size)))
-  to.big <- to.big[to.big != 0]
-  if (length(to.big) == 0) return(index.vector)
-
-  message("Modules ", paste(to.big, collapse = ", "), " are too large; attempting to split with ICA...")
-  for (m in to.big) {
-    m.nodes <- which(index.vector == m)
-    # extract just enough components to bring sub-modules within max.size
-    n.split <- min(ceiling(length(m.nodes) / max.size), length(m.nodes), ncol(x))
-    if (n.split < 2) next
-
-    ica <- fastICA::fastICA(X = as.matrix(x[m.nodes, , drop = FALSE]), n.comp = n.split, ...)
-    sub.index <- apply(abs(ica$S), 1, which.max)
-    n.new <- .n_modules(sub.index)
-    if (n.new < 2) {
-      message("Module ", m, " failed to split into at least two new modules.")
-      next
-    }
-    message("Splitting module ", m, " into ", n.new, " new modules.")
-    # offset new labels by the current max so they do not collide with existing modules
-    index.vector[m.nodes] <- sub.index + max(index.vector)
-  }
-  return(index.vector)
 }
 
 
@@ -843,11 +674,19 @@ find_ICA_mods <- function(x,
 ###############################
 
 #' Expand non-overlapping modules to fuzzy (overlapping) modules by recruiting nodes correlated with each module's eigengene
+#'
+#' The nodes of the input partition become the \emph{core} (owned) nodes of each
+#' fuzzy module; the recruited neighbours are auxiliary nodes, present only so the
+#' graph learned on the module can condition on each core node's Markov blanket.
+#' Growth stops at \code{ratio}/\code{max.size}, or earlier if \code{min.cor} is
+#' supplied and no external feature clears that correlation (an approximate
+#' blanket-closure criterion).
 #' @param x a numeric matrix with p features (rows) and n samples (columns)
 #' @param input.modules a module S4 object containing the non-overlapping module assignments to expand
 #' @param max.size an integer, the maximum number of nodes allowed in any fuzzy module
 #' @param n.pc an integer, the number of principal components used to represent each module's eigengene
 #' @param ratio a numeric, the maximum ratio of fuzzy module size to original module size
+#' @param min.cor a numeric or NULL; if set, only features whose summed absolute correlation with the module eigengene exceeds this value are recruited (blanket-closure cutoff), so a module may grow by fewer than \code{ratio} implies
 
 #' @return a module object
 
@@ -855,7 +694,11 @@ find_ICA_mods <- function(x,
 #' @importFrom methods new
 
 #' @export
-eigen_fuzzy_modules <- function(x, input.modules, max.size, n.pc = 2, ratio = 1.5){
+eigen_fuzzy_modules <- function(x, input.modules, max.size, n.pc = 2, ratio = 1.5, min.cor = NULL){
+  # growth only defines ownership cleanly when the input is a partition
+  if (input.modules@overlapping) {
+    stop("input.modules must be a non-overlapping partition (its nodes become the core nodes of each fuzzy module).")
+  }
   # check if any modules are too large
   if (any(lengths(input.modules@index.list) > max.size)) {
     stop("Some modules are too large, increase max.size.")
@@ -864,56 +707,68 @@ eigen_fuzzy_modules <- function(x, input.modules, max.size, n.pc = 2, ratio = 1.
   # create new index list (list of nodes in each fuzzy module by index)
   index.list <- lapply(seq_along(input.modules@index.list), function(m){
     mod.nodes <- input.modules@index.list[[m]]
-    # get number of required fuzzy nodes
-    f.size <- length(mod.nodes)*ratio
+    # get number of required fuzzy nodes (capped by max.size and by nodes available)
+    f.size <- length(mod.nodes) * ratio
     if(f.size > max.size){f.size <- max.size}
-    n.fuzzy.nodes <- f.size - length(mod.nodes)
+    n.fuzzy.nodes <- min(f.size - length(mod.nodes), nrow(x) - length(mod.nodes))
+    if(n.fuzzy.nodes <= 0){ return(sort(mod.nodes)) }
 
     # get the module's principal components
     mod.PC <- stats::prcomp(t(x[mod.nodes, , drop = FALSE]), scale. = TRUE)
 
     # score each gene outside the module by its summed absolute correlation
     # with the module's first n.pc principal components
+    n.pc.use <- min(n.pc, ncol(mod.PC$x))
     pc.cor <- stats::cor(t(x[-mod.nodes, , drop = FALSE]),
-                         mod.PC$x[, seq_len(n.pc), drop = FALSE])
+                         mod.PC$x[, seq_len(n.pc.use), drop = FALSE])
     eigen.cor <- rowSums(abs(pc.cor))
 
-    corRank <- sort(eigen.cor, decreasing = TRUE) # ranked absolute correlation
-    fuzzy.nodes <- names(corRank[seq_len(n.fuzzy.nodes)]) # highest-ranked fuzzy nodes
+    corRank <- sort(eigen.cor, decreasing = TRUE)      # ranked absolute correlation
+    corRank <- corRank[seq_len(n.fuzzy.nodes)]         # highest-ranked candidates
+    if(!is.null(min.cor)){ corRank <- corRank[corRank >= min.cor] } # blanket-closure cutoff
+    fuzzy.nodes <- which(rownames(x) %in% names(corRank))
 
-    # convert fuzzy nodes to numerics (stored naturally as names)
-    fuzzy.nodes <- which(rownames(x) %in% fuzzy.nodes)
-    names(fuzzy.nodes) <- rownames(x)[fuzzy.nodes]
-
-    # return fuzzy module combining original and fuzzy nodes
+    # return fuzzy module combining original (core) and recruited (auxiliary) nodes
     sort(c(mod.nodes, fuzzy.nodes))
   })
 
-  # convert to module object and return
+  # convert to module object and return; original nodes are the owned core nodes
   fuzzy.mods <- methods::new("module",
                              source = paste("eigen_fuzzy_modules", "generated from", input.modules@source),
                              data.dim = dim(x),
                              overlapping = TRUE,
                              index.list = index.list,
-                             name.list = lapply(index.list, function(m){rownames(x)[m]})
+                             name.list = lapply(index.list, function(m){rownames(x)[m]}),
+                             core.list = input.modules@index.list
   )
   return(fuzzy.mods)
 
 }
 
 #' Expand non-overlapping modules to fuzzy (overlapping) modules using a thresholded WGCNA adjacency matrix
+#'
+#' The nodes of the input partition become the \emph{core} (owned) nodes of each
+#' fuzzy module; the recruited neighbours are auxiliary nodes carried along so
+#' the module can condition on each core node's Markov blanket. Growth stops at
+#' \code{ratio}/\code{max.size}, or earlier if \code{min.adj} is supplied and no
+#' external feature reaches that adjacency (an approximate blanket-closure cutoff).
 #' @param x a numeric matrix with p features (rows) and n samples (columns)
 #' @param adj a p x p numeric adjacency matrix (e.g. from WGCNA::adjacency) defining pairwise feature similarity
 #' @param input.modules a module S4 object containing the non-overlapping module assignments to expand
 #' @param max.size an integer, the maximum number of nodes allowed in any fuzzy module
 #' @param ratio a numeric, the maximum ratio of fuzzy module size to original module size
+#' @param min.adj a numeric or NULL; if set, only features whose maximum adjacency to a core node exceeds this value are recruited (blanket-closure cutoff)
 
 #' @return a module object
 
 #' @importFrom methods new
 
 #' @export
-adj_fuzzy_modules <- function(x, adj, input.modules, max.size, ratio){
+adj_fuzzy_modules <- function(x, adj, input.modules, max.size, ratio, min.adj = NULL){
+  # growth only defines ownership cleanly when the input is a partition
+  if (input.modules@overlapping) {
+    stop("input.modules must be a non-overlapping partition (its nodes become the core nodes of each fuzzy module).")
+  }
   # check if any modules are too large
   if (any(lengths(input.modules@index.list) > max.size)) {
     stop("Some modules are too large, increase max.size.")
@@ -922,36 +777,35 @@ adj_fuzzy_modules <- function(x, adj, input.modules, max.size, ratio){
   # create new index list (list of nodes in each fuzzy module by index)
   index.list <- lapply(seq_along(input.modules@index.list), function(m){
     mod.nodes <- input.modules@index.list[[m]]
-    # get number of required fuzzy nodes
-    f.size <- length(mod.nodes)*ratio
+    # get number of required fuzzy nodes (capped by max.size and by nodes available)
+    f.size <- length(mod.nodes) * ratio
     if(f.size > max.size){f.size <- max.size}
-    n.fuzzy.nodes <- f.size - length(mod.nodes)
+    n.fuzzy.nodes <- min(f.size - length(mod.nodes), nrow(x) - length(mod.nodes))
+    if(n.fuzzy.nodes <= 0){ return(sort(mod.nodes)) }
 
     # get matrix of nodes in module adj with nodes outside module
     in.out.adj <- adj[mod.nodes, -mod.nodes, drop = FALSE]
 
-    # get max adj of node outside module with node inside module
+    # get max adj of node outside module with a node inside module
     out.max <- apply(in.out.adj, 2, max)
 
-    # rank and select fuzzy nodes based on adj
-    adj.rank <- order(out.max, decreasing = TRUE)
-    fuzzy.nodes <- colnames(in.out.adj)[adj.rank[seq_len(n.fuzzy.nodes)]]
+    # rank and select fuzzy nodes based on adjacency to the module
+    adj.rank <- order(out.max, decreasing = TRUE)[seq_len(n.fuzzy.nodes)]
+    if(!is.null(min.adj)){ adj.rank <- adj.rank[out.max[adj.rank] >= min.adj] } # closure cutoff
+    fuzzy.nodes <- which(rownames(x) %in% colnames(in.out.adj)[adj.rank])
 
-    # convert fuzzy nodes to numerics (stored naturally as names)
-    fuzzy.nodes <- which(rownames(x) %in% fuzzy.nodes)
-    names(fuzzy.nodes) <- rownames(x)[fuzzy.nodes]
-
-    # return fuzzy module combining original and fuzzy nodes
+    # return fuzzy module combining original (core) and recruited (auxiliary) nodes
     sort(c(mod.nodes, fuzzy.nodes))
   })
 
-  # convert to module object and return
+  # convert to module object and return; original nodes are the owned core nodes
   fuzzy.mods <- methods::new("module",
                              source = paste("adj_fuzzy_modules", "generated from", input.modules@source),
                              data.dim = dim(x),
                              overlapping = TRUE,
                              index.list = index.list,
-                             name.list = lapply(index.list, function(m){rownames(x)[m]})
+                             name.list = lapply(index.list, function(m){rownames(x)[m]}),
+                             core.list = input.modules@index.list
   )
   return(fuzzy.mods)
 }

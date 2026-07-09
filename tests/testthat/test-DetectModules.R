@@ -129,108 +129,61 @@ test_that("find_WGCNA_mods() respects the max.size constraint after trading", {
 # find_ICA_mods()
 # ---------------------------------------------------------------------------
 
-test_that("find_ICA_mods() returns a similarity slot and two valid module objects", {
+test_that("find_ICA_mods() returns loadings and an overlapping module with owned cores", {
   skip_if_not_installed("fastICA")
   fx <- make_lfr_fixture()
 
   w <- suppressWarnings(suppressMessages(find_ICA_mods(fx$x, n.comp = 6)))
 
   expect_type(w, "list")
-  expect_named(w, c("similarity", "initial.mods", "final.mods"))
+  expect_named(w, c("ica.loadings", "mods"))
 
-  # no max.size constraint -> no network learned, nothing traded
-  expect_null(w$similarity)
+  # ica.loadings: p x n.comp metagene loading matrix, feature-named rows
+  expect_true(is.matrix(w$ica.loadings))
+  expect_equal(dim(w$ica.loadings), c(nrow(fx$x), 6))
+  expect_equal(rownames(w$ica.loadings), rownames(fx$x))
 
-  # initial.mods / final.mods: valid non-overlapping module objects
-  expect_s4_class(w$initial.mods, "module")
-  expect_s4_class(w$final.mods, "module")
-  expect_false(w$initial.mods@overlapping)
-  expect_true(.module_check(fx$x, w$initial.mods))
-  expect_true(.module_check(fx$x, w$final.mods))
+  m <- w$mods
+  expect_s4_class(m, "module")
+  expect_true(m@overlapping)
+  expect_true(.module_check(fx$x, m))
+  expect_length(m@score.vector, nrow(fx$x))
 
-  # every feature is assigned to one of the n.comp components (none unassigned)
-  expect_equal(length(w$initial.mods@index.vector), nrow(fx$x))
-  expect_true(all(w$initial.mods@index.vector %in% 1:6))
-  expect_length(w$initial.mods@score.vector, nrow(fx$x))
+  # cores partition the features: every feature owned by exactly one component
+  expect_false(any(duplicated(unlist(m@core.list))))
+  expect_setequal(unlist(m@core.list), seq_len(nrow(fx$x)))
 
-  # with no constraint the final modules equal the initial modules
-  expect_equal(w$final.mods@index.vector, w$initial.mods@index.vector)
+  # multi-membership makes the modules overlap (total memberships exceed p)
+  expect_gt(length(unlist(m@index.list)), length(unlist(m@core.list)))
 })
 
-test_that("find_ICA_mods() respects max.size via eigengene trading without a network", {
+test_that("find_ICA_mods() membership.z tunes how much the modules overlap", {
+  skip_if_not_installed("fastICA")
+  fx <- make_lfr_fixture()
+
+  loose  <- suppressWarnings(suppressMessages(find_ICA_mods(fx$x, n.comp = 6, membership.z = 1)))
+  strict <- suppressWarnings(suppressMessages(find_ICA_mods(fx$x, n.comp = 6, membership.z = 3)))
+
+  # a higher loading threshold recruits fewer auxiliary members -> less overlap
+  expect_lte(sum(lengths(strict$mods@index.list)),
+             sum(lengths(loose$mods@index.list)))
+  # the core partition is unaffected by the threshold
+  expect_setequal(unlist(strict$mods@core.list), unlist(loose$mods@core.list))
+})
+
+test_that("find_ICA_mods() trims auxiliary members to respect max.size", {
   skip_if_not_installed("fastICA")
   fx <- make_lfr_fixture()
 
   w <- suppressWarnings(suppressMessages(
-    find_ICA_mods(fx$x, n.comp = 6, max.size = 25, trade.by = "eigengene")))
+    find_ICA_mods(fx$x, n.comp = 12, max.size = 20)))
 
-  # eigengene trading needs no similarity matrix
-  expect_null(w$similarity)
-  # 6 modules over 120 features leave room, so trading meets max.size
-  expect_lte(max(lengths(w$final.mods@index.list)), 25)
-  expect_true(.module_check(fx$x, w$final.mods))
-})
-
-test_that("find_ICA_mods() learns a WGCNA similarity matrix for adjacency trading", {
-  skip_if_not_installed("fastICA")
-  skip_if_not_installed("WGCNA")
-  fx <- make_lfr_fixture()
-
-  # 6 components over 120 features => the largest module is always >= 20 > 18,
-  # so adjacency trading always runs and a similarity matrix is learned
-  w <- suppressWarnings(suppressMessages(
-    find_ICA_mods(fx$x, n.comp = 6, max.size = 18, trade.by = "adjacency")))
-
-  expect_true(is.matrix(w$similarity))
-  expect_equal(dim(w$similarity), c(nrow(fx$x), nrow(fx$x)))
-  expect_equal(rownames(w$similarity), rownames(fx$x))
-  # trading never grows the largest module
-  expect_lte(max(lengths(w$final.mods@index.list)),
-             max(lengths(w$initial.mods@index.list)))
-  expect_true(.module_check(fx$x, w$final.mods))
-})
-
-test_that("find_ICA_mods() splits oversized modules when iterate = TRUE", {
-  skip_if_not_installed("fastICA")
-  skip_if_not_installed("WGCNA")
-  fx <- make_lfr_fixture()
-
-  # 2 components over 120 features => each module starts well above max.size,
-  # so iterative ICA must split them into more modules
-  w <- suppressWarnings(suppressMessages(
-    find_ICA_mods(fx$x, n.comp = 2, max.size = 40, iterate = TRUE)))
-
-  expect_gt(length(w$final.mods@index.list), 2)
-  expect_lte(max(lengths(w$final.mods@index.list)), 40)
-  expect_true(.module_check(fx$x, w$final.mods))
-})
-
-test_that("find_ICA_mods() merge = TRUE stays valid and never adds modules", {
-  skip_if_not_installed("fastICA")
-  skip_if_not_installed("WGCNA")
-  fx <- make_lfr_fixture()
-
-  w <- suppressWarnings(suppressMessages(
-    find_ICA_mods(fx$x, n.comp = 6, merge = TRUE)))
-
-  # merging can only reduce (or keep) the number of modules
-  expect_lte(length(w$initial.mods@index.list), 6)
-  expect_true(.module_check(fx$x, w$initial.mods))
-  expect_true(.module_check(fx$x, w$final.mods))
-})
-
-test_that("find_ICA_mods() can learn an ARACNE similarity matrix", {
-  skip_if_not_installed("fastICA")
-  skip_if_not_installed("minet")
-  fx <- make_lfr_fixture()
-
-  w <- suppressWarnings(suppressMessages(
-    find_ICA_mods(fx$x, n.comp = 6, max.size = 18,
-                  trade.by = "adjacency", network = "ARACNE")))
-
-  expect_true(is.matrix(w$similarity))
-  expect_equal(dim(w$similarity), c(nrow(fx$x), nrow(fx$x)))
-  expect_true(.module_check(fx$x, w$final.mods))
+  # cores are never trimmed, so each module is capped at max.size whenever its
+  # core set fits; oversized cores (should they occur) are left intact and warned
+  sizes <- lengths(w$mods@index.list)
+  cores <- lengths(w$mods@core.list)
+  expect_true(all(sizes <= pmax(20, cores)))
+  expect_true(.module_check(fx$x, w$mods))
 })
 
 # ---------------------------------------------------------------------------
@@ -485,6 +438,7 @@ test_that("module_match() is invariant to module ordering", {
   ord <- rev(seq_along(tm@index.list))
   shuffled@index.list <- tm@index.list[ord]
   shuffled@name.list  <- tm@name.list[ord]
+  shuffled@core.list  <- tm@core.list[ord]   # keep ownership aligned with the reorder
 
   res <- module_match(tm, shuffled)
   # same partition, just reordered -> still a perfect match
@@ -504,6 +458,8 @@ test_that("module_match() scores a coarser partition between 0 and 100", {
                          tm@index.list[-(1:2)])
   merged@name.list  <- c(list(unlist(tm@name.list[1:2])),
                          tm@name.list[-(1:2)])
+  # drop the (now stale) ownership so the hand-built object stays valid
+  merged@core.list <- list()
 
   res <- module_match(tm, merged)
   expect_gt(res$overall.overlap, 0)

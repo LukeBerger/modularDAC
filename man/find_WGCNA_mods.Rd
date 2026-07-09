@@ -43,12 +43,12 @@ find_WGCNA_mods(
 
 \item{merging.cut}{a numeric between 0 and 1, the eigengene dissimilarity threshold for WGCNA::mergeCloseModules}
 
-\item{iterate}{a logical, if TRUE module detection is run iteratively to break up any modules exceeding max.size}
+\item{iterate}{a logical, if TRUE oversized modules are recursively split so every module fits within max.size}
 
 \item{assign.by}{a character, how unassigned nodes are recruited to modules: 'adjacency' uses WGCNA adjacency, 'eigengene' uses correlation with module eigengenes}
 }
 \value{
-a list containing: the WGCNA thresholded adj matrix, the initial modules after merge/iteration, the final modules after max.size fitting
+a list containing: 'wgcna.adj', the WGCNA co-expression adjacency matrix; 'initial.mods', the natural modules after merging and unassigned-node recruitment; and 'final.mods', those modules after recursive splitting to satisfy max.size
 }
 \description{
 Detect co-expression modules from a data matrix using WGCNA

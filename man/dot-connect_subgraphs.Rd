@@ -4,19 +4,33 @@
 \alias{.connect_subgraphs}
 \title{Combine a list of sub-graphs with overlapping nodes into a single weighted graph by reconciling edge weights}
 \usage{
-.connect_subgraphs(x, sub.graphs, weight.summary = c("min", "mean"))
+.connect_subgraphs(
+  x,
+  sub.graphs,
+  weight.summary = c("min", "mean"),
+  core.sets = NULL
+)
 }
 \arguments{
 \item{x}{a numeric matrix with p features (rows) and n samples (columns)}
 
 \item{sub.graphs}{a list of weighted igraph objects with overlapping node names}
 
-\item{weight.summary}{a character, how to reconcile the weight of an edge that is possible in multiple sub-graphs; 'min' (default) keeps, by absolute value, the smallest weight across every sub-graph in which the edge is possible (an absent edge counts as weight 0, so an edge missing from any possible sub-graph is dropped) and stores that edge's signed value, while 'mean' keeps the average of the signed weights across those sub-graphs (an absent edge again counting as 0, so an edge present in only some possible sub-graphs survives with a reduced weight)}
+\item{weight.summary}{a character, how to reconcile an edge across the owner modules that could propose it; 'min' (default) keeps the edge only if every expected proposer detected it (consensus), storing the smallest-magnitude signed weight, while 'mean' averages the signed weights over the expected proposers so an edge missing from some proposer survives with a shrunk weight}
+
+\item{core.sets}{a list (aligned with sub.graphs) of character vectors giving the core (owned) node names of each sub-graph, or NULL to treat every node as core (which reproduces the ownership-agnostic behaviour: all sub-graphs containing both endpoints are proposers)}
 }
 \value{
 a weighted igraph object comprised of the combined sub-graphs
 }
 \description{
-Combine a list of sub-graphs with overlapping nodes into a single weighted graph by reconciling edge weights
+Stitching is done on an edge list rather than dense p x p matrices, so cost
+scales with the number of within-module edges (which is sparse) instead of
+with p^2. When \code{core.sets} records node ownership, an edge is only
+credited from a sub-graph in which at least one endpoint is a \emph{core}
+(owned) node -- discarding auxiliary-auxiliary edges, whose endpoints' Markov
+blankets are not guaranteed to lie inside the module. Every kept detection
+therefore comes from an owner of one of its endpoints, so each edge has at
+most two authoritative proposers (the owners of its two endpoints).
 }
 \keyword{internal}

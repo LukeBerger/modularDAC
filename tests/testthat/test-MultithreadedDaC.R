@@ -73,6 +73,8 @@ test_that("divide_and_conquer() warns when a module has no overlap with the othe
   disjoint@index.list <- list(seq_len(p / 2), (p / 2 + 1):p)
   disjoint@name.list  <- list(rownames(.x)[seq_len(p / 2)],
                               rownames(.x)[(p / 2 + 1):p])
+  # each half owns itself (keeps the ownership consistent with the new index list)
+  disjoint@core.list  <- disjoint@index.list
 
   # capture_warnings() collects every warning (the run also emits an unrelated
   # "%dopar% sequentially" warning), so we assert that at least one reports the

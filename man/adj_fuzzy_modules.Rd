@@ -4,7 +4,7 @@
 \alias{adj_fuzzy_modules}
 \title{Expand non-overlapping modules to fuzzy (overlapping) modules using a thresholded WGCNA adjacency matrix}
 \usage{
-adj_fuzzy_modules(x, adj, input.modules, max.size, ratio)
+adj_fuzzy_modules(x, adj, input.modules, max.size, ratio, min.adj = NULL)
 }
 \arguments{
 \item{x}{a numeric matrix with p features (rows) and n samples (columns)}
@@ -16,10 +16,16 @@ adj_fuzzy_modules(x, adj, input.modules, max.size, ratio)
 \item{max.size}{an integer, the maximum number of nodes allowed in any fuzzy module}
 
 \item{ratio}{a numeric, the maximum ratio of fuzzy module size to original module size}
+
+\item{min.adj}{a numeric or NULL; if set, only features whose maximum adjacency to a core node exceeds this value are recruited (blanket-closure cutoff)}
 }
 \value{
 a module object
 }
 \description{
-Expand non-overlapping modules to fuzzy (overlapping) modules using a thresholded WGCNA adjacency matrix
+The nodes of the input partition become the \emph{core} (owned) nodes of each
+fuzzy module; the recruited neighbours are auxiliary nodes carried along so
+the module can condition on each core node's Markov blanket. Growth stops at
+\code{ratio}/\code{max.size}, or earlier if \code{min.adj} is supplied and no
+external feature reaches that adjacency (an approximate blanket-closure cutoff).
 }

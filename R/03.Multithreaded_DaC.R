@@ -127,7 +127,15 @@ divide_and_conquer <- function(x,
   # stitch graphs back together
 
   weight.summary <- match.arg(weight.summary)
-  final.graph <- .connect_subgraphs(x, parsed.outputs$learned.graphs, weight.summary)
+  # node ownership (core.list) makes the stitch owner-based: each edge is credited
+  # only from the module(s) that own one of its endpoints. Falls back to NULL
+  # (ownership-agnostic) when the module carries no core.list.
+  core.sets <- if (length(subgraph.module@core.list) > 0) {
+    lapply(subgraph.module@core.list, function(idx) rownames(x)[idx])
+  } else {
+    NULL
+  }
+  final.graph <- .connect_subgraphs(x, parsed.outputs$learned.graphs, weight.summary, core.sets)
 
   # return sub graphs and final graphs
   return(
@@ -140,82 +148,101 @@ divide_and_conquer <- function(x,
 }
 
 #' Combine a list of sub-graphs with overlapping nodes into a single weighted graph by reconciling edge weights
+#'
+#' Stitching is done on an edge list rather than dense p x p matrices, so cost
+#' scales with the number of within-module edges (which is sparse) instead of
+#' with p^2. When \code{core.sets} records node ownership, an edge is only
+#' credited from a sub-graph in which at least one endpoint is a \emph{core}
+#' (owned) node -- discarding auxiliary-auxiliary edges, whose endpoints' Markov
+#' blankets are not guaranteed to lie inside the module. Every kept detection
+#' therefore comes from an owner of one of its endpoints, so each edge has at
+#' most two authoritative proposers (the owners of its two endpoints).
 #' @param x a numeric matrix with p features (rows) and n samples (columns)
 #' @param sub.graphs a list of weighted igraph objects with overlapping node names
-#' @param weight.summary a character, how to reconcile the weight of an edge that is possible in multiple sub-graphs; 'min' (default) keeps, by absolute value, the smallest weight across every sub-graph in which the edge is possible (an absent edge counts as weight 0, so an edge missing from any possible sub-graph is dropped) and stores that edge's signed value, while 'mean' keeps the average of the signed weights across those sub-graphs (an absent edge again counting as 0, so an edge present in only some possible sub-graphs survives with a reduced weight)
+#' @param weight.summary a character, how to reconcile an edge across the owner modules that could propose it; 'min' (default) keeps the edge only if every expected proposer detected it (consensus), storing the smallest-magnitude signed weight, while 'mean' averages the signed weights over the expected proposers so an edge missing from some proposer survives with a shrunk weight
+#' @param core.sets a list (aligned with sub.graphs) of character vectors giving the core (owned) node names of each sub-graph, or NULL to treat every node as core (which reproduces the ownership-agnostic behaviour: all sub-graphs containing both endpoints are proposers)
 
-#' @importFrom igraph as_adjacency_matrix graph_from_adjacency_matrix V is_weighted
+#' @importFrom igraph as_edgelist graph_from_data_frame V E is_weighted ecount
 
 #' @return a weighted igraph object comprised of the combined sub-graphs
 
 #' @keywords internal
-.connect_subgraphs <- function(x, sub.graphs, weight.summary = c("min", "mean")){
+.connect_subgraphs <- function(x, sub.graphs, weight.summary = c("min", "mean"), core.sets = NULL){
   weight.summary <- match.arg(weight.summary)
 
   # the full node set, in the order of the input data
   nodes <- rownames(x)
-  p <- length(nodes)
 
-  # accumulators over all node pairs (p x p), built up one sub-graph at a time:
-  #  - min.abs / min.signed track the smallest-magnitude weight and its signed
-  #    value (used when weight.summary == "min")
-  #  - weight.sum tracks the summed signed weight (used when weight.summary == "mean")
-  #  - possible.count tracks, for each pair, the number of sub-graphs in which
-  #    both endpoints are present (i.e. the edge is "possible")
-  #  - pos.count / neg.count tally how many sub-graphs gave the edge a positive
-  #    vs negative weight, so sign disagreements can be flagged
-  min.abs        <- matrix(Inf, p, p, dimnames = list(nodes, nodes))
-  min.signed     <- matrix(0,   p, p, dimnames = list(nodes, nodes))
-  weight.sum     <- matrix(0,   p, p, dimnames = list(nodes, nodes))
-  possible.count <- matrix(0,   p, p, dimnames = list(nodes, nodes))
-  pos.count      <- matrix(0,   p, p, dimnames = list(nodes, nodes))
-  neg.count      <- matrix(0,   p, p, dimnames = list(nodes, nodes))
+  # per-sub-graph node sets; default ownership is "every node is core", which
+  # makes every sub-graph containing both endpoints a proposer (legacy behaviour)
+  node.sets <- lapply(sub.graphs, function(g) igraph::V(g)$name)
+  if (is.null(core.sets)) core.sets <- node.sets
 
-  for (sg in sub.graphs) {
-    sg.nodes <- igraph::V(sg)$name
+  # an empty graph over the full node set, used as the fallback return
+  empty.graph <- igraph::graph_from_data_frame(
+    data.frame(from = character(0), to = character(0)),
+    directed = FALSE, vertices = data.frame(name = nodes))
 
-    # this sub-graph's weighted adjacency, in node order
-    adj.sub <- as.matrix(igraph::as_adjacency_matrix(
-      sg, attr = if (igraph::is_weighted(sg)) "weight" else NULL))
-    blk <- adj.sub[sg.nodes, sg.nodes]
-    a   <- abs(blk)
+  # --- collect authoritative edge detections (>= 1 core endpoint per sub-graph) ---
+  rows <- vector("list", length(sub.graphs))
+  for (s in seq_along(sub.graphs)) {
+    g <- sub.graphs[[s]]
+    if (igraph::ecount(g) == 0) next
+    el <- igraph::as_edgelist(g, names = TRUE)
+    w  <- if (igraph::is_weighted(g)) igraph::E(g)$weight else rep(1, nrow(el))
+    core <- core.sets[[s]]
+    keep <- (el[, 1] %in% core) | (el[, 2] %in% core)
+    if (!any(keep)) next
+    el <- el[keep, , drop = FALSE]; w <- w[keep]
+    a <- pmin(el[, 1], el[, 2]); b <- pmax(el[, 1], el[, 2])   # canonical endpoint order
+    rows[[s]] <- data.frame(a = a, b = b, w = w, sub = s, stringsAsFactors = FALSE)
+  }
+  edges <- do.call(rbind, rows)
+  if (is.null(edges) || nrow(edges) == 0) return(empty.graph)
 
-    # all updates are confined to this sub-graph's block of the global matrices:
-    # every pair within sg.nodes is "possible", pairs outside are untouched.
-    # An absent edge contributes magnitude 0 and so wins the smallest-magnitude
-    # update, which is what drops edges missing from a possible sub-graph.
-    cur.abs <- min.abs[sg.nodes, sg.nodes]
-    upd <- a < cur.abs
-    cur.abs[upd] <- a[upd]
-    min.abs[sg.nodes, sg.nodes] <- cur.abs
+  # index endpoints into the node universe and key each undirected pair
+  ai <- match(edges$a, nodes); bi <- match(edges$b, nodes)
+  edges$key <- paste(ai, bi, sep = "-")
 
-    cur.signed <- min.signed[sg.nodes, sg.nodes]
-    cur.signed[upd] <- blk[upd]
-    min.signed[sg.nodes, sg.nodes] <- cur.signed
+  # per-sub boolean presence / core membership over the node universe
+  in.sub  <- lapply(node.sets, function(ns) { v <- logical(length(nodes)); v[match(ns, nodes)] <- TRUE; v })
+  in.core <- lapply(core.sets, function(cs) { v <- logical(length(nodes)); v[match(cs, nodes)] <- TRUE; v })
 
-    # running sums for the mean, the possible counts, and the sign tallies
-    weight.sum[sg.nodes, sg.nodes]     <- weight.sum[sg.nodes, sg.nodes] + blk
-    possible.count[sg.nodes, sg.nodes] <- possible.count[sg.nodes, sg.nodes] + 1
-    pos.count[sg.nodes, sg.nodes]      <- pos.count[sg.nodes, sg.nodes] + (blk > 0)
-    neg.count[sg.nodes, sg.nodes]      <- neg.count[sg.nodes, sg.nodes] + (blk < 0)
+  # unique candidate edges
+  uk <- !duplicated(edges$key)
+  ua <- ai[uk]; ub <- bi[uk]; keys <- edges$key[uk]
+  U <- length(keys)
+
+  # expected proposer count E: sub-graphs where both endpoints are present and at
+  # least one is core there. Computed from membership (not detections) so a missing
+  # edge in a proposer can be detected as such below.
+  E <- integer(U)
+  for (s in seq_along(sub.graphs)) {
+    E <- E + ((in.sub[[s]][ua] & in.sub[[s]][ub]) & (in.core[[s]][ua] | in.core[[s]][ub]))
   }
 
-  # reconcile to a single weighted adjacency matrix
+  # detections grouped by edge (in the order of `keys`)
+  det.sub <- split(edges$sub, edges$key)[keys]
+  det.w   <- split(edges$w,   edges$key)[keys]
+
+  # reconcile each edge over its expected proposers
+  D     <- vapply(det.sub, function(s) length(unique(s)), integer(1))   # proposers that detected it
+  n.pos <- vapply(det.w, function(w) sum(w > 0), integer(1))
+  n.neg <- vapply(det.w, function(w) sum(w < 0), integer(1))
   if (weight.summary == "min") {
-    adj <- min.signed
-    adj[is.infinite(min.abs)] <- 0          # pairs possible in no sub-graph
+    # consensus: keep only when every expected proposer detected the edge
+    min.signed <- vapply(det.w, function(w) w[which.min(abs(w))], numeric(1))
+    final.w <- ifelse(D >= E, min.signed, 0)
   } else {
-    adj <- weight.sum / possible.count
-    adj[possible.count == 0] <- 0           # avoid 0 / 0 = NaN
+    # average signed weight over the expected proposers (absent-in-some -> shrunk)
+    sum.signed <- vapply(det.w, sum, numeric(1))
+    final.w <- sum.signed / E
   }
 
-  # no self-loops
-  diag(adj) <- 0
+  keep <- final.w != 0
 
-  # warn if any retained edge had conflicting signs across the sub-graphs it
-  # appeared in (its stored weight then reflects only the reconciliation rule)
-  conflict <- (pos.count > 0) & (neg.count > 0) & (adj != 0)
-  n.conflict <- sum(conflict[upper.tri(conflict)])
+  # warn if any retained edge had conflicting signs across its proposers
+  n.conflict <- sum((n.pos > 0) & (n.neg > 0) & keep)
   if (n.conflict > 0) {
     warning(sprintf(
       "%d edge(s) in the final graph had different signs across the sub-graphs in which they appeared.",
@@ -223,8 +250,12 @@ divide_and_conquer <- function(x,
     ))
   }
 
-  # build and return the combined weighted graph
-  igraph::graph_from_adjacency_matrix(adj, mode = "undirected", weighted = TRUE)
+  if (!any(keep)) return(empty.graph)
+
+  # build and return the combined weighted graph on the full node set
+  igraph::graph_from_data_frame(
+    data.frame(from = nodes[ua[keep]], to = nodes[ub[keep]], weight = final.w[keep]),
+    directed = FALSE, vertices = data.frame(name = nodes))
 }
 
 #####################################################
