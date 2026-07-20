@@ -316,39 +316,6 @@ divide_and_conquer <- function(x,
 }
 
 
-#' Argument wrapper for BDgraph: packages each module data subset for use with BDgraph::bdgraph
-#' @param sub.x a list of numeric matrices, each being a p_i x n subset of x for one module (features as rows)
-
-#' @return a list of argument lists, one per module, for .bd_wrapper
-
-#' @keywords internal
-.bd_arg_wrapper <- function(sub.x){
-  lapply(sub.x, function(x){
-    list(
-      x = x
-    )
-  })
-}
-
-#' Graph learning wrapper for BDgraph: fits a Gaussian graphical model and returns an igraph object
-#' @param x a numeric matrix with p features (rows) and n samples (columns), as prepared by .bd_arg_wrapper
-
-#' @return an igraph object, the learned graph
-
-#' @importFrom igraph graph_from_adjacency_matrix
-
-#' @keywords internal
-.bd_wrapper <- function(x){
-  if (!requireNamespace("BDgraph", quietly = TRUE)) {
-    stop("Package BDgraph is required. Install with: install.packages('BDgraph')", call. = FALSE)
-  }
-  # BDgraph expects an n samples x p features matrix
-  t.x <- t(x)
-  bdFit <- BDgraph::bdgraph(t.x)
-  postProb <- BDgraph::plinks(bdFit)
-  adjMat <- BDgraph::select(postProb)
-  igraph::graph_from_adjacency_matrix(adjMat, mode = "undirected") # can change this if I want to test edge directional update for .connect_subgraphs
-}
 
 #' Argument wrapper for RSNet: packages each module data subset with RSNet arguments
 #' @param sub.x a list of numeric matrices, each being a p_i x n subset of x for one module (features as rows)
