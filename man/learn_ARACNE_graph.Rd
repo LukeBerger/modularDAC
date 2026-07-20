@@ -4,14 +4,21 @@
 \alias{learn_ARACNE_graph}
 \title{Learn a gene co-expression graph from a data matrix using the ARACNE algorithm}
 \usage{
-learn_ARACNE_graph(x, eps = 0, threshold = 0.05)
+learn_ARACNE_graph(
+  x,
+  eps = 0,
+  percentile.thresold = 0.95,
+  mim.threshold = NULL
+)
 }
 \arguments{
 \item{x}{a numeric matrix with p features (rows) and n samples (columns)}
 
 \item{eps}{a numeric, the data processing inequality threshold used by ARACNE to remove indirect edges}
 
-\item{threshold}{a numeric, the mutual information value above which an edge is retained}
+\item{percentile.thresold}{a numeric, the top percentile of edges by strength will be kept in the final graph}
+
+\item{mim.threshold}{a numeric, the a fixed mutual information threshold that overrides the percentile, edges bellow this strength will be removed}
 }
 \value{
 a named list with two elements: 'graph', the learned weighted igraph object, and 'weights', the mutual information (ARACNE) matrix

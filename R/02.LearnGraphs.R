@@ -282,7 +282,8 @@ learn_WGCNA_graph <- function(x,
 
 #' Learn a gene co-expression graph from a data matrix using the ARACNE algorithm
 #' @param x a numeric matrix with p features (rows) and n samples (columns)
-#' @param threshold a numeric, the mutual information value above which an edge is retained
+#' @param percentile.thresold a numeric, the top percentile of edges by strength will be kept in the final graph
+#' @param mim.threshold a numeric, the a fixed mutual information threshold that overrides the percentile, edges bellow this strength will be removed
 #' @param eps a numeric, the data processing inequality threshold used by ARACNE to remove indirect edges
 
 #' @return a named list with two elements: 'graph', the learned weighted igraph object, and 'weights', the mutual information (ARACNE) matrix
@@ -290,7 +291,7 @@ learn_WGCNA_graph <- function(x,
 #' @importFrom igraph graph_from_adjacency_matrix
 
 #' @export
-learn_ARACNE_graph <- function(x, eps=0, threshold = 0.05) {
+learn_ARACNE_graph <- function(x, eps=0, percentile.thresold = 0.95, mim.threshold = NULL) {
   if (!requireNamespace("minet", quietly = TRUE)) {
     stop("Package minet is required. Install with: install.packages('minet')", call. = FALSE)
   }
@@ -304,8 +305,13 @@ learn_ARACNE_graph <- function(x, eps=0, threshold = 0.05) {
   # apply ARACNE algorithm
   aracne.mat <- minet::aracne(mim, eps=eps)
 
-  # threshold to select edges, but keep the mutual information values as edge weights
-  weighted.mim <- aracne.mat * (aracne.mat > threshold)
+  # if no threhsold.weight is provided, keep only the 'percentile.thresold' percentile of edges
+  if(is.null(mim.threshold)){
+    mim.threshold <- quantile(aracne.mat, percentile.thresold)
+  }
+
+  # threshold to select edges based on a minimum mutal information threshold
+  weighted.mim <- aracne.mat * (aracne.mat > mim.threshold)
 
   # remove looped edges
   diag(weighted.mim) <- 0

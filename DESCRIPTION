@@ -1,6 +1,6 @@
 Package: modularDAC
 Title: Quickly learn large networks by dividing data into modules
-Version: 0.0.0.9009
+Version: 0.0.0.9010
 Authors@R: 
     person("Luke", "Berger", , "lukeberg@bu.edu", role = c("aut", "cre"),
            comment = c(ORCID = "0009-0006-9987-3304"))
