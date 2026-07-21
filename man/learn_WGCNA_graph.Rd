@@ -10,7 +10,8 @@ learn_WGCNA_graph(
   beta = NULL,
   cor.FN = c("bicor", "cor"),
   powers = c(seq(1, 10, by = 1), seq(12, 20, by = 2)),
-  threshold = NULL
+  percentile.threshold = 0.95,
+  adj.threshold = NULL
 )
 }
 \arguments{
@@ -24,7 +25,9 @@ learn_WGCNA_graph(
 
 \item{powers}{an integer vector, candidate soft-thresholding powers evaluated by WGCNA::pickSoftThreshold}
 
-\item{threshold}{a numeric, the adjacency value above which an edge is retained; if NULL the 99.9th percentile is used}
+\item{percentile.threshold}{a numeric, the top percentile of edges by adjacency strength will be kept in the final graph}
+
+\item{adj.threshold}{a numeric, a fixed adjacency threshold that overrides the percentile; edges below this strength will be removed}
 }
 \value{
 a named list with two elements: 'graph', the learned weighted igraph object, and 'weights', the WGCNA co-expression adjacency matrix

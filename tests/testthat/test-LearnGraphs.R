@@ -93,9 +93,16 @@ test_that("learn_WGCNA_graph() returns a weighted igraph alongside the adjacency
   expect_equal(adj, t(adj))
 })
 
-test_that("learn_WGCNA_graph() retains fewer edges as the threshold rises", {
-  loose  <- quiet(learn_WGCNA_graph(.x, threshold = 0.01))$graph
-  strict <- quiet(learn_WGCNA_graph(.x, threshold = 0.5))$graph
+test_that("learn_WGCNA_graph() retains fewer edges as the fixed adjacency threshold rises", {
+  loose  <- quiet(learn_WGCNA_graph(.x, adj.threshold = 0.01))$graph
+  strict <- quiet(learn_WGCNA_graph(.x, adj.threshold = 0.5))$graph
+  expect_lte(igraph::gsize(strict), igraph::gsize(loose))
+})
+
+test_that("learn_WGCNA_graph() retains fewer edges as the kept percentile rises", {
+  # a higher percentile.threshold keeps a smaller top slice of edges
+  loose  <- quiet(learn_WGCNA_graph(.x, percentile.threshold = 0.90))$graph
+  strict <- quiet(learn_WGCNA_graph(.x, percentile.threshold = 0.99))$graph
   expect_lte(igraph::gsize(strict), igraph::gsize(loose))
 })
 

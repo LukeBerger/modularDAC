@@ -215,7 +215,8 @@ learn_SILGGM_graph <- function(x,
 #' @param beta an integer, the soft-thresholding power for WGCNA::adjacency; if NULL it is selected automatically via pickSoftThreshold
 #' @param cor.FN a character, the correlation function to use in WGCNA::adjacency; either 'bicor' or 'cor'
 #' @param powers an integer vector, candidate soft-thresholding powers evaluated by WGCNA::pickSoftThreshold
-#' @param threshold a numeric, the adjacency value above which an edge is retained; if NULL the 99.9th percentile is used
+#' @param percentile.threshold a numeric, the top percentile of edges by adjacency strength will be kept in the final graph
+#' @param adj.threshold a numeric, a fixed adjacency threshold that overrides the percentile; edges below this strength will be removed
 
 #' @return a named list with two elements: 'graph', the learned weighted igraph object, and 'weights', the WGCNA co-expression adjacency matrix
 
@@ -228,7 +229,8 @@ learn_WGCNA_graph <- function(x,
                               beta=NULL,
                               cor.FN=c("bicor", "cor"),
                               powers=c(seq(1, 10, by = 1), seq(12, 20, by = 2)),
-                              threshold = NULL
+                              percentile.threshold = 0.95,
+                              adj.threshold = NULL
 ) {
   if (!requireNamespace("WGCNA", quietly = TRUE)) {
     stop("Package WGCNA is required. Install with: install.packages('WGCNA')", call. = FALSE)
@@ -261,9 +263,13 @@ learn_WGCNA_graph <- function(x,
                           type="unsigned",
                           corOptions=cor.options)
 
-  # threshold to select edges, but keep the adjacency values as edge weights
-  if(is.null(threshold)){threshold <- quantile(.upper_tri_vec(adj), .999)}
-  weighted.adj <- adj * (adj > threshold)
+  # threshold to select edges, but keep the adjacency values as edge weights.
+  # if no fixed adj.threshold is provided, keep only the 'percentile.threshold'
+  # top percentile of edges by adjacency strength (mirrors learn_ARACNE_graph)
+  if(is.null(adj.threshold)){
+    adj.threshold <- quantile(.upper_tri_vec(adj), percentile.threshold)
+  }
+  weighted.adj <- adj * (adj > adj.threshold)
 
   # remove looped edges
   diag(weighted.adj) <- 0
@@ -282,7 +288,7 @@ learn_WGCNA_graph <- function(x,
 
 #' Learn a gene co-expression graph from a data matrix using the ARACNE algorithm
 #' @param x a numeric matrix with p features (rows) and n samples (columns)
-#' @param percentile.thresold a numeric, the top percentile of edges by strength will be kept in the final graph
+#' @param percentile.threshold a numeric, the top percentile of edges by strength will be kept in the final graph
 #' @param mim.threshold a numeric, the a fixed mutual information threshold that overrides the percentile, edges bellow this strength will be removed
 #' @param eps a numeric, the data processing inequality threshold used by ARACNE to remove indirect edges
 
@@ -291,7 +297,7 @@ learn_WGCNA_graph <- function(x,
 #' @importFrom igraph graph_from_adjacency_matrix
 
 #' @export
-learn_ARACNE_graph <- function(x, eps=0, percentile.thresold = 0.95, mim.threshold = NULL) {
+learn_ARACNE_graph <- function(x, eps=0, percentile.threshold = 0.95, mim.threshold = NULL) {
   if (!requireNamespace("minet", quietly = TRUE)) {
     stop("Package minet is required. Install with: install.packages('minet')", call. = FALSE)
   }
@@ -305,9 +311,9 @@ learn_ARACNE_graph <- function(x, eps=0, percentile.thresold = 0.95, mim.thresho
   # apply ARACNE algorithm
   aracne.mat <- minet::aracne(mim, eps=eps)
 
-  # if no threhsold.weight is provided, keep only the 'percentile.thresold' percentile of edges
+  # if no fixed mim.threshold is provided, keep only the 'percentile.threshold' percentile of edges
   if(is.null(mim.threshold)){
-    mim.threshold <- quantile(aracne.mat, percentile.thresold)
+    mim.threshold <- quantile(aracne.mat, percentile.threshold)
   }
 
   # threshold to select edges based on a minimum mutal information threshold

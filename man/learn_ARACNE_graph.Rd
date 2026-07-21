@@ -7,7 +7,7 @@
 learn_ARACNE_graph(
   x,
   eps = 0,
-  percentile.thresold = 0.95,
+  percentile.threshold = 0.95,
   mim.threshold = NULL
 )
 }
@@ -16,7 +16,7 @@ learn_ARACNE_graph(
 
 \item{eps}{a numeric, the data processing inequality threshold used by ARACNE to remove indirect edges}
 
-\item{percentile.thresold}{a numeric, the top percentile of edges by strength will be kept in the final graph}
+\item{percentile.threshold}{a numeric, the top percentile of edges by strength will be kept in the final graph}
 
 \item{mim.threshold}{a numeric, the a fixed mutual information threshold that overrides the percentile, edges bellow this strength will be removed}
 }
