@@ -102,6 +102,7 @@ learn_SILGGM_graph <- function(x,
 
   # diagonal to 0 before creating igraph object
   diag(adj.mat) <- 0
+  adj.mat[is.na(adj.mat)] <- 0
 
   # convert weighted adjacency matrix to igraph object
   g  <- igraph::graph_from_adjacency_matrix(adj.mat,
