@@ -406,8 +406,7 @@ find_WGCNA_mods <- function(x,
       if (max(table(sub)) <= max.size || k >= length(m.nodes)) break
       k <- k + 1
     }
-    message("Splitting module ", m, " (", length(m.nodes), " nodes) into ",
-            length(unique(sub)), " parts to satisfy max.size.")
+    message("Splitting modules iteratively to satisfy max.size.")
 
     # first piece keeps the id m, the others get fresh ids beyond the current max
     offset <- max(index.vector)
