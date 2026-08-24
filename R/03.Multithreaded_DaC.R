@@ -140,8 +140,8 @@ divide_and_conquer <- function(x,
   # return sub graphs and final graphs
   return(
     list(
-      modular.subgraphs = parsed.outputs$learned.graphs,
-      final.graph = final.graph,
+      module.subgraphs = parsed.outputs$learned.graphs,
+      graph = final.graph,
       other.outputs = parsed.outputs$other.outputs
     )
   )
