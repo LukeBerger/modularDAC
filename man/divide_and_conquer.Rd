@@ -8,6 +8,7 @@ divide_and_conquer(
   x,
   subgraph.module,
   weight.summary = c("min", "mean"),
+  output.weights = TRUE,
   n.cores = 1,
   graph.learning.func = learn_SILGGM_graph,
   arg.wrapping.func = .default_arg_wrapper,
@@ -25,6 +26,8 @@ divide_and_conquer(
 
 \item{weight.summary}{a character, how to reconcile the weight of an edge that is possible in multiple sub-graphs; 'min' (default) keeps the smallest-magnitude weight across the sub-graphs where the edge is possible (an absent edge counts as weight 0, so an edge missing from any possible sub-graph is dropped), while 'mean' keeps the average of the signed weights across those sub-graphs (so an edge present in only some possible sub-graphs survives with a reduced weight)}
 
+\item{output.weights}{a logical, if TRUE (default) a combined feature-by-feature weight matrix is assembled from the per-module weights (analogous to the 'weights' matrix returned by the single-shot learners), reconciled across modules with the same ownership and weight.summary rule as the stitched graph; if the sub-graph learners expose neither weight matrices nor weighted graphs a warning is issued and the returned weights are NULL rather than stopping}
+
 \item{n.cores}{an integer, the number of cores to use for parallel processing}
 
 \item{graph.learning.func}{a function that accepts a data matrix and returns an igraph object}
@@ -40,7 +43,7 @@ divide_and_conquer(
 \item{...}{additional arguments passed through arg.wrapping.func to graph.learning.func}
 }
 \value{
-a list with elements: modular.subgraphs (list of igraph objects, one per module), final.graph (igraph object combining all sub-graphs), and other.outputs (any additional outputs from graph learning)
+a list with elements: module.subgraphs (list of igraph objects, one per module), graph (igraph object combining all sub-graphs), weights (a combined feature-by-feature weight matrix reconciled across modules, or NULL when output.weights is FALSE or the learners expose no weights), and other.outputs (any additional outputs from graph learning)
 }
 \description{
 Learn a network from a data matrix using a divide-and-conquer strategy: data is split into overlapping modules, graphs are learned per module, and the results are stitched back together

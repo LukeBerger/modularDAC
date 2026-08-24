@@ -6,6 +6,7 @@
 #' @param x a numeric matrix with p features (rows) and n samples (columns)
 #' @param subgraph.module a module S4 object with overlapping index sets defining which feature subsets to use for each sub-graph
 #' @param weight.summary a character, how to reconcile the weight of an edge that is possible in multiple sub-graphs; 'min' (default) keeps the smallest-magnitude weight across the sub-graphs where the edge is possible (an absent edge counts as weight 0, so an edge missing from any possible sub-graph is dropped), while 'mean' keeps the average of the signed weights across those sub-graphs (so an edge present in only some possible sub-graphs survives with a reduced weight)
+#' @param output.weights a logical, if TRUE (default) a combined feature-by-feature weight matrix is assembled from the per-module weights (analogous to the 'weights' matrix returned by the single-shot learners), reconciled across modules with the same ownership and weight.summary rule as the stitched graph; if the sub-graph learners expose neither weight matrices nor weighted graphs a warning is issued and the returned weights are NULL rather than stopping
 #' @param n.cores an integer, the number of cores to use for parallel processing
 #' @param graph.learning.func a function that accepts a data matrix and returns an igraph object
 #' @param arg.wrapping.func a function that packages each module's data subset and additional arguments into a list ready for graph.learning.func
@@ -14,7 +15,7 @@
 #' @param export.to.each a character vector of function names to export to each parallel worker
 #' @param ... additional arguments passed through arg.wrapping.func to graph.learning.func
 
-#' @return a list with elements: modular.subgraphs (list of igraph objects, one per module), final.graph (igraph object combining all sub-graphs), and other.outputs (any additional outputs from graph learning)
+#' @return a list with elements: module.subgraphs (list of igraph objects, one per module), graph (igraph object combining all sub-graphs), weights (a combined feature-by-feature weight matrix reconciled across modules, or NULL when output.weights is FALSE or the learners expose no weights), and other.outputs (any additional outputs from graph learning)
 
 #' @importFrom foreach foreach %dopar% registerDoSEQ
 #' @importFrom igraph is_igraph
@@ -23,6 +24,7 @@
 divide_and_conquer <- function(x,
                                subgraph.module,
                                weight.summary = c("min", "mean"),
+                               output.weights = TRUE,
                                n.cores = 1,
                                graph.learning.func = learn_SILGGM_graph,
                                arg.wrapping.func = .default_arg_wrapper,
@@ -137,11 +139,29 @@ divide_and_conquer <- function(x,
   }
   final.graph <- .connect_subgraphs(x, parsed.outputs$learned.graphs, weight.summary, core.sets)
 
+  # optionally assemble a combined weight matrix, analogous to the 'weights'
+  # matrix returned by the single-shot learners. Per-module weights are taken
+  # from the parser's weight matrices when available and otherwise from the
+  # weighted sub-graphs, then reconciled across modules with the same ownership
+  # and weight.summary rule as the stitched graph. When no module exposes any
+  # weights we warn and leave the combined weights NULL rather than stopping.
+  combined.weights <- NULL
+  if (output.weights) {
+    weight.mats <- .subgraph_weight_mats(parsed.outputs$learned.graphs,
+                                         parsed.outputs$other.outputs, x)
+    if (all(vapply(weight.mats, is.null, logical(1)))) {
+      warning("The subgraph learning function returned neither weight matrices nor weighted graphs; combined 'weights' is NULL.")
+    } else {
+      combined.weights <- .connect_weights(x, weight.mats, weight.summary, core.sets)
+    }
+  }
+
   # return sub graphs and final graphs
   return(
     list(
       module.subgraphs = parsed.outputs$learned.graphs,
       graph = final.graph,
+      weights = combined.weights,
       other.outputs = parsed.outputs$other.outputs
     )
   )
@@ -256,6 +276,113 @@ divide_and_conquer <- function(x,
   igraph::graph_from_data_frame(
     data.frame(from = nodes[ua[keep]], to = nodes[ub[keep]], weight = final.w[keep]),
     directed = FALSE, vertices = data.frame(name = nodes))
+}
+
+#' Collect a per-module weight matrix for each learned sub-graph
+#'
+#' For each module the weight matrix is taken, in order of preference, from the
+#' feature-named numeric matrix supplied by the output parser (e.g. a partial
+#' correlation matrix) and otherwise from the weighted sub-graph's adjacency
+#' matrix. A module that exposes neither returns NULL, signalling that no combined
+#' weight matrix can be built from it.
+#' @param learned.graphs a list of igraph objects, one per module (the parsed learned graphs)
+#' @param other.outputs a list aligned with learned.graphs holding each parser's extra outputs; entries that are feature-named numeric matrices are used as that module's weight matrix
+#' @param x a numeric matrix with p features (rows) and n samples (columns); its row names define the feature universe
+
+#' @return a list aligned with learned.graphs, each element a feature-named weight matrix or NULL when the module exposes no weights
+
+#' @importFrom igraph is_igraph is_weighted as_adjacency_matrix
+#' @keywords internal
+.subgraph_weight_mats <- function(learned.graphs, other.outputs, x){
+  nodes <- rownames(x)
+  lapply(seq_along(learned.graphs), function(i){
+    oo <- if (i <= length(other.outputs)) other.outputs[[i]] else NULL
+    # (1) a feature-named numeric weight matrix supplied by the output parser
+    if (is.matrix(oo) && is.numeric(oo) && nrow(oo) == ncol(oo) &&
+        !is.null(rownames(oo)) && all(rownames(oo) %in% nodes)) {
+      return(oo)
+    }
+    # (2) otherwise fall back to the weighted sub-graph's adjacency matrix
+    g <- learned.graphs[[i]]
+    if (igraph::is_igraph(g) && igraph::is_weighted(g)) {
+      return(igraph::as_adjacency_matrix(g, attr = "weight", sparse = FALSE))
+    }
+    # (3) this module exposes no weights
+    NULL
+  })
+}
+
+#' Combine a list of per-module weight matrices into one feature-by-feature matrix
+#'
+#' The weight-matrix analogue of \code{.connect_subgraphs}: each module proposes a
+#' weight for a feature pair only when both features are present in the module and
+#' at least one of them is a \emph{core} (owned) node there, so untrustworthy
+#' auxiliary-auxiliary pairs are discarded. Overlapping proposals are reconciled
+#' with the same rule as the stitched graph -- 'min' keeps the smallest-magnitude
+#' signed weight and 'mean' averages the signed weights over the proposing
+#' modules. Pairs no module proposes stay 0.
+#' @param x a numeric matrix with p features (rows) and n samples (columns); its row names define the feature universe and the output matrix's dimnames
+#' @param weight.mats a list (aligned with the modules) of feature-named weight matrices, with NULL for any module that exposes no weights
+#' @param weight.summary a character, how to reconcile a pair across the modules that propose it; 'min' (default) keeps the smallest-magnitude signed weight, 'mean' averages the signed weights
+#' @param core.sets a list (aligned with weight.mats) of character vectors giving each module's core (owned) node names, or NULL to treat every node as core (ownership-agnostic reconciliation)
+
+#' @return a symmetric p x p feature-named weight matrix
+
+#' @keywords internal
+.connect_weights <- function(x, weight.mats, weight.summary = c("min", "mean"), core.sets = NULL){
+  weight.summary <- match.arg(weight.summary)
+  nodes <- rownames(x)
+  p <- length(nodes)
+
+  # per-module node sets come from the weight matrices; default ownership is
+  # "every node is core", reproducing ownership-agnostic reconciliation
+  node.sets <- lapply(weight.mats, function(w) if (is.null(w)) character(0) else rownames(w))
+  if (is.null(core.sets)) core.sets <- node.sets
+
+  # the empty (all-zero) combined matrix, also the fallback return
+  W <- matrix(0, p, p, dimnames = list(nodes, nodes))
+
+  # collect each module's within-block pair weights, keeping only pairs with at
+  # least one core (owned) endpoint (the ownership rule from .connect_subgraphs).
+  # zero-valued pairs are kept so they still count toward the 'mean' denominator.
+  rows <- vector("list", length(weight.mats))
+  for (s in seq_along(weight.mats)) {
+    w <- weight.mats[[s]]
+    if (is.null(w) || nrow(w) < 2) next
+    w[is.na(w)] <- 0                          # match the pipeline's NA -> 0 convention
+    ns <- rownames(w)
+    core <- core.sets[[s]]
+    ut <- which(upper.tri(w))                 # linear indices of the block's upper triangle
+    ri <- ((ut - 1L) %%  nrow(w)) + 1L        # block row of each pair
+    ci <- ((ut - 1L) %/% nrow(w)) + 1L        # block column of each pair
+    a.name <- ns[ri]; b.name <- ns[ci]
+    keep <- (a.name %in% core) | (b.name %in% core)
+    if (!any(keep)) next
+    rows[[s]] <- data.frame(a = a.name[keep], b = b.name[keep],
+                            w = w[ut][keep], stringsAsFactors = FALSE)
+  }
+  df <- do.call(rbind, rows)
+  if (is.null(df) || nrow(df) == 0) return(W)
+
+  # key each undirected pair by its position in the node universe
+  ai <- match(df$a, nodes); bi <- match(df$b, nodes)
+  lo <- pmin(ai, bi); hi <- pmax(ai, bi)
+  key <- paste(lo, hi, sep = "-")
+
+  # reconcile the proposing modules' weights for each pair
+  wl <- split(df$w, key)
+  final <- if (weight.summary == "min") {
+    vapply(wl, function(v) v[which.min(abs(v))], numeric(1))   # smallest-magnitude signed weight
+  } else {
+    vapply(wl, mean, numeric(1))                               # mean signed weight over proposers
+  }
+
+  # scatter the reconciled weights symmetrically into the combined matrix
+  ijs <- do.call(rbind, strsplit(names(final), "-", fixed = TRUE))
+  ii <- as.integer(ijs[, 1]); jj <- as.integer(ijs[, 2])
+  W[cbind(ii, jj)] <- final
+  W[cbind(jj, ii)] <- final
+  W
 }
 
 #####################################################
