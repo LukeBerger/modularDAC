@@ -313,6 +313,14 @@ find_WGCNA_mods <- function(x,
     }
   }
 
+  # renumber the final modules to a contiguous 1:N sequence. Iterative splitting
+  # (.split_to_max_size) hands out inflated ids and small-module merging
+  # (.merge_small_modules) deletes ids, so the labels arrive full of gaps
+  # (e.g. 1, 45, 101, 4); relabel so the returned modules read 1:N. The
+  # unassigned group (0) is preserved and the labels are deliberately not tied
+  # to the initial module ids.
+  final.index.vector <- .relabel_sequential(final.index.vector)
+
   # build module objects (a non-overlapping partition owns all of its own nodes,
   # so core.list == index.list)
   initial.index.vector <- as.numeric(initial.index.vector)
@@ -445,6 +453,22 @@ find_WGCNA_mods <- function(x,
     target <- others[room][which.min(mean.d[room])]
     index.vector[m.nodes] <- target
   }
+  index.vector
+}
+
+#' Helper to find_WGCNA_mods that renumbers module labels to a contiguous 1:N
+#' sequence, closing the gaps and inflated ids left behind by iterative
+#' splitting and small-module merging. The unassigned group (0) is left as-is.
+#' @param index.vector an integer vector of length p assigning each node to a module (0 = unassigned)
+
+#' @return an integer vector of length p whose non-zero modules are relabelled 1..N (in ascending order of their original ids)
+
+#' @keywords internal
+.relabel_sequential <- function(index.vector) {
+  assigned <- index.vector != 0
+  # map the distinct non-zero ids (ascending) onto 1..N, leaving 0 untouched
+  labels <- sort(unique(index.vector[assigned]))
+  index.vector[assigned] <- match(index.vector[assigned], labels)
   index.vector
 }
 
