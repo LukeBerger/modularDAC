@@ -176,6 +176,9 @@ true_fuzzy <- function(m, g){
 #' @param merging.cut a numeric between 0 and 1, the eigengene dissimilarity threshold for WGCNA::mergeCloseModules
 #' @param iterate a logical, if TRUE oversized modules are recursively split so every module fits within max.size
 #' @param assign.by a character, how unassigned nodes are recruited to modules: 'adjacency' uses WGCNA adjacency, 'eigengene' uses correlation with module eigengenes
+#' @param deep.split an integer 0-4 passed to \code{dynamicTreeCut::cutreeDynamic}, controlling how aggressively the dendrogram is split; 4 (the default, and the previously hard-coded value) splits most aggressively, 0 least
+#' @param min.natural.mods an integer, the minimum number of modules the dynamic tree cut must produce before the partition is accepted; if fewer are found and \code{retry.betas} is TRUE the soft-threshold power is re-tried (see \code{retry.betas}). Fewer than 1 is always an error, since a cut that assigns every feature to the unassigned group cannot be repaired downstream
+#' @param retry.betas a logical; if TRUE (default) and the soft-threshold power was chosen automatically, a natural cut yielding fewer than \code{min.natural.mods} modules is re-tried at the remaining \code{powers}, best scale-free fit first, keeping the first power that resolves the network into modules. Ignored when \code{beta} is supplied explicitly
 
 #' @return a list containing: 'wgcna.adj', the WGCNA co-expression adjacency matrix; 'initial.mods', the natural modules after merging and unassigned-node recruitment; and 'final.mods', those modules after recursive splitting to satisfy max.size
 
@@ -196,7 +199,10 @@ find_WGCNA_mods <- function(x,
                             merge = FALSE,
                             merging.cut = 0.2,
                             iterate = TRUE,
-                            assign.by = c("adjacency", "eigengene")
+                            assign.by = c("adjacency", "eigengene"),
+                            deep.split = 4,
+                            min.natural.mods = 2L,
+                            retry.betas = TRUE
 ) {
   if (!requireNamespace("WGCNA", quietly = TRUE)) {
     stop("Package WGCNA is required. Install with: install.packages('WGCNA')", call. = FALSE)
@@ -241,9 +247,19 @@ find_WGCNA_mods <- function(x,
   t.x <- t(x)
 
   # pick soft threshold via scale-free fit
-  if (is.null(beta)) {
+  sft <- NULL
+  auto.beta <- is.null(beta)
+  if (auto.beta) {
+    # corOptions and networkType are passed explicitly so the power is chosen
+    # under the SAME correlation and network settings the adjacency below is
+    # built with. They previously diverged: pickSoftThreshold fell back to its
+    # own default corOptions = list(use = "p") while adjacency used
+    # list(pearsonFallback = "individual") for bicor, so the selected power was
+    # fitted to a slightly different matrix than the one it was then applied to.
     sft <- WGCNA::pickSoftThreshold(data = t.x,
                                     corFnc = cor.FN,
+                                    corOptions = cor.options,
+                                    networkType = "unsigned",
                                     RsquaredCut = min.sft,
                                     powerVector = powers)
     beta <- .sft_check(sft)
@@ -252,24 +268,80 @@ find_WGCNA_mods <- function(x,
   # minimum number of modules to retain when merging (a floor for .merge_modules)
   min.mods <- max(1, ceiling(nrow(x) / max.size))
 
-  # construct co-expression similarity, TOM distance, and hierarchical clustering
-  adj <- WGCNA::adjacency(datExpr = t.x,
-                          power = beta,
-                          corFnc = cor.FN,
-                          type = "unsigned",
-                          corOptions = cor.options)
-  dis <- WGCNA::TOMdist(adjMat = adj, TOMType = "unsigned")
-  dendro <- flashClust::flashClust(d = stats::as.dist(dis), method = hclust.method)
+  # build the co-expression adjacency, TOM distance, dendrogram and natural
+  # (dynamic tree cut) partition at one soft-threshold power
+  cut.at.power <- function(b) {
+    adj <- WGCNA::adjacency(datExpr = t.x,
+                            power = b,
+                            corFnc = cor.FN,
+                            type = "unsigned",
+                            corOptions = cor.options)
+    dis <- WGCNA::TOMdist(adjMat = adj, TOMType = "unsigned")
+    dendro <- flashClust::flashClust(d = stats::as.dist(dis), method = hclust.method)
+    iv <- dynamicTreeCut::cutreeDynamic(dendro = dendro,
+                                        cutHeight = cut.height,
+                                        method = "hybrid",
+                                        distM = dis,
+                                        deepSplit = deep.split,
+                                        pamRespectsDendro = FALSE,
+                                        minClusterSize = min.size)
+    list(adj = adj, dis = dis, dendro = dendro, index.vector = iv,
+         n.mods = length(unique(iv[iv != 0])), beta = b)
+  }
 
-  # initial (natural) module identification via dynamic tree cut
   message("Generating initial modules...")
-  initial.index.vector <- dynamicTreeCut::cutreeDynamic(dendro = dendro,
-                                                        cutHeight = cut.height,
-                                                        method = "hybrid",
-                                                        distM = dis,
-                                                        deepSplit = 4,
-                                                        pamRespectsDendro = FALSE,
-                                                        minClusterSize = min.size)
+  fit <- cut.at.power(beta)
+  n.powers.tried <- 1L
+
+  # RETRY ACROSS POWERS. pickSoftThreshold selects the SMALLEST power whose
+  # signed scale-free R^2 clears min.sft, which says nothing about whether the
+  # resulting TOM actually resolves into modules -- and on a weakly scale-free
+  # network that crossing point is noise-dominated. When the natural cut comes
+  # back with fewer than min.natural.mods modules, walk the remaining powers
+  # (best scale-free fit first) and keep the first that does resolve.
+  #
+  # This matters because the degenerate case is silent: a cut that assigns EVERY
+  # node to the unassigned group (0) cannot be repaired downstream --
+  # .assign_unassigned has no module to recruit into, and .split_to_max_size
+  # deliberately never splits group 0 -- so the whole graph would be returned as
+  # a single "module 0". Retrying, then failing loudly, replaces that.
+  if (fit$n.mods < min.natural.mods && auto.beta && retry.betas) {
+    r2 <- -sign(sft$fitIndices$slope) * sft$fitIndices$SFT.R.sq
+    candidates <- sft$fitIndices$Power[order(r2, decreasing = TRUE)]
+    candidates <- setdiff(candidates, beta)
+    for (b in candidates) {
+      message("Natural cut gave ", fit$n.mods, " module(s) at power ", fit$beta,
+              "; retrying at power ", b, ".")
+      trial <- cut.at.power(b)
+      n.powers.tried <- n.powers.tried + 1L
+      if (trial$n.mods >= min.natural.mods) { fit <- trial; break }
+      fit <- trial   # keep the most recent attempt so the error below is honest
+    }
+  }
+
+  if (fit$n.mods < 1) {
+    stop("WGCNA module detection failed: the dynamic tree cut assigned every ",
+         "feature to the unassigned group ",
+         if (n.powers.tried > 1)
+           paste0("at all ", n.powers.tried, " soft-threshold powers tried")
+         else if (auto.beta && !retry.betas)
+           paste0("at power ", fit$beta, " (retry.betas = FALSE; set it TRUE to try other powers)")
+         else
+           paste0("at the supplied power ", fit$beta, " (pass beta = NULL to search other powers)"),
+         ". Use find_ICA_mods(), supply a partition directly, or check the input ",
+         "for degenerate correlation structure.", call. = FALSE)
+  }
+  if (fit$n.mods < min.natural.mods) {
+    warning("Natural module detection produced only ", fit$n.mods,
+            " module(s) (min.natural.mods = ", min.natural.mods,
+            "); the partition may be degenerate.", call. = FALSE)
+  }
+
+  beta   <- fit$beta
+  adj    <- fit$adj
+  dis    <- fit$dis
+  dendro <- fit$dendro
+  initial.index.vector <- fit$index.vector
 
   # merge similar modules based on eigengene similarity
   if (merge) {
@@ -320,6 +392,19 @@ find_WGCNA_mods <- function(x,
   # unassigned group (0) is preserved and the labels are deliberately not tied
   # to the initial module ids.
   final.index.vector <- .relabel_sequential(final.index.vector)
+
+  # The unassigned group (0) is NOT a module. split() below would happily emit it
+  # as one, which is how a total detection collapse used to be returned as a
+  # single valid-looking module covering the whole graph. The retry above makes
+  # that path unreachable via cutreeDynamic; this asserts the contract for every
+  # other route (an explicit `beta`, retry.betas = FALSE, or a node that scores
+  # zero against every module in .assign_unassigned).
+  leftover <- sum(final.index.vector == 0)
+  if (leftover > 0) {
+    stop(leftover, " feature(s) could not be assigned to any module and would be ",
+         "returned as a spurious 'module 0'. A module object must partition every ",
+         "feature into a real module.", call. = FALSE)
+  }
 
   # build module objects (a non-overlapping partition owns all of its own nodes,
   # so core.list == index.list)

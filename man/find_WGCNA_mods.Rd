@@ -17,7 +17,10 @@ find_WGCNA_mods(
   merge = FALSE,
   merging.cut = 0.2,
   iterate = TRUE,
-  assign.by = c("adjacency", "eigengene")
+  assign.by = c("adjacency", "eigengene"),
+  deep.split = 4,
+  min.natural.mods = 2L,
+  retry.betas = TRUE
 )
 }
 \arguments{
@@ -46,6 +49,12 @@ find_WGCNA_mods(
 \item{iterate}{a logical, if TRUE oversized modules are recursively split so every module fits within max.size}
 
 \item{assign.by}{a character, how unassigned nodes are recruited to modules: 'adjacency' uses WGCNA adjacency, 'eigengene' uses correlation with module eigengenes}
+
+\item{deep.split}{an integer 0-4 passed to \code{dynamicTreeCut::cutreeDynamic}, controlling how aggressively the dendrogram is split; 4 (the default, and the previously hard-coded value) splits most aggressively, 0 least}
+
+\item{min.natural.mods}{an integer, the minimum number of modules the dynamic tree cut must produce before the partition is accepted; if fewer are found and \code{retry.betas} is TRUE the soft-threshold power is re-tried (see \code{retry.betas}). Fewer than 1 is always an error, since a cut that assigns every feature to the unassigned group cannot be repaired downstream}
+
+\item{retry.betas}{a logical; if TRUE (default) and the soft-threshold power was chosen automatically, a natural cut yielding fewer than \code{min.natural.mods} modules is re-tried at the remaining \code{powers}, best scale-free fit first, keeping the first power that resolves the network into modules. Ignored when \code{beta} is supplied explicitly}
 }
 \value{
 a list containing: 'wgcna.adj', the WGCNA co-expression adjacency matrix; 'initial.mods', the natural modules after merging and unassigned-node recruitment; and 'final.mods', those modules after recursive splitting to satisfy max.size
