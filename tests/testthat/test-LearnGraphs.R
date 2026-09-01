@@ -130,6 +130,53 @@ test_that("learn_ARACNE_graph() returns a weighted igraph alongside the MI matri
 })
 
 # ---------------------------------------------------------------------------
+# learn_CLR_graph()
+# ---------------------------------------------------------------------------
+
+test_that("learn_CLR_graph() returns a weighted igraph alongside the CLR score matrix", {
+  skip_if_not_installed("minet")
+  out <- quiet(learn_CLR_graph(.x))        # mutual information over features (p x n input)
+
+  expect_type(out, "list")
+  expect_named(out, c("graph", "weights"))
+
+  g <- out$graph
+  expect_s3_class(g, "igraph")
+  expect_length(g, nrow(.x))
+  expect_true(igraph::is_weighted(g))
+  expect_false(igraph::is_directed(g))
+  expect_true(igraph::is_simple(g))
+
+  clr <- out$weights
+  expect_true(is.matrix(clr))
+  expect_equal(dim(clr), c(nrow(.x), nrow(.x)))
+  # feature names must survive so the weights matrix can be thresholded
+  # externally (the benchmark's edge-budget rule works off dimnames)
+  expect_equal(rownames(clr), rownames(.x))
+})
+
+test_that("learn_CLR_graph() keeps fewer edges at a stricter percentile", {
+  skip_if_not_installed("minet")
+  loose  <- quiet(learn_CLR_graph(.x, percentile.threshold = 0.90))$graph
+  strict <- quiet(learn_CLR_graph(.x, percentile.threshold = 0.99))$graph
+  expect_lte(igraph::gsize(strict), igraph::gsize(loose))
+
+  # the upper-triangle quantile means the kept edge count tracks the requested
+  # fraction of PAIRS -- unlike a whole-matrix quantile, which double-counts
+  n.pairs <- nrow(.x) * (nrow(.x) - 1) / 2
+  expect_lt(abs(igraph::gsize(strict) - 0.01 * n.pairs), 0.01 * n.pairs)
+})
+
+test_that("learn_CLR_graph() honours an explicit clr.threshold over the percentile", {
+  skip_if_not_installed("minet")
+  w <- quiet(learn_CLR_graph(.x))$weights
+  cut <- as.numeric(stats::quantile(w[upper.tri(w)], 0.80))
+  g <- quiet(learn_CLR_graph(.x, percentile.threshold = 0.99, clr.threshold = cut))$graph
+  # the explicit cut (80th pct) must win over the percentile argument (99th)
+  expect_equal(igraph::gsize(g), sum(w[upper.tri(w)] > cut))
+})
+
+# ---------------------------------------------------------------------------
 # learn_GENIE3_graph()
 # ---------------------------------------------------------------------------
 

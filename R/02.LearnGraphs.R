@@ -187,6 +187,34 @@ learn_SILGGM_graph <- function(x,
   return(vec)
 }
 
+# Shared percentile cut for every learn_*_graph that exposes percentile.threshold
+# (ARACNE, WGCNA, CLR, GENIE3), so the four cannot drift apart again.
+#
+# The quantile is taken over the UPPER TRIANGLE. A whole-matrix quantile -- which
+# learn_ARACNE_graph used until this was fixed -- also counts the diagonal and
+# both copies of every pair, so the fraction of EDGES kept is not the fraction
+# requested.
+#
+# Sparse weight matrices need care beyond that. ARACNE's DPI step zeroes most
+# entries, so when more than `percentile.threshold` of pairs are structurally
+# zero the quantile lands ON the zero mass: the cut degenerates to "keep every
+# non-zero entry" and different percentiles silently return the SAME graph (this
+# is why V.2.0's ARACNE top-2.5% and top-5% lines were identical). That is a real
+# property of percentile-thresholding a sparse matrix, not something a quantile
+# can fix, so it is surfaced as a warning rather than hidden. Use an explicit
+# threshold, or a rank-based edge budget, when it fires.
+.percentile_threshold <- function(mat, percentile.threshold, what = "edges") {
+  v <- .upper_tri_vec(mat)
+  thr <- stats::quantile(v, percentile.threshold, names = FALSE)
+  if (thr <= 0) {
+    n.pos <- sum(v > 0)
+    warning(sprintf(
+      "percentile.threshold = %g falls on the zero mass of the %s matrix (%.1f%% of pairs are zero); the cut keeps all %d non-zero %s regardless of the percentile requested.",
+      percentile.threshold, what, 100 * mean(v <= 0), n.pos, what), call. = FALSE)
+  }
+  thr
+}
+
 #' Compute the z-score of a partial correlation, see https://github.com/cran/SILGGM/blob/master/src/SILGGMCpp.cpp
 #'
 #' @param pcor the partial correlation
@@ -268,7 +296,7 @@ learn_WGCNA_graph <- function(x,
   # if no fixed adj.threshold is provided, keep only the 'percentile.threshold'
   # top percentile of edges by adjacency strength (mirrors learn_ARACNE_graph)
   if(is.null(adj.threshold)){
-    adj.threshold <- quantile(.upper_tri_vec(adj), percentile.threshold)
+    adj.threshold <- .percentile_threshold(adj, percentile.threshold, "WGCNA adjacency")
   }
   weighted.adj <- adj * (adj > adj.threshold)
 
@@ -283,6 +311,71 @@ learn_WGCNA_graph <- function(x,
     list(
       graph   = g,
       weights = adj
+    )
+  )
+}
+
+#' Learn a gene co-expression graph from a data matrix using the CLR algorithm
+#'
+#' CLR (Context Likelihood of Relatedness) is a mutual-information network method
+#' from the same family as ARACNE, and shares its first step: build the pairwise
+#' mutual information matrix. Where ARACNE prunes indirect edges with the data
+#' processing inequality (a hard, triplet-wise deletion), CLR instead RESCORES
+#' every pair against the background distribution of its two endpoints -- each
+#' edge is converted to a joint z-score of how surprising its MI is relative to
+#' all other MIs involving feature i and feature j. Edges are therefore
+#' down-weighted rather than deleted, so unlike ARACNE the returned weight matrix
+#' has no structural zeros and a percentile threshold cannot degenerate.
+#'
+#' @param x a numeric matrix with p features (rows) and n samples (columns)
+#' @param percentile.threshold a numeric, the top percentile of edges by strength will be kept in the final graph
+#' @param clr.threshold a numeric, a fixed CLR score threshold that overrides the percentile, edges bellow this strength will be removed
+#' @param skip.diagonal an integer passed to \code{minet::clr}; 1 (the default) excludes self-MI from each feature's background distribution, 0 includes it
+
+#' @return a named list with two elements: 'graph', the learned weighted igraph object, and 'weights', the CLR score matrix
+
+#' @importFrom igraph graph_from_adjacency_matrix
+
+#' @export
+learn_CLR_graph <- function(x, percentile.threshold = 0.95, clr.threshold = NULL,
+                            skip.diagonal = 1) {
+  if (!requireNamespace("minet", quietly = TRUE)) {
+    stop("Package minet is required. Install with: install.packages('minet')", call. = FALSE)
+  }
+
+  # minet expects an n samples x p features matrix
+  t.x <- t(x)
+
+  # build mutual information matrix (same first step as learn_ARACNE_graph)
+  mim <- minet::build.mim(dataset = t.x)
+
+  # apply CLR: rescore each pair against the MI background of both endpoints
+  clr.mat <- minet::clr(mim, skipDiagonal = skip.diagonal)
+  dimnames(clr.mat) <- dimnames(mim)
+
+  # if no fixed clr.threshold is provided, keep only the 'percentile.threshold'
+  # percentile of edges. The quantile is taken over the UPPER TRIANGLE (as
+  # learn_WGCNA_graph does) rather than the whole matrix: a full-matrix quantile
+  # also counts the diagonal and both copies of every pair, so the kept fraction
+  # is not the requested one.
+  if(is.null(clr.threshold)){
+    clr.threshold <- .percentile_threshold(clr.mat, percentile.threshold, "CLR score")
+  }
+
+  # threshold to select edges based on a minimum CLR score
+  weighted.clr <- clr.mat * (clr.mat > clr.threshold)
+
+  # remove looped edges
+  diag(weighted.clr) <- 0
+
+  # build the weighted graph and return it alongside the full CLR score matrix
+  g <- igraph::graph_from_adjacency_matrix(weighted.clr,
+                                           mode = "undirected",
+                                           weighted = TRUE)
+  return(
+    list(
+      graph   = g,
+      weights = clr.mat
     )
   )
 }
@@ -314,7 +407,7 @@ learn_ARACNE_graph <- function(x, eps=0, percentile.threshold = 0.95, mim.thresh
 
   # if no fixed mim.threshold is provided, keep only the 'percentile.threshold' percentile of edges
   if(is.null(mim.threshold)){
-    mim.threshold <- quantile(aracne.mat, percentile.threshold)
+    mim.threshold <- .percentile_threshold(aracne.mat, percentile.threshold, "ARACNE mutual information")
   }
 
   # threshold to select edges based on a minimum mutal information threshold
@@ -497,7 +590,7 @@ learn_GENIE3_graph <- function(x,
   # if no fixed weight.threshold is provided, keep only the 'percentile.threshold'
   # top percentile of edges by importance strength (mirrors learn_WGCNA_graph)
   if(is.null(weight.threshold)){
-    weight.threshold <- quantile(.upper_tri_vec(sym.matrix), percentile.threshold)
+    weight.threshold <- .percentile_threshold(sym.matrix, percentile.threshold, "GENIE3 importance")
   }
   weighted.imp <- sym.matrix * (sym.matrix > weight.threshold)
 
