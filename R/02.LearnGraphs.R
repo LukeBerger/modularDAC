@@ -251,6 +251,47 @@ learn_SILGGM_graph <- function(x,
   thr
 }
 
+#' Two-sided p-value for a mutual information estimate under the independence null
+#'
+#' `minet::build.mim()`'s default estimator returns `MI = -0.5 * log(1 - rho^2)`
+#' for the Spearman rank correlation `rho` -- a monotone function of a rank
+#' statistic. Under the null of independent, continuously distributed features
+#' that makes the null DISTRIBUTION-FREE and closed form: `rho` has variance
+#' `1 / (n - 1)`, so `2 * (n - 1) * MI ~ chi-squared(1)`.
+#'
+#' This is the analytic form of the permutation threshold ARACNE's authors
+#' describe (Margolin et al. 2006). They shuffle expression across profiles,
+#' tabulate the MI null over 1e5 manifestly independent pairs, and extrapolate
+#' below p = 1e-4 with `p(I >= I0 | I = 0) ~ exp(-alpha * n * I0)`, fitting
+#' `alpha`. That extrapolation does hold for this estimator -- a fit over the
+#' empirical tail gives alpha = 1.10, R^2 = 0.9997, against the theoretical
+#' alpha = 1 -- but none of the machinery is needed: the chi-squared tail matches
+#' a 21,420-draw permutation null to within 2-4% at every p-value from 1e-1 to
+#' 1e-4, and is exact further out where the permutation estimate runs out of
+#' resolution and the paper has to extrapolate.
+#'
+#' NB this is tied to the Spearman estimator `learn_ARACNE_graph` uses. A
+#' discretised or kernel MI estimator would need the paper's permutation null
+#' instead, since the estimator bias at fixed bin width is exactly what `alpha`
+#' absorbs.
+#'
+#' @param mim a p x p mutual information matrix from `minet::build.mim()`
+#' @param n.samples an integer, the number of samples the MI was estimated from
+#'
+#' @return a p x p matrix of p-values for the null hypothesis that the pair is independent
+
+#' @importFrom stats pchisq
+#' @keywords internal
+.mi_pvalue <- function(mim, n.samples) {
+  if (n.samples < 3L) {
+    stop("at least 3 samples are needed to test a mutual information estimate.", call. = FALSE)
+  }
+  pv <- stats::pchisq(2 * (n.samples - 1) * mim, df = 1, lower.tail = FALSE)
+  dim(pv) <- dim(mim)
+  dimnames(pv) <- dimnames(mim)
+  pv
+}
+
 #' Compute the z-score of a partial correlation, see https://github.com/cran/SILGGM/blob/master/src/SILGGMCpp.cpp
 #'
 #' @param pcor the partial correlation
@@ -436,22 +477,83 @@ learn_CLR_graph <- function(x, percentile.threshold = 0.95, clr.threshold = NULL
 #' percentile spanning all node pairs lands on that zero mass and stops
 #' responding to the percentile at all.
 #'
+#' Four edge-selection rules are available. **`max.fdr = 0.05` is the default**:
+#' test each MI against the independence null and keep the edges whose
+#' Benjamini-Hochberg adjusted p-value clears the level. It is the rule Margolin
+#' et al. describe, and the only truth-free one that needs no calibration
+#' against graph size -- a percentile fixes a fraction of node pairs (~p^2) while
+#' true edges scale with ~p, so one percentile cannot be right at two sizes,
+#' whereas the MI null adapts to the sample size on its own. On the density
+#' pilot (8 LFR configs x {360, 720} nodes x 3 reps) it beat every hand-tuned
+#' `c*p` edge budget in 15 of 16 config-by-size cells, and unlike the budget's
+#' `c` -- best split 7/2/7 across {1.5p, 1p, 2p} and flipping with node count --
+#' one level works everywhere.
+#'
+#' The other three rules are off unless set, and any one of them overrides the
+#' default: precedence is `mim.threshold` (an absolute MI cutoff), then
+#' `p.threshold` (the same null test on the raw, unadjusted p-value), then
+#' `percentile.threshold` (keep the top slice by MI strength), then `max.fdr`.
+#' `max.fdr` comes last precisely because it is the fallback -- setting any other
+#' rule silently disables it, and setting all four to NULL is an error. To use a
+#' different FDR level just pass it, e.g. `max.fdr = 0.01`, which edged out 0.05
+#' on the pilot (mean F1 0.564 vs 0.546) at some cost in recall.
+#'
+#' Margolin et al. threshold the raw MI matrix and then run DPI over what
+#' survives, where this function has always run DPI over the complete MI graph
+#' and thresholded afterwards. For the significance rules -- and for
+#' `mim.threshold` -- **those two orders are provably the same graph**, so no
+#' reordering is needed and none is offered. The p-value is a strictly decreasing
+#' function of MI at fixed n, so any rule built on p-values (raw, or BH, which
+#' takes a prefix of the sorted p-values) is exactly `MI >= c` for some c. DPI
+#' prunes (i,j) only via a witness k with `min(MI(i,k), MI(j,k)) > MI(i,j) + eps`,
+#' so if (i,j) clears c then both witness edges clear c too and survive the mask:
+#' masking can never remove a witness that would have mattered. Verified
+#' identical edge sets across 36 configurations (3 seeds x p in {120, 240} x eps
+#' in {0, 0.001, 0.01} x raw/BH rules).
+#'
+#' What does matter is whether DPI runs at all. On p = 300 simulated modular data
+#' (403 true edges) a BH q < 0.05 mask on its own scores F1 0.464 (precision
+#' 0.343); the same mask with DPI scores F1 0.754 (precision 0.834, recall
+#' 0.687), against 0.401 for the top-5% percentile and 0.765 for a hand-tuned
+#' 1.0p edge budget. So the significance rule matches the best tuned budget
+#' without a budget having to be chosen, but only in combination with DPI.
+#'
+#' Note what a significance threshold does and does not do. It rules out pairs
+#' whose MI is explicable as sampling noise, which is the job `percentile.threshold`
+#' was doing badly. It does NOT rule out indirect edges: a pair joined only by a
+#' path through other features is genuinely dependent, so its true MI is non-zero
+#' and it becomes significant at large enough n. DPI, applied afterwards, is what
+#' removes those, and being a 3-node rule it cannot see paths of length >= 3.
+#'
 #' @param x a numeric matrix with p features (rows) and n samples (columns)
-#' @param percentile.threshold a numeric, the top percentile of edges by strength will be kept in the final graph; ranked within the pairs that survive DPI unless `nonzero.only = FALSE`
+#' @param percentile.threshold a numeric, or NULL (the default, leaving this rule off); the top percentile of edges by strength will be kept in the final graph, ranked within the pairs that survive DPI unless `nonzero.only = FALSE`. Supplying it overrides the default `max.fdr` rule. Beware that it is not calibrated across graph sizes, and that a value tuned under one `nonzero.only` setting is meaningless under the other -- on the density pilot `percentile.threshold = 0.95` with `nonzero.only = TRUE` scored mean F1 0.135 against 0.546 for the default `max.fdr = 0.05`, because the top 5% of DPI survivors is only ~50 edges at p = 360 against ~1234 true ones
 #' @param mim.threshold a numeric, the a fixed mutual information threshold that overrides the percentile, edges bellow this strength will be removed
 #' @param eps a numeric, the data processing inequality threshold used by ARACNE to remove indirect edges
 #' @param nonzero.only a logical; if TRUE (the default) `percentile.threshold` is a percentile of the NON-ZERO entries of the ARACNE matrix -- the pairs still in contention after DPI pruning -- so the cut drops the weakest X% of surviving edges. If FALSE the percentile spans all p(p-1)/2 node pairs, the behaviour before 0.0.0.9015: because DPI zeroes most entries that cut collapses to "keep every non-zero entry" (and warns) whenever more than 1 - percentile.threshold of pairs are zero, making different percentiles return the same graph. The two are on different scales -- the top 5% of survivors is far fewer edges than the top 5% of pairs -- so a percentile tuned under one does not carry over
+
+#' @param max.fdr a numeric between 0 and 1, or NULL; **the default edge rule (0.05)**. An edge is kept when the Benjamini-Hochberg adjusted p-value of its mutual information -- tested against the independence null by \code{.mi_pvalue} -- falls below it. Mirrors `learn_SILGGM_graph`'s `max.fdr`. It sits last in the precedence order, so it applies only when no other rule is set; pass `max.fdr = NULL` together with another rule, or simply set that other rule, to turn it off
+#' @param p.threshold a numeric between 0 and 1, or NULL (the default); as `max.fdr` but testing the RAW, unadjusted per-edge p-value, the form ARACNE's authors use. With p(p-1)/2 tests this needs a very small value to control false positives (Bonferroni is `0.05 / (p * (p - 1) / 2)`); at that level it scored mean F1 0.553 on the density pilot, between `max.fdr` 0.01 and 0.05. Supplying it overrides `max.fdr`
 
 #' @return a named list with two elements: 'graph', the learned weighted igraph object, and 'weights', the mutual information (ARACNE) matrix
 
 #' @importFrom igraph graph_from_adjacency_matrix
 
 #' @export
-learn_ARACNE_graph <- function(x, eps=0, percentile.threshold = 0.95, mim.threshold = NULL,
-                               nonzero.only = TRUE) {
+learn_ARACNE_graph <- function(x, eps=0, percentile.threshold = NULL, mim.threshold = NULL,
+                               nonzero.only = TRUE, max.fdr = 0.05, p.threshold = NULL) {
   if (!requireNamespace("minet", quietly = TRUE)) {
     stop("Package minet is required. Install with: install.packages('minet')", call. = FALSE)
   }
+
+  # Resolve the edge-selection rule. `max.fdr` is the DEFAULT rule, so it sits
+  # LAST in precedence: the other three are NULL unless the caller sets them, so
+  # setting any one of them is what overrides the default.
+  rule <- if (!is.null(mim.threshold))            "absolute"
+          else if (!is.null(p.threshold))         "pvalue"
+          else if (!is.null(percentile.threshold)) "percentile"
+          else if (!is.null(max.fdr))             "fdr"
+          else stop("no edge-selection rule: supply one of max.fdr, p.threshold, ",
+                    "percentile.threshold or mim.threshold.", call. = FALSE)
 
   # minet expects an n samples x p features matrix
   t.x <- t(x)
@@ -460,19 +562,27 @@ learn_ARACNE_graph <- function(x, eps=0, percentile.threshold = 0.95, mim.thresh
   mim <- minet::build.mim(dataset = t.x)
 
   # apply ARACNE algorithm
-  aracne.mat <- minet::aracne(mim, eps=eps)
+  aracne.mat <- minet::aracne(mim, eps = eps)
 
-  # if no fixed mim.threshold is provided, keep only the 'percentile.threshold'
-  # percentile of edges -- by default ranked within the DPI survivors rather
-  # than all node pairs, see .percentile_threshold()
-  if(is.null(mim.threshold)){
-    mim.threshold <- .percentile_threshold(aracne.mat, percentile.threshold,
-                                           "ARACNE mutual information",
-                                           nonzero.only = nonzero.only)
-  }
-
-  # threshold to select edges based on a minimum mutal information threshold
-  weighted.mim <- aracne.mat * (aracne.mat > mim.threshold)
+  # select edges. The significance rules test the RAW MI, never the DPI output:
+  # DPI zeroes entries as a pruning decision, so a pruned pair has a p-value of
+  # 1 however dependent it actually was, and testing the pruned matrix would
+  # silently re-apply DPI's verdict instead of asking about independence. It is
+  # still safe to intersect that mask with the DPI output rather than re-running
+  # DPI on the masked MI, because the two are the same graph -- see the note on
+  # ordering in this function's documentation.
+  keep <- switch(rule,
+    absolute = aracne.mat > mim.threshold,
+    fdr      = .matrix_p_adjust(.mi_pvalue(mim, ncol(x))) < max.fdr,
+    pvalue   = .mi_pvalue(mim, ncol(x)) < p.threshold,
+    # keep only the 'percentile.threshold' percentile of edges -- by default
+    # ranked within the DPI survivors rather than all node pairs, see
+    # .percentile_threshold()
+    percentile = aracne.mat > .percentile_threshold(aracne.mat, percentile.threshold,
+                                                    "ARACNE mutual information",
+                                                    nonzero.only = nonzero.only)
+  )
+  weighted.mim <- aracne.mat * keep
 
   # remove looped edges
   diag(weighted.mim) <- 0

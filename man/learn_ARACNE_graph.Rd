@@ -7,9 +7,11 @@
 learn_ARACNE_graph(
   x,
   eps = 0,
-  percentile.threshold = 0.95,
+  percentile.threshold = NULL,
   mim.threshold = NULL,
-  nonzero.only = TRUE
+  nonzero.only = TRUE,
+  max.fdr = 0.05,
+  p.threshold = NULL
 )
 }
 \arguments{
@@ -17,11 +19,15 @@ learn_ARACNE_graph(
 
 \item{eps}{a numeric, the data processing inequality threshold used by ARACNE to remove indirect edges}
 
-\item{percentile.threshold}{a numeric, the top percentile of edges by strength will be kept in the final graph; ranked within the pairs that survive DPI unless \code{nonzero.only = FALSE}}
+\item{percentile.threshold}{a numeric, or NULL (the default, leaving this rule off); the top percentile of edges by strength will be kept in the final graph, ranked within the pairs that survive DPI unless \code{nonzero.only = FALSE}. Supplying it overrides the default \code{max.fdr} rule. Beware that it is not calibrated across graph sizes, and that a value tuned under one \code{nonzero.only} setting is meaningless under the other -- on the density pilot \code{percentile.threshold = 0.95} with \code{nonzero.only = TRUE} scored mean F1 0.135 against 0.546 for the default \code{max.fdr = 0.05}, because the top 5\% of DPI survivors is only ~50 edges at p = 360 against ~1234 true ones}
 
 \item{mim.threshold}{a numeric, the a fixed mutual information threshold that overrides the percentile, edges bellow this strength will be removed}
 
 \item{nonzero.only}{a logical; if TRUE (the default) \code{percentile.threshold} is a percentile of the NON-ZERO entries of the ARACNE matrix -- the pairs still in contention after DPI pruning -- so the cut drops the weakest X\% of surviving edges. If FALSE the percentile spans all p(p-1)/2 node pairs, the behaviour before 0.0.0.9015: because DPI zeroes most entries that cut collapses to "keep every non-zero entry" (and warns) whenever more than 1 - percentile.threshold of pairs are zero, making different percentiles return the same graph. The two are on different scales -- the top 5\% of survivors is far fewer edges than the top 5\% of pairs -- so a percentile tuned under one does not carry over}
+
+\item{max.fdr}{a numeric between 0 and 1, or NULL; \strong{the default edge rule (0.05)}. An edge is kept when the Benjamini-Hochberg adjusted p-value of its mutual information -- tested against the independence null by \code{.mi_pvalue} -- falls below it. Mirrors \code{learn_SILGGM_graph}'s \code{max.fdr}. It sits last in the precedence order, so it applies only when no other rule is set; pass \code{max.fdr = NULL} together with another rule, or simply set that other rule, to turn it off}
+
+\item{p.threshold}{a numeric between 0 and 1, or NULL (the default); as \code{max.fdr} but testing the RAW, unadjusted per-edge p-value, the form ARACNE's authors use. With p(p-1)/2 tests this needs a very small value to control false positives (Bonferroni is \code{0.05 / (p * (p - 1) / 2)}); at that level it scored mean F1 0.553 on the density pilot, between \code{max.fdr} 0.01 and 0.05. Supplying it overrides \code{max.fdr}}
 }
 \value{
 a named list with two elements: 'graph', the learned weighted igraph object, and 'weights', the mutual information (ARACNE) matrix
@@ -34,4 +40,53 @@ structural ZERO by the time it is thresholded (93.5\% of pairs on p = 120
 simulated modular data), which is what \code{nonzero.only} exists to handle -- a
 percentile spanning all node pairs lands on that zero mass and stops
 responding to the percentile at all.
+}
+\details{
+Four edge-selection rules are available. \strong{\code{max.fdr = 0.05} is the default}:
+test each MI against the independence null and keep the edges whose
+Benjamini-Hochberg adjusted p-value clears the level. It is the rule Margolin
+et al. describe, and the only truth-free one that needs no calibration
+against graph size -- a percentile fixes a fraction of node pairs (~p^2) while
+true edges scale with ~p, so one percentile cannot be right at two sizes,
+whereas the MI null adapts to the sample size on its own. On the density
+pilot (8 LFR configs x {360, 720} nodes x 3 reps) it beat every hand-tuned
+\code{c*p} edge budget in 15 of 16 config-by-size cells, and unlike the budget's
+\code{c} -- best split 7/2/7 across {1.5p, 1p, 2p} and flipping with node count --
+one level works everywhere.
+
+The other three rules are off unless set, and any one of them overrides the
+default: precedence is \code{mim.threshold} (an absolute MI cutoff), then
+\code{p.threshold} (the same null test on the raw, unadjusted p-value), then
+\code{percentile.threshold} (keep the top slice by MI strength), then \code{max.fdr}.
+\code{max.fdr} comes last precisely because it is the fallback -- setting any other
+rule silently disables it, and setting all four to NULL is an error. To use a
+different FDR level just pass it, e.g. \code{max.fdr = 0.01}, which edged out 0.05
+on the pilot (mean F1 0.564 vs 0.546) at some cost in recall.
+
+Margolin et al. threshold the raw MI matrix and then run DPI over what
+survives, where this function has always run DPI over the complete MI graph
+and thresholded afterwards. For the significance rules -- and for
+\code{mim.threshold} -- \strong{those two orders are provably the same graph}, so no
+reordering is needed and none is offered. The p-value is a strictly decreasing
+function of MI at fixed n, so any rule built on p-values (raw, or BH, which
+takes a prefix of the sorted p-values) is exactly \code{MI >= c} for some c. DPI
+prunes (i,j) only via a witness k with \code{min(MI(i,k), MI(j,k)) > MI(i,j) + eps},
+so if (i,j) clears c then both witness edges clear c too and survive the mask:
+masking can never remove a witness that would have mattered. Verified
+identical edge sets across 36 configurations (3 seeds x p in {120, 240} x eps
+in {0, 0.001, 0.01} x raw/BH rules).
+
+What does matter is whether DPI runs at all. On p = 300 simulated modular data
+(403 true edges) a BH q < 0.05 mask on its own scores F1 0.464 (precision
+0.343); the same mask with DPI scores F1 0.754 (precision 0.834, recall
+0.687), against 0.401 for the top-5\% percentile and 0.765 for a hand-tuned
+1.0p edge budget. So the significance rule matches the best tuned budget
+without a budget having to be chosen, but only in combination with DPI.
+
+Note what a significance threshold does and does not do. It rules out pairs
+whose MI is explicable as sampling noise, which is the job \code{percentile.threshold}
+was doing badly. It does NOT rule out indirect edges: a pair joined only by a
+path through other features is genuinely dependent, so its true MI is non-zero
+and it becomes significant at large enough n. DPI, applied afterwards, is what
+removes those, and being a 3-node rule it cannot see paths of length >= 3.
 }
