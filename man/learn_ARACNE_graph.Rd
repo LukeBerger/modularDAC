@@ -8,7 +8,8 @@ learn_ARACNE_graph(
   x,
   eps = 0,
   percentile.threshold = 0.95,
-  mim.threshold = NULL
+  mim.threshold = NULL,
+  nonzero.only = TRUE
 )
 }
 \arguments{
@@ -16,13 +17,21 @@ learn_ARACNE_graph(
 
 \item{eps}{a numeric, the data processing inequality threshold used by ARACNE to remove indirect edges}
 
-\item{percentile.threshold}{a numeric, the top percentile of edges by strength will be kept in the final graph}
+\item{percentile.threshold}{a numeric, the top percentile of edges by strength will be kept in the final graph; ranked within the pairs that survive DPI unless \code{nonzero.only = FALSE}}
 
 \item{mim.threshold}{a numeric, the a fixed mutual information threshold that overrides the percentile, edges bellow this strength will be removed}
+
+\item{nonzero.only}{a logical; if TRUE (the default) \code{percentile.threshold} is a percentile of the NON-ZERO entries of the ARACNE matrix -- the pairs still in contention after DPI pruning -- so the cut drops the weakest X\% of surviving edges. If FALSE the percentile spans all p(p-1)/2 node pairs, the behaviour before 0.0.0.9015: because DPI zeroes most entries that cut collapses to "keep every non-zero entry" (and warns) whenever more than 1 - percentile.threshold of pairs are zero, making different percentiles return the same graph. The two are on different scales -- the top 5\% of survivors is far fewer edges than the top 5\% of pairs -- so a percentile tuned under one does not carry over}
 }
 \value{
 a named list with two elements: 'graph', the learned weighted igraph object, and 'weights', the mutual information (ARACNE) matrix
 }
 \description{
-Learn a gene co-expression graph from a data matrix using the ARACNE algorithm
+ARACNE builds the pairwise mutual information matrix, then prunes indirect
+edges with the data processing inequality: for every triplet it deletes the
+weakest of the three MI values outright. Most of the matrix is therefore a
+structural ZERO by the time it is thresholded (93.5\% of pairs on p = 120
+simulated modular data), which is what \code{nonzero.only} exists to handle -- a
+percentile spanning all node pairs lands on that zero mass and stops
+responding to the percentile at all.
 }

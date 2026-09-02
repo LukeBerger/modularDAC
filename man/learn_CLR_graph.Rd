@@ -8,17 +8,20 @@ learn_CLR_graph(
   x,
   percentile.threshold = 0.95,
   clr.threshold = NULL,
-  skip.diagonal = 1
+  skip.diagonal = 1,
+  nonzero.only = TRUE
 )
 }
 \arguments{
 \item{x}{a numeric matrix with p features (rows) and n samples (columns)}
 
-\item{percentile.threshold}{a numeric, the top percentile of edges by strength will be kept in the final graph}
+\item{percentile.threshold}{a numeric, the top percentile of edges by strength will be kept in the final graph; ranked within the non-zero CLR scores unless \code{nonzero.only = FALSE}}
 
 \item{clr.threshold}{a numeric, a fixed CLR score threshold that overrides the percentile, edges bellow this strength will be removed}
 
 \item{skip.diagonal}{an integer passed to \code{minet::clr}; 1 (the default) excludes self-MI from each feature's background distribution, 0 includes it}
+
+\item{nonzero.only}{a logical; if TRUE (the default) \code{percentile.threshold} is a percentile of the NON-ZERO CLR scores -- the pairs CLR left in contention -- so the cut drops the weakest X\% of those. If FALSE the percentile spans all p(p-1)/2 node pairs, the behaviour before 0.0.0.9015, which collapses to "keep every non-zero score" (and warns) whenever more than 1 - percentile.threshold of pairs are zero. The two are on different scales -- the top 5\% of non-zero scores is far fewer edges than the top 5\% of pairs -- so a percentile tuned under one does not carry over}
 }
 \value{
 a named list with two elements: 'graph', the learned weighted igraph object, and 'weights', the CLR score matrix
@@ -31,6 +34,14 @@ processing inequality (a hard, triplet-wise deletion), CLR instead RESCORES
 every pair against the background distribution of its two endpoints -- each
 edge is converted to a joint z-score of how surprising its MI is relative to
 all other MIs involving feature i and feature j. Edges are therefore
-down-weighted rather than deleted, so unlike ARACNE the returned weight matrix
-has no structural zeros and a percentile threshold cannot degenerate.
+down-weighted rather than deleted wholesale, and CLR keeps many more pairs
+than ARACNE does.
+}
+\details{
+It is not zero-free, though: \code{minet::clr} clamps a negative endpoint z-score
+to 0, so every pair whose MI falls below the background mean of BOTH its
+endpoints comes back as a structural zero -- 69.9\% of pairs on p = 120
+simulated modular data, against 93.5\% for ARACNE. A percentile spanning all
+node pairs therefore degenerates on CLR too, just at a lower percentile than
+it does for ARACNE, which is why \code{nonzero.only} defaults to TRUE here as well.
 }

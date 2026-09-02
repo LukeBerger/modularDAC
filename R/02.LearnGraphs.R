@@ -195,21 +195,57 @@ learn_SILGGM_graph <- function(x,
 # both copies of every pair, so the fraction of EDGES kept is not the fraction
 # requested.
 #
-# Sparse weight matrices need care beyond that. ARACNE's DPI step zeroes most
-# entries, so when more than `percentile.threshold` of pairs are structurally
-# zero the quantile lands ON the zero mass: the cut degenerates to "keep every
-# non-zero entry" and different percentiles silently return the SAME graph (this
-# is why V.2.0's ARACNE top-2.5% and top-5% lines were identical). That is a real
-# property of percentile-thresholding a sparse matrix, not something a quantile
-# can fix, so it is surfaced as a warning rather than hidden. Use an explicit
-# threshold, or a rank-based edge budget, when it fires.
-.percentile_threshold <- function(mat, percentile.threshold, what = "edges") {
+# Sparse weight matrices need care beyond that, and `nonzero.only` picks WHICH
+# POPULATION the percentile ranks within -- which matters for any learner whose
+# weight matrix carries structural zeros:
+#
+#   FALSE -- all p(p-1)/2 pairs. The percentile is a DENSITY TARGET ("keep the
+#     top X% of node pairs"), correct when every pair is a live candidate, as in
+#     WGCNA's soft-power adjacency and GENIE3's importances. On a sparse matrix
+#     it degenerates: once more than 1 - percentile.threshold of pairs are zero
+#     the quantile lands ON the zero mass, the cut collapses to "keep every
+#     non-zero entry", and different percentiles silently return the SAME graph
+#     (this is why V.2.0's ARACNE top-2.5% and top-5% lines were identical).
+#     Surfaced as a warning rather than hidden.
+#
+#   TRUE -- the non-zero pairs only. The percentile is a RELATIVE-STRENGTH
+#     FILTER ("drop the weakest X% of the pairs still in contention"), correct
+#     for ARACNE and CLR. Their zeros are a deletion decision the algorithm has
+#     ALREADY taken -- DPI pruning, or CLR clamping a negative background
+#     z-score to 0 -- not a measurement, so those pairs are no longer candidates
+#     and ranking within them is meaningless (the true MI of a DPI-zeroed pair
+#     is still in the `mim` matrix, but ARACNE has ruled the pair out). Excluding
+#     them keeps the cut monotone in percentile.threshold at any sparsity. The
+#     sparsity is more than enough to matter: on p = 120 simulated modular data
+#     93.5% of ARACNE pairs and 69.9% of CLR pairs are zero.
+#
+# The two modes are on DIFFERENT SCALES -- the top 5% of survivors is a far
+# smaller absolute edge count than the top 5% of pairs -- so a percentile tuned
+# under one is meaningless under the other. For cross-size comparisons a
+# rank-based edge budget (top c*p edges off the returned `weights` matrix) still
+# beats either, since the survivor count is itself data-dependent.
+.percentile_threshold <- function(mat, percentile.threshold, what = "edges",
+                                  nonzero.only = FALSE) {
   v <- .upper_tri_vec(mat)
+
+  # rank within the pairs still in contention: no zero mass to land on, so the
+  # cut stays monotone in percentile.threshold however sparse the matrix is
+  if (nonzero.only) {
+    pos <- v[v > 0]
+    if (length(pos) == 0L) {
+      warning(sprintf(
+        "every pair of the %s matrix is zero, so no edges can be kept.",
+        what), call. = FALSE)
+      return(0)
+    }
+    return(stats::quantile(pos, percentile.threshold, names = FALSE))
+  }
+
   thr <- stats::quantile(v, percentile.threshold, names = FALSE)
   if (thr <= 0) {
     n.pos <- sum(v > 0)
     warning(sprintf(
-      "percentile.threshold = %g falls on the zero mass of the %s matrix (%.1f%% of pairs are zero); the cut keeps all %d non-zero %s regardless of the percentile requested.",
+      "percentile.threshold = %g falls on the zero mass of the %s matrix (%.1f%% of pairs are zero); the cut keeps all %d non-zero %s regardless of the percentile requested. Pass nonzero.only = TRUE to rank within the non-zero entries instead.",
       percentile.threshold, what, 100 * mean(v <= 0), n.pos, what), call. = FALSE)
   }
   thr
@@ -324,13 +360,21 @@ learn_WGCNA_graph <- function(x,
 #' every pair against the background distribution of its two endpoints -- each
 #' edge is converted to a joint z-score of how surprising its MI is relative to
 #' all other MIs involving feature i and feature j. Edges are therefore
-#' down-weighted rather than deleted, so unlike ARACNE the returned weight matrix
-#' has no structural zeros and a percentile threshold cannot degenerate.
+#' down-weighted rather than deleted wholesale, and CLR keeps many more pairs
+#' than ARACNE does.
+#'
+#' It is not zero-free, though: `minet::clr` clamps a negative endpoint z-score
+#' to 0, so every pair whose MI falls below the background mean of BOTH its
+#' endpoints comes back as a structural zero -- 69.9% of pairs on p = 120
+#' simulated modular data, against 93.5% for ARACNE. A percentile spanning all
+#' node pairs therefore degenerates on CLR too, just at a lower percentile than
+#' it does for ARACNE, which is why `nonzero.only` defaults to TRUE here as well.
 #'
 #' @param x a numeric matrix with p features (rows) and n samples (columns)
-#' @param percentile.threshold a numeric, the top percentile of edges by strength will be kept in the final graph
+#' @param percentile.threshold a numeric, the top percentile of edges by strength will be kept in the final graph; ranked within the non-zero CLR scores unless `nonzero.only = FALSE`
 #' @param clr.threshold a numeric, a fixed CLR score threshold that overrides the percentile, edges bellow this strength will be removed
 #' @param skip.diagonal an integer passed to \code{minet::clr}; 1 (the default) excludes self-MI from each feature's background distribution, 0 includes it
+#' @param nonzero.only a logical; if TRUE (the default) `percentile.threshold` is a percentile of the NON-ZERO CLR scores -- the pairs CLR left in contention -- so the cut drops the weakest X% of those. If FALSE the percentile spans all p(p-1)/2 node pairs, the behaviour before 0.0.0.9015, which collapses to "keep every non-zero score" (and warns) whenever more than 1 - percentile.threshold of pairs are zero. The two are on different scales -- the top 5% of non-zero scores is far fewer edges than the top 5% of pairs -- so a percentile tuned under one does not carry over
 
 #' @return a named list with two elements: 'graph', the learned weighted igraph object, and 'weights', the CLR score matrix
 
@@ -338,7 +382,7 @@ learn_WGCNA_graph <- function(x,
 
 #' @export
 learn_CLR_graph <- function(x, percentile.threshold = 0.95, clr.threshold = NULL,
-                            skip.diagonal = 1) {
+                            skip.diagonal = 1, nonzero.only = TRUE) {
   if (!requireNamespace("minet", quietly = TRUE)) {
     stop("Package minet is required. Install with: install.packages('minet')", call. = FALSE)
   }
@@ -357,9 +401,11 @@ learn_CLR_graph <- function(x, percentile.threshold = 0.95, clr.threshold = NULL
   # percentile of edges. The quantile is taken over the UPPER TRIANGLE (as
   # learn_WGCNA_graph does) rather than the whole matrix: a full-matrix quantile
   # also counts the diagonal and both copies of every pair, so the kept fraction
-  # is not the requested one.
+  # is not the requested one. By default it ranks within the non-zero scores
+  # rather than all node pairs, see .percentile_threshold()
   if(is.null(clr.threshold)){
-    clr.threshold <- .percentile_threshold(clr.mat, percentile.threshold, "CLR score")
+    clr.threshold <- .percentile_threshold(clr.mat, percentile.threshold, "CLR score",
+                                           nonzero.only = nonzero.only)
   }
 
   # threshold to select edges based on a minimum CLR score
@@ -381,17 +427,28 @@ learn_CLR_graph <- function(x, percentile.threshold = 0.95, clr.threshold = NULL
 }
 
 #' Learn a gene co-expression graph from a data matrix using the ARACNE algorithm
+#'
+#' ARACNE builds the pairwise mutual information matrix, then prunes indirect
+#' edges with the data processing inequality: for every triplet it deletes the
+#' weakest of the three MI values outright. Most of the matrix is therefore a
+#' structural ZERO by the time it is thresholded (93.5% of pairs on p = 120
+#' simulated modular data), which is what `nonzero.only` exists to handle -- a
+#' percentile spanning all node pairs lands on that zero mass and stops
+#' responding to the percentile at all.
+#'
 #' @param x a numeric matrix with p features (rows) and n samples (columns)
-#' @param percentile.threshold a numeric, the top percentile of edges by strength will be kept in the final graph
+#' @param percentile.threshold a numeric, the top percentile of edges by strength will be kept in the final graph; ranked within the pairs that survive DPI unless `nonzero.only = FALSE`
 #' @param mim.threshold a numeric, the a fixed mutual information threshold that overrides the percentile, edges bellow this strength will be removed
 #' @param eps a numeric, the data processing inequality threshold used by ARACNE to remove indirect edges
+#' @param nonzero.only a logical; if TRUE (the default) `percentile.threshold` is a percentile of the NON-ZERO entries of the ARACNE matrix -- the pairs still in contention after DPI pruning -- so the cut drops the weakest X% of surviving edges. If FALSE the percentile spans all p(p-1)/2 node pairs, the behaviour before 0.0.0.9015: because DPI zeroes most entries that cut collapses to "keep every non-zero entry" (and warns) whenever more than 1 - percentile.threshold of pairs are zero, making different percentiles return the same graph. The two are on different scales -- the top 5% of survivors is far fewer edges than the top 5% of pairs -- so a percentile tuned under one does not carry over
 
 #' @return a named list with two elements: 'graph', the learned weighted igraph object, and 'weights', the mutual information (ARACNE) matrix
 
 #' @importFrom igraph graph_from_adjacency_matrix
 
 #' @export
-learn_ARACNE_graph <- function(x, eps=0, percentile.threshold = 0.95, mim.threshold = NULL) {
+learn_ARACNE_graph <- function(x, eps=0, percentile.threshold = 0.95, mim.threshold = NULL,
+                               nonzero.only = TRUE) {
   if (!requireNamespace("minet", quietly = TRUE)) {
     stop("Package minet is required. Install with: install.packages('minet')", call. = FALSE)
   }
@@ -405,9 +462,13 @@ learn_ARACNE_graph <- function(x, eps=0, percentile.threshold = 0.95, mim.thresh
   # apply ARACNE algorithm
   aracne.mat <- minet::aracne(mim, eps=eps)
 
-  # if no fixed mim.threshold is provided, keep only the 'percentile.threshold' percentile of edges
+  # if no fixed mim.threshold is provided, keep only the 'percentile.threshold'
+  # percentile of edges -- by default ranked within the DPI survivors rather
+  # than all node pairs, see .percentile_threshold()
   if(is.null(mim.threshold)){
-    mim.threshold <- .percentile_threshold(aracne.mat, percentile.threshold, "ARACNE mutual information")
+    mim.threshold <- .percentile_threshold(aracne.mat, percentile.threshold,
+                                           "ARACNE mutual information",
+                                           nonzero.only = nonzero.only)
   }
 
   # threshold to select edges based on a minimum mutal information threshold
