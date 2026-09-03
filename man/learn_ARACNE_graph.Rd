@@ -49,10 +49,10 @@ et al. describe, and the only truth-free one that needs no calibration
 against graph size -- a percentile fixes a fraction of node pairs (~p^2) while
 true edges scale with ~p, so one percentile cannot be right at two sizes,
 whereas the MI null adapts to the sample size on its own. On the density
-pilot (8 LFR configs x {360, 720} nodes x 3 reps) it beat every hand-tuned
-\code{c*p} edge budget in 15 of 16 config-by-size cells, and unlike the budget's
-\code{c} -- best split 7/2/7 across {1.5p, 1p, 2p} and flipping with node count --
-one level works everywhere.
+pilot (8 LFR configs at 360 and 720 nodes, 3 reps each) it beat every
+hand-tuned \code{c*p} edge budget in 15 of 16 config-by-size cells, and unlike
+the budget's \code{c} -- split 7/2/7 across 1.5p, 1p and 2p, and flipping with
+node count -- one level works everywhere.
 
 The other three rules are off unless set, and any one of them overrides the
 default: precedence is \code{mim.threshold} (an absolute MI cutoff), then
@@ -73,8 +73,8 @@ takes a prefix of the sorted p-values) is exactly \code{MI >= c} for some c. DPI
 prunes (i,j) only via a witness k with \code{min(MI(i,k), MI(j,k)) > MI(i,j) + eps},
 so if (i,j) clears c then both witness edges clear c too and survive the mask:
 masking can never remove a witness that would have mattered. Verified
-identical edge sets across 36 configurations (3 seeds x p in {120, 240} x eps
-in {0, 0.001, 0.01} x raw/BH rules).
+identical edge sets across 36 configurations: 3 seeds x p of 120 and 240 x
+eps of 0, 0.001 and 0.01 x the raw-p and BH rules.
 
 What does matter is whether DPI runs at all. On p = 300 simulated modular data
 (403 true edges) a BH q < 0.05 mask on its own scores F1 0.464 (precision
