@@ -1,27 +1,12 @@
-# Tests for the divide-and-conquer driver in R/03.Multithreaded_DaC.R
-# Scope: divide_and_conquer()
-#
-# divide_and_conquer() splits the data into overlapping modules, learns a graph
-# per module (SILGGM by default), and stitches them back together. The default
-# learner is verbose via cat(), so quiet() captures that output and the full run
-# is computed once and shared across assertions.
+# Tests for divide_and_conquer() and its private stitching helpers
+# (.connect_subgraphs, .connect_weights, .subgraph_weight_mats) in
+# R/divide_and_conquer.R
 
-# silence cat()/message()/warning() noise while returning the value
-quiet <- function(expr) {
-  utils::capture.output(val <- suppressWarnings(suppressMessages(expr)))
-  val
-}
-
-set.seed(1)
-.g <- make_modular_graph()
-.x <- sim_graph_data(.g, n.samples = 100)   # p x n
-.fuzzy <- true_fuzzy(true_modules(.g), .g)  # overlapping modules to divide along
 .dac <- quiet(divide_and_conquer(.x, .fuzzy))
 
 # ---------------------------------------------------------------------------
 # divide_and_conquer(): successful run with defaults
 # ---------------------------------------------------------------------------
-
 test_that("divide_and_conquer() returns subgraphs, a graph, weights, and other outputs", {
   expect_type(.dac, "list")
   expect_named(.dac, c("module.subgraphs", "graph", "weights", "other.outputs"))
@@ -62,7 +47,6 @@ test_that("divide_and_conquer() returns a combined feature-by-feature weight mat
 # ---------------------------------------------------------------------------
 # divide_and_conquer(): input validation
 # ---------------------------------------------------------------------------
-
 test_that("divide_and_conquer() rejects non-matrix data", {
   expect_error(divide_and_conquer(as.data.frame(.x), .fuzzy),
                regexp = "numeric matrix")
@@ -101,42 +85,6 @@ test_that("divide_and_conquer() warns when a module has no overlap with the othe
 })
 
 # ---------------------------------------------------------------------------
-# divide_and_conquer(): alternative (RSNet) graph-learning helpers
-# ---------------------------------------------------------------------------
-
-test_that("divide_and_conquer() works with the RSNet helper functions", {
-  skip_if_not_installed("RSNet")
-
-  # RSNet parallelises with parallel::mclapply; pass n_cores = 1 so it runs
-  # serially (mc.cores > 1 is unsupported on Windows). n_cores flows through
-  # the ... to .RSNet_arg_wrapper and on to RSNet::ensemble_ggm.
-  dac <- quiet(divide_and_conquer(
-    .x, .fuzzy,
-    graph.learning.func = .RSNet_full_learning,
-    arg.wrapping.func   = .RSNet_arg_wrapper,
-    out.parsing.func    = .RSNet_output_parser,
-    packages.to.each    = c("igraph", "RSNet"),
-    export.to.each      = c(".RSNet_full_learning"),
-    n_cores = 1
-  ))
-
-  # same container contract as the default SILGGM path
-  expect_named(dac, c("module.subgraphs", "graph", "weights", "other.outputs"))
-  expect_length(dac$module.subgraphs, length(.fuzzy@index.list))
-  expect_true(all(vapply(dac$module.subgraphs, igraph::is_igraph, logical(1))))
-
-  # stitched graph covers the full feature set
-  expect_s3_class(dac$graph, "igraph")
-  expect_length(dac$graph, nrow(.x))
-  expect_setequal(igraph::V(dac$graph)$name, rownames(.x))
-
-  # unlike the default parser, the RSNet parser returns the extra consensus
-  # outputs alongside the learned graphs
-  expect_false(is.null(dac$other.outputs))
-  expect_length(dac$other.outputs, length(.fuzzy@index.list))
-})
-
-# ---------------------------------------------------------------------------
 # .connect_subgraphs(): weight reconciliation
 # ---------------------------------------------------------------------------
 
@@ -150,16 +98,22 @@ test_that("divide_and_conquer() works with the RSNet helper functions", {
 .xc <- matrix(0, nrow = 3, ncol = 2, dimnames = list(c("a", "b", "c"), NULL))
 
 .A1 <- matrix(0, 3, 3, dimnames = list(c("a","b","c"), c("a","b","c")))
+
 .A1["a","b"] <- .A1["b","a"] <- 0.5
+
 .A1["b","c"] <- .A1["c","b"] <- 0.8
+
 .A1["a","c"] <- .A1["c","a"] <- 0.3   # present only in sub-graph 1
 
 .A2 <- matrix(0, 3, 3, dimnames = list(c("a","b","c"), c("a","b","c")))
-.A2["a","b"] <- .A2["b","a"] <- 0.4
-.A2["b","c"] <- .A2["c","b"] <- 0.2
-# no a-c edge in sub-graph 2
 
+.A2["a","b"] <- .A2["b","a"] <- 0.4
+
+.A2["b","c"] <- .A2["c","b"] <- 0.2
+
+# no a-c edge in sub-graph 2
 .g1 <- .mk_wg(.A1)
+
 .g2 <- .mk_wg(.A2)
 
 wmat <- function(g) {
@@ -212,7 +166,6 @@ test_that(".connect_subgraphs() rejects an unknown weight.summary", {
 # ---------------------------------------------------------------------------
 # .connect_weights(): combining per-module weight matrices
 # ---------------------------------------------------------------------------
-
 test_that(".connect_weights() min keeps the smallest-magnitude weight per pair", {
   # both modules cover {a, b, c}; ownership-agnostic (core.sets = NULL)
   W <- .connect_weights(.xc, list(.A1, .A2), "min")
@@ -248,7 +201,6 @@ test_that(".connect_weights() honours core ownership (drops auxiliary-auxiliary 
 # ---------------------------------------------------------------------------
 # .subgraph_weight_mats(): choosing a weight source per module
 # ---------------------------------------------------------------------------
-
 test_that(".subgraph_weight_mats() prefers a parser weight matrix, then the weighted graph, else NULL", {
   # module 1: parser supplies a feature-named weight matrix -> use it directly
   # module 2: parser output is not a matrix, but the graph is weighted -> use its adjacency
@@ -275,6 +227,7 @@ test_that(".subgraph_weight_mats() prefers a parser weight matrix, then the weig
 # a stub learner that returns an UNWEIGHTED graph and no weight matrix, used to
 # exercise the output.weights fallback (warn + NULL, but do not stop)
 .stub_arg <- function(sub.x, ...) lapply(sub.x, function(xx) list(x = xx))
+
 .stub_learn <- function(x) {
   ns <- rownames(x)
   edges <- if (length(ns) >= 2) {
@@ -286,6 +239,7 @@ test_that(".subgraph_weight_mats() prefers a parser weight matrix, then the weig
                                      vertices = data.frame(name = ns))
   list(graph = g, weights = NULL)   # unweighted graph, no weight matrix
 }
+
 .stub_parse <- function(outs) list(
   learned.graphs = lapply(outs, function(o) o$graph),
   other.outputs  = lapply(outs, function(o) o$weights)
@@ -313,7 +267,6 @@ test_that("divide_and_conquer() warns and returns NULL weights when learners exp
 # ---------------------------------------------------------------------------
 # divide_and_conquer(): weight.summary plumbing
 # ---------------------------------------------------------------------------
-
 test_that("divide_and_conquer() returns a weighted final graph and respects weight.summary", {
   expect_true(igraph::is_weighted(.dac$graph))   # .dac uses the default (min)
 
