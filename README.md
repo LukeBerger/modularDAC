@@ -71,7 +71,7 @@ modularDAC for 1500+ feature networks.
 
 ## Installation
 
-The `master` branch holds the user-facing package and is the default branch:
+The `main` branch holds the user-facing package and is the default branch:
 
 ```r
 # install.packages("devtools")
