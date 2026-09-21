@@ -6,7 +6,10 @@
 #' @importFrom methods new
 #' @importFrom igraph V
 
-#' @export
+#' @keywords internal
+#' @note Benchmarking helper, kept on this branch only to back the test
+#'   suite. It is not part of the user-facing API; the exported version
+#'   lives on the dev branch.
 true_modules <- function(g){
   # build module object from ground-truth module vertex attribute
   module <- igraph::V(g)$module

@@ -14,7 +14,10 @@
 
 #' @importFrom igraph sample_gnp sample_pa V add_edges simplify disjoint_union
 
-#' @export
+#' @keywords internal
+#' @note Benchmarking helper, kept on this branch only to back the test
+#'   suite. It is not part of the user-facing API; the exported version
+#'   lives on the dev branch.
 make_modular_graph <- function(g.type=c("er", "sf"),
                                n.mods=3, n.nodes=120, n.mod.links=3,
                                no.uncon = TRUE, link.all = TRUE,

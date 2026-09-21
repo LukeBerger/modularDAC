@@ -6,7 +6,10 @@
 
 #' @importFrom igraph V as_edgelist
 
-#' @export
+#' @keywords internal
+#' @note Benchmarking helper, kept on this branch only to back the test
+#'   suite. It is not part of the user-facing API; the exported version
+#'   lives on the dev branch.
 calc_F1 <- function(g.true, g.pred) {
   # check that the graphs have the same nodes
   if (!all(igraph::V(g.true)$name %in% igraph::V(g.pred)$name)) {

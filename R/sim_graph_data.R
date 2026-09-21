@@ -8,7 +8,10 @@
 
 #' @importFrom igraph as_adjacency_matrix V
 
-#' @export
+#' @keywords internal
+#' @note Benchmarking helper, kept on this branch only to back the test
+#'   suite. It is not part of the user-facing API; the exported version
+#'   lives on the dev branch.
 sim_graph_data <- function(g, n.samples, mean.vec = NULL, b = 3){
   if (!requireNamespace("BDgraph", quietly = TRUE)) {
     stop("Package BDgraph is required. Install with: install.packages('BDgraph')", call. = FALSE)

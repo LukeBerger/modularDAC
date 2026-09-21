@@ -20,10 +20,8 @@ Imports:
     parallel,
     doParallel
 Suggests:
-    ggplot2,
     MatrixGenerics,
     netUtils,
-    visNetwork,
     dynamicTreeCut,
     flashClust,
     matrixStats,

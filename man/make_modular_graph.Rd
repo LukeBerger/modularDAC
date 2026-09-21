@@ -44,3 +44,9 @@ an igraph object
 \description{
 Create a modular graph comprised of multiple modules using either Erdos-Renyi or scale-free structure within modules
 }
+\note{
+Benchmarking helper, kept on this branch only to back the test
+suite. It is not part of the user-facing API; the exported version
+lives on the dev branch.
+}
+\keyword{internal}

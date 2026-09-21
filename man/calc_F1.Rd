@@ -17,3 +17,9 @@ a list of F1 score and its components
 \description{
 Calculate the F1 score comparing a predicted graph against a true graph
 }
+\note{
+Benchmarking helper, kept on this branch only to back the test
+suite. It is not part of the user-facing API; the exported version
+lives on the dev branch.
+}
+\keyword{internal}

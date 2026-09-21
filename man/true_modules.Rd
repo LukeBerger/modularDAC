@@ -15,3 +15,9 @@ a module object
 \description{
 Extract true module assignments from a simulated graph
 }
+\note{
+Benchmarking helper, kept on this branch only to back the test
+suite. It is not part of the user-facing API; the exported version
+lives on the dev branch.
+}
+\keyword{internal}

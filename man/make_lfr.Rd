@@ -38,3 +38,9 @@ an igraph object
 \description{
 Wrapper for netUtils::sample_lfr that generates a Lancichinetti-Fortunato-Radicchi (LFR) benchmark graph and labels nodes
 }
+\note{
+Benchmarking helper, kept on this branch only to back the test
+suite. It is not part of the user-facing API; the exported version
+lives on the dev branch.
+}
+\keyword{internal}

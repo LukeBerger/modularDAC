@@ -7,7 +7,10 @@
 #' @importFrom methods new
 #' @importFrom igraph V neighborhood
 
-#' @export
+#' @keywords internal
+#' @note Benchmarking helper, kept on this branch only to back the test
+#'   suite. It is not part of the user-facing API; the exported version
+#'   lives on the dev branch.
 true_fuzzy <- function(m, g){
   node.names <- igraph::V(g)$name
   # collect all nodes within 2 graph hops of each module

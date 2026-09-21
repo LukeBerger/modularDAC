@@ -21,3 +21,9 @@ a p x n data matrix
 \description{
 Simulate gene expression data for n.samples samples based on the covariance structure implied by a graph
 }
+\note{
+Benchmarking helper, kept on this branch only to back the test
+suite. It is not part of the user-facing API; the exported version
+lives on the dev branch.
+}
+\keyword{internal}

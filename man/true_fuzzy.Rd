@@ -17,3 +17,9 @@ a module object
 \description{
 Expand true modules to fuzzy (overlapping) modules based on second-order graph neighborhood
 }
+\note{
+Benchmarking helper, kept on this branch only to back the test
+suite. It is not part of the user-facing API; the exported version
+lives on the dev branch.
+}
+\keyword{internal}
