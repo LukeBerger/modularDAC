@@ -22,7 +22,6 @@ Imports:
 Suggests:
     SummarizedExperiment,
     S4Vectors,
-    ggplot2,
     MatrixGenerics,
     netUtils,
     dynamicTreeCut,
