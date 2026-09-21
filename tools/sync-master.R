@@ -54,6 +54,12 @@ DROP_MAN <- c(
   "man/modular_plot.Rd", "man/module_contiguity.Rd",
   "man/module_correlation.Rd", "man/module_match.Rd", "man/dot-match_modules.Rd"
 )
+# dev-only tooling. The example dataset it produces (data/lfr_example.rda, with
+# its R/lfr_example.R docs) ships on both branches; the script that regenerates
+# it does not, since it calls the simulators.
+DROP_OTHER <- c(
+  "data-raw/make_example_data.R"
+)
 
 # kept on master but unexported: test infrastructure, not user-facing API.
 # calc_F1 is here rather than in DROP_R because test-learn_SILGGM_graph.R uses
@@ -134,7 +140,7 @@ if (attr(merge.out, "status") != 0) {
   }
   # the only expected conflicts are modify/delete on files master drops
   for (f in conflicts) {
-    if (f %in% c(DROP_R, DROP_TESTS, DROP_MAN)) {
+    if (f %in% c(DROP_R, DROP_TESTS, DROP_MAN, DROP_OTHER)) {
       run("git rm -q -f", shQuote(f))
     } else {
       run("git checkout --theirs", shQuote(f)); run("git add", shQuote(f))
@@ -157,8 +163,8 @@ if (behind > 0) {
 
 # ---------------------------------------------------------- apply the split --
 
-step("removing benchmarking sources, tests and man pages")
-for (f in c(DROP_R, DROP_TESTS, DROP_MAN)) {
+step("removing benchmarking sources, tests, man pages and dev-only tooling")
+for (f in c(DROP_R, DROP_TESTS, DROP_MAN, DROP_OTHER)) {
   if (file.exists(f)) run("git rm -q -f", shQuote(f))
 }
 
