@@ -87,15 +87,18 @@ SENTINELS <- c("R/divide_and_conquer.R", "R/learn_ARACNE_graph.R",
 
 # ---------------------------------------------------------------- utilities --
 
+# stderr is left to flow to the console rather than captured, so git's own
+# messages stay visible; the exit status is what decides success.
 run <- function(..., allow.fail = FALSE) {
   cmd <- paste(...)
-  out <- suppressWarnings(system(paste(cmd, "2>&1"), intern = TRUE))
+  out <- suppressWarnings(system(cmd, intern = TRUE))
   st <- attr(out, "status")
-  if (!allow.fail && !is.null(st) && st != 0) {
-    stop("command failed (status ", st, "): ", cmd, "\n",
-         paste(out, collapse = "\n"), call. = FALSE)
+  if (is.null(st)) st <- 0L
+  if (!allow.fail && st != 0) {
+    stop("command failed (status ", st, "): ", cmd, call. = FALSE)
   }
-  invisible(out)
+  attr(out, "status") <- st
+  out
 }
 
 step <- function(...) cat("==> ", ..., "\n", sep = "")
@@ -118,8 +121,12 @@ step("merging dev")
 # -X theirs settles content conflicts in dev's favour; the transformation below
 # is then re-applied in full, so master's own edits never need preserving.
 merge.out <- run("git merge -X theirs --no-edit dev", allow.fail = TRUE)
-conflicts <- run("git diff --name-only --diff-filter=U", allow.fail = TRUE)
-if (length(conflicts)) {
+if (attr(merge.out, "status") != 0) {
+  conflicts <- run("git diff --name-only --diff-filter=U", allow.fail = TRUE)
+  if (!length(conflicts)) {
+    stop("merge of dev failed and left no conflicts to resolve; see git's ",
+         "output above. Nothing has been changed.", call. = FALSE)
+  }
   # the only expected conflicts are modify/delete on files master drops
   for (f in conflicts) {
     if (f %in% c(DROP_R, DROP_TESTS, DROP_MAN)) {
@@ -129,21 +136,19 @@ if (length(conflicts)) {
     }
   }
   run("git commit --no-edit")
-} else if (length(run("git rev-list --count dev..HEAD", allow.fail = TRUE)) &&
-           length(merge.out) && any(grepl("^(error|fatal|Aborting)", merge.out))) {
-  stop("merge of dev failed:\n", paste(merge.out, collapse = "\n"), call. = FALSE)
 }
 
+# guard against the transformation being applied to stale content
 missing <- SENTINELS[!file.exists(SENTINELS)]
 if (length(missing)) {
   stop("master does not look like dev after the merge; missing:\n  ",
        paste(missing, collapse = "\n  "),
        "\nAborting before any files are changed.", call. = FALSE)
 }
-if (length(run("git rev-list --count dev..HEAD")) &&
-    as.integer(run("git rev-list --count dev..HEAD")[1]) == 0 &&
-    as.integer(run("git rev-list --count HEAD..dev")[1]) > 0) {
-  stop("master is still behind dev after the merge; aborting.", call. = FALSE)
+behind <- as.integer(run("git rev-list --count HEAD..dev")[1])
+if (behind > 0) {
+  stop("master is still ", behind, " commit(s) behind dev after the merge; ",
+       "aborting.", call. = FALSE)
 }
 
 # --------------------------------------------------------- apply the split --
