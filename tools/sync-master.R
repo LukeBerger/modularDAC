@@ -12,15 +12,19 @@
 #   1. DROPPED entirely. Functions whose only purpose is benchmarking or
 #      reporting on a benchmark, together with their tests and man pages.
 #
-#   2. KEPT BUT UNEXPORTED. The graph/data simulators and the ground-truth
-#      module constructors. Every test fixture in the suite builds its data with
-#      these, so removing them would take the whole test suite with them. On
-#      master they are marked @keywords internal instead of @export, so they
+#   2. KEPT BUT UNEXPORTED. The graph/data simulators, the ground-truth module
+#      constructors and calc_F1. Every test fixture in the suite builds its data
+#      with these, so removing them would take the whole test suite with them.
+#      On master they are marked @keywords internal instead of @export, so they
 #      still back the tests but never appear in the user-facing API.
 #
 # This script is the single source of truth for that transformation: it is
 # re-applied in full on every sync, so the two branches cannot drift and merge
-# conflicts on the transformed files do not need hand-resolution.
+# conflicts on the transformed files never need hand-resolution.
+#
+# All master-side work happens in a temporary git worktree, so the checkout this
+# runs from stays on dev and is never modified. (Switching branches in place
+# would delete this very file mid-run, which aborts the merge.)
 #
 # Usage, from a clean checkout of the package root:
 #     Rscript tools/sync-master.R           # build master locally
@@ -30,20 +34,6 @@
 # diff can be reviewed.
 
 args <- commandArgs(trailingOnly = TRUE)
-
-# Re-exec from a copy outside the repo. This file is tracked on dev but not on
-# master, so checking master out deletes it from the working tree -- which
-# aborts the merge if the copy git is managing is the one currently executing.
-if (!("--relocated" %in% args)) {
-  self <- sub("^--file=", "", grep("^--file=", commandArgs(FALSE), value = TRUE))[1]
-  if (!is.na(self) && nzchar(self)) {
-    tmp <- file.path(tempdir(), "sync-master.R")
-    file.copy(self, tmp, overwrite = TRUE)
-    st <- system2(file.path(R.home("bin"), "Rscript"),
-                  c(shQuote(tmp), shQuote(args), "--relocated"))
-    quit(save = "no", status = st)
-  }
-}
 do.push <- "--push" %in% args
 
 # ---------------------------------------------------------------- the split --
@@ -80,8 +70,8 @@ UNEXPORT <- c(
 # Suggests entries no longer reachable once the dropped set is gone
 DROP_SUGGESTS <- c("ggplot2", "visNetwork")
 
-# files that must exist on master after a correct merge (guards against the
-# merge silently failing and the transformation being applied to stale content)
+# files that must exist on master after a correct merge; guards against the
+# transformation being applied to stale content if the merge silently fails
 SENTINELS <- c("R/divide_and_conquer.R", "R/learn_ARACNE_graph.R",
                "R/module-class.R", "tests/testthat/helper-fixtures.R")
 
@@ -110,22 +100,37 @@ if (length(run("git status --porcelain")) > 0) {
   stop("working tree is not clean; commit or stash first.", call. = FALSE)
 }
 
-# ------------------------------------------------------- merge dev to master --
+root <- normalizePath(".", winslash = "/")
+wt <- file.path(normalizePath(tempdir(), winslash = "/"), "modularDAC-master")
 
-step("fetching and checking out master")
+# ------------------------------------------------------ master worktree setup --
+
+step("fetching")
 run("git fetch origin")
-run("git checkout master")
-run("git merge --ff-only origin/master", allow.fail = TRUE)  # no-op if in sync
+
+step("preparing a master worktree at ", wt)
+run("git worktree remove --force", shQuote(wt), allow.fail = TRUE)  # leftover from a failed run
+run("git worktree prune")
+run("git worktree add", shQuote(wt), "master")
+on.exit({
+  setwd(root)
+  run("git worktree remove --force", shQuote(wt), allow.fail = TRUE)
+  run("git worktree prune", allow.fail = TRUE)
+}, add = TRUE)
+
+setwd(wt)
+
+run("git merge --ff-only origin/master", allow.fail = TRUE)  # no-op when in sync
 
 step("merging dev")
 # -X theirs settles content conflicts in dev's favour; the transformation below
-# is then re-applied in full, so master's own edits never need preserving.
+# is re-applied in full afterwards, so master's own edits never need preserving.
 merge.out <- run("git merge -X theirs --no-edit dev", allow.fail = TRUE)
 if (attr(merge.out, "status") != 0) {
   conflicts <- run("git diff --name-only --diff-filter=U", allow.fail = TRUE)
   if (!length(conflicts)) {
     stop("merge of dev failed and left no conflicts to resolve; see git's ",
-         "output above. Nothing has been changed.", call. = FALSE)
+         "output above. Nothing has been committed.", call. = FALSE)
   }
   # the only expected conflicts are modify/delete on files master drops
   for (f in conflicts) {
@@ -138,7 +143,6 @@ if (attr(merge.out, "status") != 0) {
   run("git commit --no-edit")
 }
 
-# guard against the transformation being applied to stale content
 missing <- SENTINELS[!file.exists(SENTINELS)]
 if (length(missing)) {
   stop("master does not look like dev after the merge; missing:\n  ",
@@ -147,18 +151,18 @@ if (length(missing)) {
 }
 behind <- as.integer(run("git rev-list --count HEAD..dev")[1])
 if (behind > 0) {
-  stop("master is still ", behind, " commit(s) behind dev after the merge; ",
-       "aborting.", call. = FALSE)
+  stop("master is still ", behind, " commit(s) behind dev after the merge; aborting.",
+       call. = FALSE)
 }
 
-# --------------------------------------------------------- apply the split --
+# ---------------------------------------------------------- apply the split --
 
 step("removing benchmarking sources, tests and man pages")
 for (f in c(DROP_R, DROP_TESTS, DROP_MAN)) {
   if (file.exists(f)) run("git rm -q -f", shQuote(f))
 }
 
-step("unexporting the simulators and ground-truth constructors")
+step("unexporting the simulators, ground-truth constructors and calc_F1")
 for (f in UNEXPORT) {
   if (!file.exists(f)) next
   txt <- readLines(f, warn = FALSE)
@@ -210,6 +214,7 @@ if (do.push) {
   step("pushing to origin/master")
   run("git push origin master")
 } else {
-  step("not pushed. Review with:  git diff origin/master..master --stat")
+  step("not pushed. Review with:  git log --oneline origin/master..master")
+  step("                          git diff origin/master..master --stat")
   step("then push with:           git push origin master")
 }
