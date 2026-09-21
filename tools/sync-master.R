@@ -30,6 +30,20 @@
 # diff can be reviewed.
 
 args <- commandArgs(trailingOnly = TRUE)
+
+# Re-exec from a copy outside the repo. This file is tracked on dev but not on
+# master, so checking master out deletes it from the working tree -- which
+# aborts the merge if the copy git is managing is the one currently executing.
+if (!("--relocated" %in% args)) {
+  self <- sub("^--file=", "", grep("^--file=", commandArgs(FALSE), value = TRUE))[1]
+  if (!is.na(self) && nzchar(self)) {
+    tmp <- file.path(tempdir(), "sync-master.R")
+    file.copy(self, tmp, overwrite = TRUE)
+    st <- system2(file.path(R.home("bin"), "Rscript"),
+                  c(shQuote(tmp), shQuote(args), "--relocated"))
+    quit(save = "no", status = st)
+  }
+}
 do.push <- "--push" %in% args
 
 # ---------------------------------------------------------------- the split --
@@ -37,7 +51,6 @@ do.push <- "--push" %in% args
 # dropped from master (source, tests and generated docs)
 DROP_R <- c(
   "R/modular_plot.R",        # visNetwork plot of a graph coloured by module
-  "R/calc_F1.R",             # scores a predicted graph against a true one
   "R/module_contiguity.R",   # how self-contained modules are within a graph
   "R/module_correlation.R",  # within-module correlation distributions
   "R/module_match.R"         # agreement between two module sets
@@ -48,11 +61,13 @@ DROP_TESTS <- c(
   "tests/testthat/test-module_match.R"
 )
 DROP_MAN <- c(
-  "man/modular_plot.Rd", "man/calc_F1.Rd", "man/module_contiguity.Rd",
+  "man/modular_plot.Rd", "man/module_contiguity.Rd",
   "man/module_correlation.Rd", "man/module_match.Rd", "man/dot-match_modules.Rd"
 )
 
-# kept on master but unexported: test infrastructure, not user-facing API
+# kept on master but unexported: test infrastructure, not user-facing API.
+# calc_F1 is here rather than in DROP_R because test-learn_SILGGM_graph.R uses
+# it as a sanity check on the learned graph.
 UNEXPORT <- c(
   "R/make_modular_graph.R",
   "R/make_lfr.R",
@@ -65,13 +80,20 @@ UNEXPORT <- c(
 # Suggests entries no longer reachable once the dropped set is gone
 DROP_SUGGESTS <- c("ggplot2", "visNetwork")
 
+# files that must exist on master after a correct merge (guards against the
+# merge silently failing and the transformation being applied to stale content)
+SENTINELS <- c("R/divide_and_conquer.R", "R/learn_ARACNE_graph.R",
+               "R/module-class.R", "tests/testthat/helper-fixtures.R")
+
 # ---------------------------------------------------------------- utilities --
 
-run <- function(...) {
+run <- function(..., allow.fail = FALSE) {
   cmd <- paste(...)
-  out <- suppressWarnings(system(cmd, intern = TRUE))
-  if (!is.null(attr(out, "status")) && attr(out, "status") != 0) {
-    stop("command failed: ", cmd, "\n", paste(out, collapse = "\n"), call. = FALSE)
+  out <- suppressWarnings(system(paste(cmd, "2>&1"), intern = TRUE))
+  st <- attr(out, "status")
+  if (!allow.fail && !is.null(st) && st != 0) {
+    stop("command failed (status ", st, "): ", cmd, "\n",
+         paste(out, collapse = "\n"), call. = FALSE)
   }
   invisible(out)
 }
@@ -81,32 +103,48 @@ step <- function(...) cat("==> ", ..., "\n", sep = "")
 if (!file.exists("DESCRIPTION")) {
   stop("run this from the package root (the directory holding DESCRIPTION).", call. = FALSE)
 }
-if (length(suppressWarnings(system("git status --porcelain", intern = TRUE))) > 0) {
+if (length(run("git status --porcelain")) > 0) {
   stop("working tree is not clean; commit or stash first.", call. = FALSE)
 }
 
 # ------------------------------------------------------- merge dev to master --
 
-step("checking out master and merging dev")
-run("git checkout master")
+step("fetching and checking out master")
 run("git fetch origin")
-# fast-forward master to whatever origin has, then take dev's content wholesale.
-# -X theirs settles content conflicts in dev's favour; modify/delete conflicts on
-# files this script removes anyway are resolved by the removal step below.
-suppressWarnings(system("git merge --ff-only origin/master", intern = TRUE))
-merged <- suppressWarnings(system("git merge -X theirs --no-edit dev", intern = TRUE))
-cat(paste(merged, collapse = "\n"), "\n")
-# any remaining conflict is a modify/delete on a file master drops: take the delete
-conflicts <- suppressWarnings(system("git diff --name-only --diff-filter=U", intern = TRUE))
-for (f in conflicts) {
-  if (f %in% c(DROP_R, DROP_TESTS, DROP_MAN)) {
-    run("git rm -q -f", shQuote(f))
-  } else {
-    run("git checkout --theirs", shQuote(f))
-    run("git add", shQuote(f))
+run("git checkout master")
+run("git merge --ff-only origin/master", allow.fail = TRUE)  # no-op if in sync
+
+step("merging dev")
+# -X theirs settles content conflicts in dev's favour; the transformation below
+# is then re-applied in full, so master's own edits never need preserving.
+merge.out <- run("git merge -X theirs --no-edit dev", allow.fail = TRUE)
+conflicts <- run("git diff --name-only --diff-filter=U", allow.fail = TRUE)
+if (length(conflicts)) {
+  # the only expected conflicts are modify/delete on files master drops
+  for (f in conflicts) {
+    if (f %in% c(DROP_R, DROP_TESTS, DROP_MAN)) {
+      run("git rm -q -f", shQuote(f))
+    } else {
+      run("git checkout --theirs", shQuote(f)); run("git add", shQuote(f))
+    }
   }
+  run("git commit --no-edit")
+} else if (length(run("git rev-list --count dev..HEAD", allow.fail = TRUE)) &&
+           length(merge.out) && any(grepl("^(error|fatal|Aborting)", merge.out))) {
+  stop("merge of dev failed:\n", paste(merge.out, collapse = "\n"), call. = FALSE)
 }
-if (length(conflicts)) run("git commit --no-edit")
+
+missing <- SENTINELS[!file.exists(SENTINELS)]
+if (length(missing)) {
+  stop("master does not look like dev after the merge; missing:\n  ",
+       paste(missing, collapse = "\n  "),
+       "\nAborting before any files are changed.", call. = FALSE)
+}
+if (length(run("git rev-list --count dev..HEAD")) &&
+    as.integer(run("git rev-list --count dev..HEAD")[1]) == 0 &&
+    as.integer(run("git rev-list --count HEAD..dev")[1]) > 0) {
+  stop("master is still behind dev after the merge; aborting.", call. = FALSE)
+}
 
 # --------------------------------------------------------- apply the split --
 
@@ -120,26 +158,31 @@ for (f in UNEXPORT) {
   if (!file.exists(f)) next
   txt <- readLines(f, warn = FALSE)
   hit <- grepl("^#' @export\\s*$", txt)
-  if (!any(hit)) next
+  if (!any(hit)) next            # already transformed; the script is idempotent
   txt[hit] <- paste0(
     "#' @keywords internal\n",
-    "#' @note Benchmarking helper. Present on this branch only to back the test\n",
-    "#'   suite; it is not part of the user-facing API. The exported version\n",
-    "#'   lives on the dev branch."
-  )
+    "#' @note Benchmarking helper, kept on this branch only to back the test\n",
+    "#'   suite. It is not part of the user-facing API; the exported version\n",
+    "#'   lives on the dev branch.")
   writeLines(txt, f)
 }
 
 step("trimming Suggests: ", paste(DROP_SUGGESTS, collapse = ", "))
 d <- readLines("DESCRIPTION", warn = FALSE)
-drop.line <- vapply(d, function(l) {
-  any(vapply(DROP_SUGGESTS, function(p)
-    grepl(paste0("^\\s+", p, ",?\\s*$"), l), logical(1)))
-}, logical(1))
+drop.line <- vapply(d, function(l) any(vapply(DROP_SUGGESTS, function(p)
+  grepl(paste0("^\\s+", p, ",?\\s*$"), l), logical(1))), logical(1))
 writeLines(d[!drop.line], "DESCRIPTION")
 
 step("regenerating NAMESPACE and man/")
 roxygen2::roxygenise(".")
+
+step("running the test suite on master")
+res <- as.data.frame(testthat::test_local(".", reporter = "silent"))
+cat("    tests: ", nrow(res), "  passed: ", sum(res$passed),
+    "  failed: ", sum(res$failed), "  errors: ", sum(res$error), "\n", sep = "")
+if (sum(res$failed) + sum(res$error) > 0) {
+  stop("master's test suite does not pass; nothing has been committed.", call. = FALSE)
+}
 
 step("committing")
 run("git add -A")
@@ -147,16 +190,16 @@ msg <- paste(
   "Rebuild master from dev without benchmarking code",
   "",
   "master carries only what a user needs to run modularDAC on their own data.",
-  "Dropped: modular_plot, calc_F1, module_contiguity, module_correlation,",
-  "module_match (and their tests/docs). The simulators and ground-truth module",
-  "constructors are kept but unexported, since every test fixture depends on",
-  "them. Generated by tools/sync-master.R.",
+  "Dropped: modular_plot, module_contiguity, module_correlation, module_match",
+  "(and their tests and docs). The simulators, the ground-truth module",
+  "constructors and calc_F1 are kept but unexported, since every test fixture",
+  "depends on them. Generated by tools/sync-master.R.",
   sep = "\n")
 run("git commit -q -m", shQuote(msg))
 
-step("done. master now has ",
-     length(system("git ls-tree --name-only HEAD R/", intern = TRUE)), " R/ scripts and ",
-     length(grep("^export", readLines("NAMESPACE", warn = FALSE))), " exports.")
+n.scripts <- length(run("git ls-tree --name-only HEAD R/"))
+n.exports <- length(grep("^export", readLines("NAMESPACE", warn = FALSE)))
+step("done. master has ", n.scripts, " R/ scripts and ", n.exports, " exports.")
 
 if (do.push) {
   step("pushing to origin/master")
