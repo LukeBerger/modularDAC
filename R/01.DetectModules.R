@@ -176,7 +176,7 @@ true_fuzzy <- function(m, g){
 #' @param merging.cut a numeric between 0 and 1, the eigengene dissimilarity threshold for WGCNA::mergeCloseModules
 #' @param iterate a logical, if TRUE oversized modules are recursively split so every module fits within max.size
 #' @param assign.by a character, how unassigned nodes are recruited to modules: 'adjacency' uses WGCNA adjacency, 'eigengene' uses correlation with module eigengenes
-#' @param deep.split an integer 0-4 passed to \code{dynamicTreeCut::cutreeDynamic}, controlling how aggressively the dendrogram is split; 4 (the default, and the previously hard-coded value) splits most aggressively, 0 least
+#' @param deep.split an integer 0-4 passed to \code{dynamicTreeCut::cutreeDynamic}, controlling how aggressively the dendrogram is split; 4 (the default) splits most aggressively, 0 least
 #' @param min.natural.mods an integer, the minimum number of modules the dynamic tree cut must produce before the partition is accepted; if fewer are found and \code{retry.betas} is TRUE the soft-threshold power is re-tried (see \code{retry.betas}). Fewer than 1 is always an error, since a cut that assigns every feature to the unassigned group cannot be repaired downstream
 #' @param retry.betas a logical; if TRUE (default) and the soft-threshold power was chosen automatically, a natural cut yielding fewer than \code{min.natural.mods} modules is re-tried at the remaining \code{powers}, best scale-free fit first, keeping the first power that resolves the network into modules. Ignored when \code{beta} is supplied explicitly
 
@@ -251,11 +251,9 @@ find_WGCNA_mods <- function(x,
   auto.beta <- is.null(beta)
   if (auto.beta) {
     # corOptions and networkType are passed explicitly so the power is chosen
-    # under the SAME correlation and network settings the adjacency below is
-    # built with. They previously diverged: pickSoftThreshold fell back to its
-    # own default corOptions = list(use = "p") while adjacency used
-    # list(pearsonFallback = "individual") for bicor, so the selected power was
-    # fitted to a slightly different matrix than the one it was then applied to.
+    # under the same correlation and network settings the adjacency below is
+    # built with; the two functions' defaults differ, which would otherwise fit
+    # the power to a different matrix than the one it is applied to.
     sft <- WGCNA::pickSoftThreshold(data = t.x,
                                     corFnc = cor.FN,
                                     corOptions = cor.options,
@@ -293,18 +291,18 @@ find_WGCNA_mods <- function(x,
   fit <- cut.at.power(beta)
   n.powers.tried <- 1L
 
-  # RETRY ACROSS POWERS. pickSoftThreshold selects the SMALLEST power whose
+  # Retry across powers. pickSoftThreshold selects the smallest power whose
   # signed scale-free R^2 clears min.sft, which says nothing about whether the
-  # resulting TOM actually resolves into modules -- and on a weakly scale-free
-  # network that crossing point is noise-dominated. When the natural cut comes
-  # back with fewer than min.natural.mods modules, walk the remaining powers
-  # (best scale-free fit first) and keep the first that does resolve.
+  # resulting TOM resolves into modules, and on a weakly scale-free network that
+  # crossing point is noise-dominated. When the natural cut returns fewer than
+  # min.natural.mods modules, walk the remaining powers (best scale-free fit
+  # first) and keep the first that does resolve.
   #
-  # This matters because the degenerate case is silent: a cut that assigns EVERY
-  # node to the unassigned group (0) cannot be repaired downstream --
-  # .assign_unassigned has no module to recruit into, and .split_to_max_size
-  # deliberately never splits group 0 -- so the whole graph would be returned as
-  # a single "module 0". Retrying, then failing loudly, replaces that.
+  # The degenerate case is otherwise silent: a cut that assigns every node to
+  # the unassigned group (0) cannot be repaired downstream, since
+  # .assign_unassigned has no module to recruit into and .split_to_max_size
+  # never splits group 0, so the whole graph would be returned as a single
+  # "module 0".
   if (fit$n.mods < min.natural.mods && auto.beta && retry.betas) {
     r2 <- -sign(sft$fitIndices$slope) * sft$fitIndices$SFT.R.sq
     candidates <- sft$fitIndices$Power[order(r2, decreasing = TRUE)]
@@ -315,7 +313,7 @@ find_WGCNA_mods <- function(x,
       trial <- cut.at.power(b)
       n.powers.tried <- n.powers.tried + 1L
       if (trial$n.mods >= min.natural.mods) { fit <- trial; break }
-      fit <- trial   # keep the most recent attempt so the error below is honest
+      fit <- trial   # keep the most recent attempt for the error message below
     }
   }
 
@@ -362,11 +360,9 @@ find_WGCNA_mods <- function(x,
                                              x = x,
                                              method = assign.by)
 
-  # enforce max.size by recursively splitting oversized modules. A cutree split
-  # of an oversized module's own sub-dendrogram can always reach max.size without
-  # evicting nodes into a foreign module (unlike node trading), so we never break
-  # up genuinely connected features to satisfy the cap. Any pieces left below
-  # min.size are then merged back into their nearest neighbouring module.
+  # enforce max.size by recursively splitting oversized modules on their own
+  # sub-dendrograms, then merging any piece left below min.size back into its
+  # nearest neighbouring module
   final.index.vector <- initial.index.vector
   if (iterate) {
     final.index.vector <- .split_to_max_size(index.vector = final.index.vector,
@@ -385,20 +381,18 @@ find_WGCNA_mods <- function(x,
     }
   }
 
-  # renumber the final modules to a contiguous 1:N sequence. Iterative splitting
+  # renumber the final modules to a contiguous 1:N sequence. Splitting
   # (.split_to_max_size) hands out inflated ids and small-module merging
-  # (.merge_small_modules) deletes ids, so the labels arrive full of gaps
-  # (e.g. 1, 45, 101, 4); relabel so the returned modules read 1:N. The
-  # unassigned group (0) is preserved and the labels are deliberately not tied
-  # to the initial module ids.
+  # (.merge_small_modules) deletes ids, so the labels arrive with gaps
+  # (e.g. 1, 45, 101, 4). The unassigned group (0) is preserved, and the new
+  # labels are not tied to the initial module ids.
   final.index.vector <- .relabel_sequential(final.index.vector)
 
-  # The unassigned group (0) is NOT a module. split() below would happily emit it
-  # as one, which is how a total detection collapse used to be returned as a
-  # single valid-looking module covering the whole graph. The retry above makes
-  # that path unreachable via cutreeDynamic; this asserts the contract for every
-  # other route (an explicit `beta`, retry.betas = FALSE, or a node that scores
-  # zero against every module in .assign_unassigned).
+  # The unassigned group (0) is not a module: split() below would otherwise emit
+  # it as one, returning a failed detection as a single module covering the whole
+  # graph. The retry above rules that out for the automatic path; this asserts
+  # the contract for the others (an explicit `beta`, retry.betas = FALSE, or a
+  # node that scores zero against every module in .assign_unassigned).
   leftover <- sum(final.index.vector == 0)
   if (leftover > 0) {
     stop(leftover, " feature(s) could not be assigned to any module and would be ",
@@ -461,9 +455,9 @@ find_WGCNA_mods <- function(x,
 #' Helper to find_WGCNA_mods that enforces max.size by recursively splitting
 #' oversized modules on their own sub-dendrograms
 #'
-#' Unlike node trading, a cutree split can always reach max.size (in the limit,
-#' singletons) without moving a node into an unrelated module, so genuinely
-#' connected features are never separated to satisfy the cap.
+#' Cutting a module's own sub-dendrogram always reaches max.size (in the limit,
+#' singletons) without moving a node into an unrelated module, so no node is
+#' evicted into a foreign module to satisfy the cap.
 #' @param index.vector an integer vector of length p assigning each node to a module (0 = unassigned)
 #' @param dis a p x p TOM distance matrix
 #' @param max.size a numeric, the maximum number of nodes allowed in a module

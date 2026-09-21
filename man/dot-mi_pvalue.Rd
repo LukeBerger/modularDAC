@@ -16,26 +16,23 @@ a p x p matrix of p-values for the null hypothesis that the pair is independent
 }
 \description{
 \code{minet::build.mim()}'s default estimator returns \code{MI = -0.5 * log(1 - rho^2)}
-for the Spearman rank correlation \code{rho} -- a monotone function of a rank
+for the Spearman rank correlation \code{rho}, a monotone function of a rank
 statistic. Under the null of independent, continuously distributed features
-that makes the null DISTRIBUTION-FREE and closed form: \code{rho} has variance
-\code{1 / (n - 1)}, so \code{2 * (n - 1) * MI ~ chi-squared(1)}.
+the null is therefore distribution-free and closed form: \code{rho} has variance
+\code{1 / (n - 1)}, so \code{2 * (n - 1) * MI ~ chi-squared(1)}. This is the analytic
+form of the permutation threshold described by Margolin et al. (2006), and it
+agrees with a permutation null to within a few percent across the tail.
 }
 \details{
-This is the analytic form of the permutation threshold ARACNE's authors
-describe (Margolin et al. 2006). They shuffle expression across profiles,
-tabulate the MI null over 1e5 manifestly independent pairs, and extrapolate
-below p = 1e-4 with \verb{p(I >= I0 | I = 0) ~ exp(-alpha * n * I0)}, fitting
-\code{alpha}. That extrapolation does hold for this estimator -- a fit over the
-empirical tail gives alpha = 1.10, R^2 = 0.9997, against the theoretical
-alpha = 1 -- but none of the machinery is needed: the chi-squared tail matches
-a 21,420-draw permutation null to within 2-4\% at every p-value from 1e-1 to
-1e-4, and is exact further out where the permutation estimate runs out of
-resolution and the paper has to extrapolate.
-
-NB this is tied to the Spearman estimator \code{learn_ARACNE_graph} uses. A
-discretised or kernel MI estimator would need the paper's permutation null
-instead, since the estimator bias at fixed bin width is exactly what \code{alpha}
-absorbs.
+The result is tied to the Spearman estimator \code{learn_ARACNE_graph} uses. A
+discretised or kernel MI estimator would need a permutation null instead,
+since its bias at fixed bin width is not captured by this reference
+distribution.
+}
+\references{
+Margolin AA, Nemenman I, Basso K, Wiggins C, Stolovitzky G,
+Dalla Favera R, Califano A (2006). ARACNE: an algorithm for the
+reconstruction of gene regulatory networks in a mammalian cellular context.
+BMC Bioinformatics 7(Suppl 1):S7.
 }
 \keyword{internal}

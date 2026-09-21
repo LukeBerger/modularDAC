@@ -28,8 +28,8 @@ oversized modules on their own sub-dendrograms}
 an integer vector of length p with every non-zero module within max.size
 }
 \description{
-Unlike node trading, a cutree split can always reach max.size (in the limit,
-singletons) without moving a node into an unrelated module, so genuinely
-connected features are never separated to satisfy the cap.
+Cutting a module's own sub-dendrogram always reaches max.size (in the limit,
+singletons) without moving a node into an unrelated module, so no node is
+evicted into a foreign module to satisfy the cap.
 }
 \keyword{internal}

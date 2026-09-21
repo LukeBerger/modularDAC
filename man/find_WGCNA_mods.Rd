@@ -50,7 +50,7 @@ find_WGCNA_mods(
 
 \item{assign.by}{a character, how unassigned nodes are recruited to modules: 'adjacency' uses WGCNA adjacency, 'eigengene' uses correlation with module eigengenes}
 
-\item{deep.split}{an integer 0-4 passed to \code{dynamicTreeCut::cutreeDynamic}, controlling how aggressively the dendrogram is split; 4 (the default, and the previously hard-coded value) splits most aggressively, 0 least}
+\item{deep.split}{an integer 0-4 passed to \code{dynamicTreeCut::cutreeDynamic}, controlling how aggressively the dendrogram is split; 4 (the default) splits most aggressively, 0 least}
 
 \item{min.natural.mods}{an integer, the minimum number of modules the dynamic tree cut must produce before the partition is accepted; if fewer are found and \code{retry.betas} is TRUE the soft-threshold power is re-tried (see \code{retry.betas}). Fewer than 1 is always an error, since a cut that assigns every feature to the unassigned group cannot be repaired downstream}
 

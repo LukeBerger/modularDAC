@@ -85,8 +85,8 @@ divide_and_conquer <- function(x,
 
   # set up multithreading
 
-  # set up the parallel backend; always release it on exit -- stop the workers AND
-  # reset foreach to the sequential backend -- so later parallel code starts clean
+  # set up the parallel backend, releasing it on exit (stopping the workers and
+  # resetting foreach to the sequential backend) so later parallel code is unaffected
   if (n.cores > 1) {
     cl <- parallel::makeCluster(n.cores)
     on.exit({
@@ -95,7 +95,7 @@ divide_and_conquer <- function(x,
     }, add = TRUE)
     doParallel::registerDoParallel(cl)
   } else {
-    # run sequentially without leaving (or relying on) a stale backend
+    # run sequentially, without relying on whatever backend is registered
     foreach::registerDoSEQ()
   }
 
@@ -106,9 +106,8 @@ divide_and_conquer <- function(x,
     x[sg, , drop = FALSE]
   })
 
-  # learn graphs in parallel
-  # nOTE: this function can be substituted for any graph learning function that returns and Igraph object
-  # (foreach with no .combine returns a list of results, one per module)
+  # learn each module's graph; graph.learning.func may be any function returning
+  # an igraph object. foreach with no .combine returns one result per module.
   args <- arg.wrapping.func(sub.x, ...)
   graph.learning.outputs <- foreach::foreach(i = seq_along(args),
                                              .packages = packages.to.each,
@@ -130,8 +129,8 @@ divide_and_conquer <- function(x,
 
   weight.summary <- match.arg(weight.summary)
   # node ownership (core.list) makes the stitch owner-based: each edge is credited
-  # only from the module(s) that own one of its endpoints. Falls back to NULL
-  # (ownership-agnostic) when the module carries no core.list.
+  # only from the module(s) that own one of its endpoints. NULL when the module
+  # carries no core.list, which stitches without regard to ownership.
   core.sets <- if (length(subgraph.module@core.list) > 0) {
     lapply(subgraph.module@core.list, function(idx) rownames(x)[idx])
   } else {
@@ -140,11 +139,11 @@ divide_and_conquer <- function(x,
   final.graph <- .connect_subgraphs(x, parsed.outputs$learned.graphs, weight.summary, core.sets)
 
   # optionally assemble a combined weight matrix, analogous to the 'weights'
-  # matrix returned by the single-shot learners. Per-module weights are taken
-  # from the parser's weight matrices when available and otherwise from the
-  # weighted sub-graphs, then reconciled across modules with the same ownership
-  # and weight.summary rule as the stitched graph. When no module exposes any
-  # weights we warn and leave the combined weights NULL rather than stopping.
+  # matrix returned by the single-shot learners. Per-module weights come from
+  # the parser's weight matrices when available and otherwise from the weighted
+  # sub-graphs, then are reconciled across modules with the same ownership and
+  # weight.summary rule as the stitched graph. When no module exposes any
+  # weights, warn and leave the combined weights NULL.
   combined.weights <- NULL
   if (output.weights) {
     weight.mats <- .subgraph_weight_mats(parsed.outputs$learned.graphs,
@@ -193,8 +192,8 @@ divide_and_conquer <- function(x,
   # the full node set, in the order of the input data
   nodes <- rownames(x)
 
-  # per-sub-graph node sets; default ownership is "every node is core", which
-  # makes every sub-graph containing both endpoints a proposer (legacy behaviour)
+  # per-sub-graph node sets; the default ownership of "every node is core" makes
+  # every sub-graph containing both endpoints a proposer
   node.sets <- lapply(sub.graphs, function(g) igraph::V(g)$name)
   if (is.null(core.sets)) core.sets <- node.sets
 
