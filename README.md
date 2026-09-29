@@ -37,7 +37,7 @@ It is the wrong tool when `p` is small enough to fit directly. The worked exampl
 
 ## Installation
 
-The `master` branch holds the user-facing package and is the default branch:
+The `main` branch holds the user-facing package and is the default branch:
 
 ```r
 # install.packages("devtools")
@@ -179,6 +179,130 @@ and can be used on its own, without divide-and-conquer.
 The `module` S4 class carries a module set: which features belong to each module
 (`index.list` / `name.list`), which it owns (`core.list`), and whether the
 modules overlap. See `?"module-class"`.
+
+---
+
+## Using a custom inference function 
+
+modularDAC allows users to input any inference method of their  choosing to the `divide_and_conquer` function provided its inputs and outputs are formatted properly. Using this function, which infers totally random edge weights, as an example.
+
+```r
+learn_random_graph <- function(x, edge.prob = 0.15){
+  features <- rownames(x)   # x has features as rows and samples as columns
+  n.features <- length(features)
+
+  # each feature pair gets a random weight with probability edge.prob, and 0 otherwise
+  weights <- matrix(0, n.features, n.features, dimnames = list(features, features))
+  is.edge <- upper.tri(weights) & (matrix(runif(n.features^2), n.features) < edge.prob)
+  weights[is.edge] <- rnorm(sum(is.edge), mean = 0.1, sd = 0.05)
+  weights <- weights + t(weights)   # symmetric, with a zero diagonal
+
+  # a weighted, undirected igraph whose vertices are named after the features
+  graph <- igraph::graph_from_adjacency_matrix(weights, mode = "undirected",
+                                               weighted = TRUE, diag = FALSE)
+
+  return(list(graph = graph, weights = weights, number_edges = sum(is.edge)))
+}
+```
+
+The learner is called once per module, on that module's slice of `x` (still
+features by samples). The one hard requirement is that it produces an `igraph`
+whose vertices are named after the rows of `x`. The sub-graphs are stitched back
+together by vertex name, so the features the modules share must have the same
+name in each. Anything else it returns, like `number_edges` here, is up to
+you.
+
+`divide_and_conquer()` does not call the learner directly. It hands each module's
+data to an **argument wrapper**, and hands the learner's outputs to an **output
+parser**. You write both to fit your learner.
+
+### The argument wrapper
+
+The wrapper receives `sub.x`, a list with one data matrix per module, plus any
+extra arguments given to `divide_and_conquer()`. It returns one argument list
+per module, and module `i` is learned with
+`do.call(graph.learning.func, args[[i]])`, so the names in each list must match
+the learner's arguments:
+
+```r
+random_arg_wrapper <- function(sub.x, edge.prob = 0.15){
+  lapply(sub.x, function(x){
+    list(x = x, edge.prob = edge.prob)
+  })
+}
+```
+
+### The output parser
+
+The parser receives a list of the learner's outputs, one per module, and must
+return a list with exactly these two elements:
+
+| element | contents |
+|---|---|
+| `learned.graphs` | a list of the per-module `igraph`s; these are stitched into `graph` |
+| `other.outputs` | a list of anything else to keep, one entry per module; returned as `other.outputs` |
+
+```r
+random_output_parser <- function(graph.learning.outputs){
+  return(
+    list(
+      learned.graphs = lapply(graph.learning.outputs, function(o) o$graph),
+      other.outputs  = lapply(graph.learning.outputs, function(o){
+        list(weights = o$weights, number_edges = o$number_edges)
+      })
+    )
+  )
+}
+```
+
+The combined `weights` matrix is built from `other.outputs` when each entry is
+itself a feature-named weight matrix, which is how the default SILGGM parser
+works. Otherwise it is built from the edge weights of the learned graphs. Here
+each entry is a list, so the graphs are used. That gives the same result, since
+`learn_random_graph()` only puts non-zero weights on edges.
+
+### Running it
+
+Pass all three functions to `divide_and_conquer()`, using `x` and `fuzzy` from
+the worked example:
+
+```r
+set.seed(1)
+random.dac <- divide_and_conquer(
+  x, fuzzy,
+  graph.learning.func = learn_random_graph,
+  arg.wrapping.func   = random_arg_wrapper,
+  out.parsing.func    = random_output_parser,
+  packages.to.each    = "igraph",
+  export.to.each      = "learn_random_graph",
+  edge.prob = 0.15
+)
+```
+
+`edge.prob` is not an argument of `divide_and_conquer()`, so it is passed through to
+`random_arg_wrapper()` and from there into every call to `learn_random_graph()`.
+`packages.to.each` and `export.to.each` only matter when `n.cores > 1`: they
+list the packages each parallel worker loads and the functions it is sent. The
+defaults are set up for SILGGM, so replace them whenever you swap the learner.
+
+Each module's `number_edges` comes back in `other.outputs`:
+
+```r
+sapply(random.dac$other.outputs, function(o) o$number_edges)
+#> [1] 473 145 164
+
+random.dac$graph
+#> IGRAPH ... UNW- 120 628 --
+#> + attr: name (v/c), weight (e/n)
+```
+
+Each module draws its edges independently, so the modules disagree about the
+features they share. The stitch settles those disagreements with the same
+ownership and `weight.summary` rules as any other learner, and 628 of the 782
+edges drawn across the three modules survive.
+
+Because this learner is random, `set.seed()` only makes the result reproducible
+when `n.cores = 1`. Parallel workers each draw from their own random stream.
 
 ---
 
