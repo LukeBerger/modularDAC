@@ -184,7 +184,7 @@ modules overlap. See `?"module-class"`.
 
 ## Using a custom inference function 
 
-modularDAC allows users to input any inference method of their  choosing to the `divide_and_conquer` function provided its inputs and outputs are formatted properly. Using this function, which infers totally random edge weights, as an example.
+modularDAC allows users to input any inference method of their  choosing to the `divide_and_conquer` function provided its inputs and outputs are formatted properly. Here we use a custom function, which infers totally random edge weights, as an example.
 
 ```r
 learn_random_graph <- function(x, edge.prob = 0.15){
