@@ -1,45 +1,71 @@
 # modularDAC
 
-Learn large networks by dividing the data into overlapping modules, learning the modular subnetworks independently, and stitching the results back into a single graph.
+Learn large networks by dividing the data into overlapping modules, learning the
+modular subnetworks independently, and stitching the results back into a single graph.
 
 ---
 
 ## The divide-and-conquer algorithm
 
-Network inference methods that estimate partial correlation have to reason about all `p * (p - 1) / 2` feature pairs at once. Cost grows steeply with the number of features, and once `p` approaches or exceeds the number of samples `n` inference can become unstable.
+Network inference methods that estimate partial correlation have to
+reason about all `p * (p - 1) / 2` feature pairs at once. Cost grows steeply
+with the number of features, and once `p` approaches or exceeds the number of
+samples `n` the whole-data estimate is also poorly conditioned: there is not
+enough data to pin down that many parameters simultaneously.
 
-modularDAC exploits the fact that biological networks are **modular**. Features fall into correlated groups, and primarily have edges within their group. If that holds, the network can be recovered from many small inference problems instead of one large one. This greatly improves the n/p ratio (all samples can be used in each sub-problem) and allows for parallelization. 
+modularDAC exploits the fact that biological networks are **modular**. Features
+fall into correlated groups, and primarily have edges within their group. If that
+holds, the network can be recovered from many small problems instead of one large one.
 
 The algorithm runs in three stages.
 
-**1. Divide**
+**1. Divide** 
+Partition the features into modules, then *grow* each module into an overlapping one.
 
- Partition the features into modules, then grow into *fuzzy* modules which overlap sufficiently to reconstruct the full network.
+The partition comes from `find_WGCNA_mods()` (co-expression modules via WGCNA)
+or `find_ICA_mods()` (independent components, which overlap naturally). The
+growth step — `eigen_fuzzy_modules()` or `adj_fuzzy_modules()` — recruits the
+features outside a module that correlate most strongly with it, up to a size or
+ratio cap.
 
-The partition comes from `find_WGCNA_mods()` (co-expression modules via WGCNA) or `find_ICA_mods()` (independent components, which overlap naturally). The growth step — `eigen_fuzzy_modules()` or `adj_fuzzy_modules()` — recruits the
-features outside a module that correlate most strongly with it, up to a size or ratio cap. 
+The overlap is the part that matters, and it is why this is not just clustering
+followed by independent fits. Each module **owns** the features of the original
+partition; those are its *core* nodes. The recruited features are *auxiliary*:
+they are not owned by this module, and are present only so the learner can
+condition on them. A partial correlation is trustworthy only when the
+conditioning set contains the node's Markov blanket. Cut a module at its
+boundary and the features near that boundary get estimated without the
+neighbours that explain their correlations, which manufactures edges that are
+not there. Growing the module approximates blanket closure for its core nodes.
 
-Each module is comprised of a set of core nodes assigned to it in the original partition. The fuzzy module functions recruit auxiliary nodes: they are not owned by this module, and are present only so the learner can condition on them. A partial correlation is trustworthy only when the conditioning set contains the node's Markov blanket. Cut a module at its boundary and the features near that boundary get estimated without the neighbours that explain their correlations, which manufactures edges that are not there. Growing the module approximates blanket closure for its core nodes and creates for overlaps between modules which can be used to reconstruct the full network.
+**2. Conquer.** Learn a graph within each module independently, optionally in
+parallel across cores. Any learner can be plugged in; the default is
+`learn_SILGGM_graph()` (partial correlation). Also available:
+`learn_WGCNA_graph()`, `learn_ARACNE_graph()`, `learn_CLR_graph()`,
+`learn_GENIE3_graph()` and `learn_bdgraph_graph()`.
 
-**2. Conquer** 
-
-Learn a graph within each module independently, optionally in
-parallel across cores. Any learner can be plugged in; the default is `learn_SILGGM_graph()` (partial correlation). Also available: `learn_WGCNA_graph()`, `learn_ARACNE_graph()`, `learn_CLR_graph()`, `learn_GENIE3_graph()` and `learn_bdgraph_graph()`. The **divide_and_conquer** function is designed so that any inference algorithm can be plugged into it using appropriately formatted helper functions. 
-
-**3. Combine** 
-
-Stitch the sub-networks into one final network. By default `weight.summary = "min"`, edges that could exist in multiple sub-networks (because that pair of nodes is found together in multiple modules) are only kept if they exist in **every** possible sub-network. 
-
-Using `weight.summary = "mean"` will instead averages the signed weights edges found in multiple sub networks allowing them to survive with shrunken weights.
+**3. Combine.** Stitch the sub-graphs into one graph over all features.
+Ownership decides who gets a say: an edge is credited only from a module in
+which at least one endpoint is a core node, so every edge has at most two
+authoritative proposers (the owners of its two endpoints), and
+auxiliary–auxiliary pairs — whose endpoints' blankets were never guaranteed to
+be inside the module — are discarded. Where two modules both propose an edge,
+`weight.summary` decides: `"min"` (the default) keeps the edge only if every
+expected proposer found it, a consensus rule; `"mean"` averages the signed
+weights, so an edge some proposers missed survives with a shrunken weight.
 
 ### When to use it
 
-Divide and conquer is designed for high-dimensional datasets, such as high-throughput RNA-seq, and for analyses that require learning many graphs or relearning a graph many times (bootstrapping). It is based on the assumption
-that the true graph structure underlying the data is modular (as is the case for many biological systems).
+Divide and conquer is designed for high-dimensional datasets, such as
+high-throughput RNA-seq, and for analyses that require learning many graphs
+or relearning a graph many times (bootstrapping). It is based on the assumption
+that the true graph structure underlying the data is modular (as is the case
+for many biological systems).
 
-It is the wrong tool when `p` is small enough to fit directly. The worked example below uses 120 features purely so it runs in seconds. If your real data is that size you should use the whole-data learner. We recommend modularDAC for 1500+ feature networks. 
-
-
+It is the wrong tool when `p` is small enough to fit directly. The worked
+example below uses 120 features purely so it runs in seconds. If your real
+data is that size you should use the whole-data learner. We recommend
+modularDAC for 1500+ feature networks.
 
 ---
 
@@ -106,7 +132,7 @@ dim(x)
 #> [1] 120  60
 ```
 
-### 1. Divide — detect modules, then expand them
+### 1. Divide — detect modules, then grow them
 
 ```r
 set.seed(1)
@@ -122,7 +148,7 @@ each sub-problem. `find_WGCNA_mods()` returns the WGCNA adjacency alongside two
 module objects: `initial.mods` (the natural cut) and `final.mods` (after
 splitting anything over `max.size`).
 
-The partition does not overlap yet, using eigen_fuzzy_modules to create an overlapping set.
+The partition does not overlap yet, so grow it:
 
 ```r
 fuzzy <- eigen_fuzzy_modules(x, mods$final.mods, max.size = 80, ratio = 1.5)
