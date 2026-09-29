@@ -1,71 +1,37 @@
 # modularDAC
 
-Learn large networks by dividing the data into overlapping modules, learning the
-modular subnetworks independently, and stitching the results back into a single graph.
+Learn large networks by dividing the data into overlapping modules, learning the modular sub-networks independently, and combining the results  into a single graph.
 
 ---
 
 ## The divide-and-conquer algorithm
 
-Network inference methods that estimate partial correlation have to
-reason about all `p * (p - 1) / 2` feature pairs at once. Cost grows steeply
-with the number of features, and once `p` approaches or exceeds the number of
-samples `n` the whole-data estimate is also poorly conditioned: there is not
-enough data to pin down that many parameters simultaneously.
+Network inference methods that estimate partial correlation have to reason about all `p * (p - 1) / 2` feature pairs at once. Computational cost and runtime grows steeply with the number of features, and once `p` approaches or exceeds the number of samples `n` inference can be unstable.
 
-modularDAC exploits the fact that biological networks are **modular**. Features
-fall into correlated groups, and primarily have edges within their group. If that
-holds, the network can be recovered from many small problems instead of one large one.
+modularDAC exploits the fact that biological networks are often **modular**. Features
+fall into correlated groups, and primarily have edges within their group. If this assumption holds, the network can be recovered from many small problems instead of one large one.
 
 The algorithm runs in three stages.
 
-**1. Divide.** Partition the features into modules, then *grow* each module into
-an overlapping one.
+**1. Divide.** 
+Partition the features into modules, then expand them to create overlapping **fuzzy modules**.
 
-The partition comes from `find_WGCNA_mods()` (co-expression modules via WGCNA)
-or `find_ICA_mods()` (independent components, which overlap naturally). The
-growth step — `eigen_fuzzy_modules()` or `adj_fuzzy_modules()` — recruits the
-features outside a module that correlate most strongly with it, up to a size or
-ratio cap.
+The partition comes from `find_WGCNA_mods()` (co-expression modules via WGCNA) or `find_ICA_mods()` (independent components, which overlap naturally). The expansion step — `eigen_fuzzy_modules()` or `adj_fuzzy_modules()` — recruits the features outside a module that correlate most strongly with it, up to a size or ratio cap.
 
-The overlap is the part that matters, and it is why this is not just clustering
-followed by independent fits. Each module **owns** the features of the original
-partition; those are its *core* nodes. The recruited features are *auxiliary*:
-they are not owned by this module, and are present only so the learner can
-condition on them. A partial correlation is trustworthy only when the
-conditioning set contains the node's Markov blanket. Cut a module at its
-boundary and the features near that boundary get estimated without the
-neighbours that explain their correlations, which manufactures edges that are
-not there. Growing the module approximates blanket closure for its core nodes.
+The expansion is necessary order  to  1) ensure modules contain overlapping pairs of nodes which can be used to *stitch* together the final network and 2) provide nodes at the *boundaries* of the module with their full markov blanket.
 
-**2. Conquer.** Learn a graph within each module independently, optionally in
-parallel across cores. Any learner can be plugged in; the default is
-`learn_SILGGM_graph()` (partial correlation). Also available:
-`learn_WGCNA_graph()`, `learn_ARACNE_graph()`, `learn_CLR_graph()`,
-`learn_GENIE3_graph()` and `learn_bdgraph_graph()`.
 
-**3. Combine.** Stitch the sub-graphs into one graph over all features.
-Ownership decides who gets a say: an edge is credited only from a module in
-which at least one endpoint is a core node, so every edge has at most two
-authoritative proposers (the owners of its two endpoints), and
-auxiliary–auxiliary pairs — whose endpoints' blankets were never guaranteed to
-be inside the module — are discarded. Where two modules both propose an edge,
-`weight.summary` decides: `"min"` (the default) keeps the edge only if every
-expected proposer found it, a consensus rule; `"mean"` averages the signed
-weights, so an edge some proposers missed survives with a shrunken weight.
+**2. Conquer.** Learn a graph within each (fuzzy) module independently, optionally in parallel across cores. Any learner can be plugged in; the default is `learn_SILGGM_graph()` (partial correlation). Also available: `learn_WGCNA_graph()`, `learn_ARACNE_graph()`, `learn_CLR_graph()`, `learn_GENIE3_graph()` and `learn_bdgraph_graph()`. 
+
+**3. Combine.** Stitch the sub-networks together based on overlapping edges. By default `weight.summary = "min"`: edges are only kept if they are found in every sub-network in which they are possible. Edge **AB** is only included in the final graph if it is found in every fuzzy module that contains nodes **A** and **B** 
+
+Using `weight.summary = "mean"` will instead take the average signed weight of **AB** from every possible sub-network, keeping edges at reduced weight if even if weight = 0 in some networks.
 
 ### When to use it
 
-Divide and conquer is designed for high-dimensional datasets, such as
-high-throughput RNA-seq, and for analyses that require learning many graphs
-or relearning a graph many times (bootstrapping). It is based on the assumption
-that the true graph structure underlying the data is modular (as is the case
-for many biological systems).
+Divide and conquer is designed for high-dimensional datasets  and for analyses that require learning many graphs or relearning a graph many times, such as bootstrapping. It is based on the assumption that the true graph structure underlying the data is modular (as is the case for many biological systems).
 
-It is the wrong tool when `p` is small enough to fit directly. The worked
-example below uses 120 features purely so it runs in seconds. If your real
-data is that size you should use the whole-data learner. We recommend
-modularDAC for 1500+ feature networks.
+It is the wrong tool when `p` is small enough to fit directly. The worked example below uses 120 features purely so it runs in seconds. If your real data is that size you should use the whole-data learner. We recommend modularDAC for 1500+ feature networks.
 
 ---
 
@@ -191,37 +157,13 @@ names(dac)
 | `weights` | a 120 × 120 feature-by-feature weight matrix, reconciled the same way as the graph |
 | `other.outputs` | whatever the learner returned per module |
 
-Raise `n.cores` to learn the modules in parallel — the point of the method on
-real data. Swap the learner with `graph.learning.func`; for the built-in
+Raise `n.cores` to learn the modules in parallel. Swap the learner with `graph.learning.func`; for the built-in
 `learn_*_graph()` functions you also pass the matching argument wrapper and
 output parser (see `?divide_and_conquer`).
 
-### Checking the result
-
-`lfr_example` carries the community each feature was simulated from, so you can
-see how the detected modules line up with the truth. Real data has no such
-column:
-
-```r
-table(detected = mods$final.mods@index.vector,
-      true     = rowData(lfr_example)$true.module)
-#>         true
-#> detected  1  2  3
-#>        1  9 10 38
-#>        2  7 22  2
-#>        3 24  4  4
-```
-
-Recovery is partial here, and that is expected rather than a bug: with 60
-samples and 120 features there are fewer observations than features, so the
-correlations the detection step relies on are noisy. Module detection sharpens
-considerably as the sample size grows relative to the feature count. It is worth
-checking this on your own data before trusting the modules — `module_match()`
-and `module_contiguity()` on the `dev` branch exist for exactly that.
-
 ---
 
-## What else is in the package
+## What is in the package
 
 **Module detection** — `find_WGCNA_mods()`, `find_ICA_mods()`
 
@@ -237,6 +179,130 @@ and can be used on its own, without divide-and-conquer.
 The `module` S4 class carries a module set: which features belong to each module
 (`index.list` / `name.list`), which it owns (`core.list`), and whether the
 modules overlap. See `?"module-class"`.
+
+---
+
+## Using a custom inference function 
+
+modularDAC allows users to input any inference method of their  choosing to the `divide_and_conquer` function provided its inputs and outputs are formatted properly. Here we use a custom function, which infers totally random edge weights, as an example.
+
+```r
+learn_random_graph <- function(x, edge.prob = 0.15){
+  features <- rownames(x)   # x has features as rows and samples as columns
+  n.features <- length(features)
+
+  # each feature pair gets a random weight with probability edge.prob, and 0 otherwise
+  weights <- matrix(0, n.features, n.features, dimnames = list(features, features))
+  is.edge <- upper.tri(weights) & (matrix(runif(n.features^2), n.features) < edge.prob)
+  weights[is.edge] <- rnorm(sum(is.edge), mean = 0.1, sd = 0.05)
+  weights <- weights + t(weights)   # symmetric, with a zero diagonal
+
+  # a weighted, undirected igraph whose vertices are named after the features
+  graph <- igraph::graph_from_adjacency_matrix(weights, mode = "undirected",
+                                               weighted = TRUE, diag = FALSE)
+
+  return(list(graph = graph, weights = weights, number_edges = sum(is.edge)))
+}
+```
+
+The learner is called once per module, on that module's slice of `x` (still
+features by samples). The one hard requirement is that it produces an `igraph`
+whose vertices are named after the rows of `x`. The sub-graphs are stitched back
+together by vertex name, so the features the modules share must have the same
+name in each. Anything else it returns, like `number_edges` here, is up to
+you.
+
+`divide_and_conquer()` does not call the learner directly. It hands each module's
+data to an **argument wrapper**, and hands the learner's outputs to an **output
+parser**. You write both to fit your learner.
+
+### The argument wrapper
+
+The wrapper receives `sub.x`, a list with one data matrix per module, plus any
+extra arguments given to `divide_and_conquer()`. It returns one argument list
+per module, and module `i` is learned with
+`do.call(graph.learning.func, args[[i]])`, so the names in each list must match
+the learner's arguments:
+
+```r
+random_arg_wrapper <- function(sub.x, edge.prob = 0.15){
+  lapply(sub.x, function(x){
+    list(x = x, edge.prob = edge.prob)
+  })
+}
+```
+
+### The output parser
+
+The parser receives a list of the learner's outputs, one per module, and must
+return a list with exactly these two elements:
+
+| element | contents |
+|---|---|
+| `learned.graphs` | a list of the per-module `igraph`s; these are stitched into `graph` |
+| `other.outputs` | a list of anything else to keep, one entry per module; returned as `other.outputs` |
+
+```r
+random_output_parser <- function(graph.learning.outputs){
+  return(
+    list(
+      learned.graphs = lapply(graph.learning.outputs, function(o) o$graph),
+      other.outputs  = lapply(graph.learning.outputs, function(o){
+        list(weights = o$weights, number_edges = o$number_edges)
+      })
+    )
+  )
+}
+```
+
+The combined `weights` matrix is built from `other.outputs` when each entry is
+itself a feature-named weight matrix, which is how the default SILGGM parser
+works. Otherwise it is built from the edge weights of the learned graphs. Here
+each entry is a list, so the graphs are used. That gives the same result, since
+`learn_random_graph()` only puts non-zero weights on edges.
+
+### Running it
+
+Pass all three functions to `divide_and_conquer()`, using `x` and `fuzzy` from
+the worked example:
+
+```r
+set.seed(1)
+random.dac <- divide_and_conquer(
+  x, fuzzy,
+  graph.learning.func = learn_random_graph,
+  arg.wrapping.func   = random_arg_wrapper,
+  out.parsing.func    = random_output_parser,
+  packages.to.each    = "igraph",
+  export.to.each      = "learn_random_graph",
+  edge.prob = 0.15
+)
+```
+
+`edge.prob` is not an argument of `divide_and_conquer()`, so it is passed through to
+`random_arg_wrapper()` and from there into every call to `learn_random_graph()`.
+`packages.to.each` and `export.to.each` only matter when `n.cores > 1`: they
+list the packages each parallel worker loads and the functions it is sent. The
+defaults are set up for SILGGM, so replace them whenever you swap the learner.
+
+Each module's `number_edges` comes back in `other.outputs`:
+
+```r
+sapply(random.dac$other.outputs, function(o) o$number_edges)
+#> [1] 473 145 164
+
+random.dac$graph
+#> IGRAPH ... UNW- 120 628 --
+#> + attr: name (v/c), weight (e/n)
+```
+
+Each module draws its edges independently, so the modules disagree about the
+features they share. The stitch settles those disagreements with the same
+ownership and `weight.summary` rules as any other learner, and 628 of the 782
+edges drawn across the three modules survive.
+
+Because this learner is random, `set.seed()` only makes the result reproducible
+when `n.cores = 1`. Parallel workers each draw from their own random stream.
 
 ---
 
