@@ -16,14 +16,14 @@ The algorithm runs in three stages.
 **1. Divide.** 
 Partition the features into modules, then expand them to create overlapping **fuzzy modules**.
 
-The partition comes from `find_WGCNA_mods()` (co-expression modules via WGCNA) or `find_ICA_mods()` (independent components, which overlap naturally). The expansion step — `eigen_fuzzy_modules()` or `adj_fuzzy_modules()` — recruits the features outside a module that correlate most strongly with it, up to a size or ratio cap.
+The partition comes from `find_WGCNA_mods()` (co-expression modules via WGCNA) or `find_ICA_mods()` (independent components, which overlap naturally). The expansion step uses `eigen_fuzzy_modules()` or `adj_fuzzy_modules()` to recruit  features outside a module that correlate most strongly with it, up to a size or ratio cap.
 
-The expansion is necessary order  to  1) ensure modules contain overlapping pairs of nodes which can be used to *stitch* together the final network and 2) provide nodes at the *boundaries* of the module with their full markov blanket.
+The expansion is necessary in order  to  1) ensure modules contain overlapping pairs of nodes which can be used to stitch together the final network and 2) provide nodes at the boundaries of the module with the necessary information to condition their partial correlations on.
 
 
-**2. Conquer.** Learn a graph within each (fuzzy) module independently, optionally in parallel across cores. Any learner can be plugged in; the default is `learn_SILGGM_graph()` (partial correlation). Also available: `learn_WGCNA_graph()`, `learn_ARACNE_graph()`, `learn_CLR_graph()`, `learn_GENIE3_graph()` and `learn_bdgraph_graph()`. 
+**2. Conquer.** Learn a graph within each (fuzzy) module independently, optionally in parallel across cores, using a  inference function. The default is `learn_SILGGM_graph()`.
 
-**3. Combine.** Stitch the sub-networks together based on overlapping edges. By default `weight.summary = "min"`: edges are only kept if they are found in every sub-network in which they are possible. Edge **AB** is only included in the final graph if it is found in every fuzzy module that contains nodes **A** and **B** 
+**3. Combine.** Stitch the sub-networks together based on overlapping edges. By default `weight.summary = "min"`: edges are only kept if they are found in every sub-network in which they are possible. Edge **AB** is only included in the final graph if it is found in every fuzzy module that contains both  **A** and **B** 
 
 Using `weight.summary = "mean"` will instead take the average signed weight of **AB** from every possible sub-network, keeping edges at reduced weight if even if weight = 0 in some networks.
 
@@ -42,14 +42,6 @@ The `main` branch holds the user-facing package and is the default branch:
 ```r
 # install.packages("devtools")
 devtools::install_github("LukeBerger/modularDAC")
-```
-
-The `dev` branch additionally carries the benchmarking code — graph and data
-simulators, ground-truth module constructors, and scoring functions such as
-`calc_F1()` and `module_contiguity()` — used to evaluate the method:
-
-```r
-devtools::install_github("LukeBerger/modularDAC", ref = "dev")
 ```
 
 Most dependencies are optional and only checked when you call a function that
