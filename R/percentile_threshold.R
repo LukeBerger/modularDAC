@@ -1,5 +1,5 @@
 # Shared percentile cut for the learners that expose percentile.threshold
-# (ARACNE, WGCNA, CLR, GENIE3).
+# (ARACNE, WGCNA, CLR, GENIE3) and for find_Louvain_mods()'s ARACNE graph.
 # The quantile is taken over the upper triangle, so the fraction of node pairs
 # kept is the fraction requested; a whole-matrix quantile would also count the
 # diagonal and both copies of every pair.
