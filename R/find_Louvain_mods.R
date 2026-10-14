@@ -4,7 +4,16 @@
 #' the Louvain algorithm, then enforces the module size limits. ARACNE is run
 #' directly through minet: mutual information from [minet::build.mim()], indirect
 #' edges pruned by the data processing inequality (DPI) in [minet::aracne()], and
-#' optionally the weakest `percentile.threshold` of the surviving edges dropped.
+#' the surviving edges kept only where their mutual information is significant
+#' (Benjamini-Hochberg adjusted p-value below `max.fdr`), the same edge rule and
+#' independence test as [learn_ARACNE_graph()]. `percentile.threshold` replaces
+#' that test with a cut of the weakest DPI survivors.
+#'
+#' The DPI is kept on purpose even though modules do not need indirect edges
+#' removed: in data with a strong shared component, the raw significant
+#' mutual-information graph links most pairs across modules, and it is the DPI
+#' that strips that cross-module association out.
+#'
 #' A community larger than `max.size` is
 #' re-split by Louvain on its own subgraph, falling back to average-linkage
 #' clustering on `1 - |cor|` if that subgraph will not split. A community smaller
@@ -28,12 +37,13 @@
 #' partition.
 #'
 #' @param x a numeric matrix with p features (rows) and n samples (columns), with unique row names
-#' @param graph an igraph object or NULL (the default). If NULL, an ARACNE graph is learned from `x` (see `eps` and `percentile.threshold`). Otherwise an undirected graph whose vertex names are feature names; vertices not in `rownames(x)` are dropped, features of `x` absent from the graph start as singleton communities, and edge weights (if any) are used as absolute values, with an unweighted graph treated as all weights 1
+#' @param graph an igraph object or NULL (the default). If NULL, an ARACNE graph is learned from `x` (see `eps`, `max.fdr` and `percentile.threshold`). Otherwise an undirected graph whose vertex names are feature names; vertices not in `rownames(x)` are dropped, features of `x` absent from the graph start as singleton communities, and edge weights (if any) are used as absolute values, with an unweighted graph treated as all weights 1
 #' @param min.size an integer, the minimum number of nodes in a module; smaller communities are merged into a neighbour where the merged size stays within `max.size`, and any that cannot be merged are kept, with a warning
 #' @param max.size an integer, or NULL for no cap; the maximum number of nodes allowed in a module
-#' @param resolution a numeric, the Louvain resolution passed to [igraph::cluster_louvain()]; higher values give more, smaller communities
+#' @param resolution a numeric, the Louvain resolution passed to [igraph::cluster_louvain()] for the initial partition and for re-splitting communities larger than `max.size`; higher values give more, smaller communities. The default 0.5 sits below igraph's 1 because the DPI-pruned ARACNE graph has almost no triangles, and at resolution 1 Louvain fragments such a near-tree into many small communities that the size rules then have to merge back
 #' @param eps a numeric, the DPI tolerance passed to [minet::aracne()]; used only when `graph` is NULL
-#' @param percentile.threshold a numeric between 0 and 1, used only when `graph` is NULL: the ARACNE edges that survive DPI are ranked by mutual information and the weakest `percentile.threshold` fraction of them is dropped. The default 0 keeps every survivor, leaving DPI as the only pruning; a positive value is not calibrated across graph sizes. Ranking within the survivors (not all node pairs) keeps the cut responsive at any sparsity
+#' @param max.fdr a numeric between 0 and 1, used only when `graph` is NULL and `percentile.threshold` is NULL: the default edge rule (0.05). A DPI survivor is kept when the Benjamini-Hochberg adjusted p-value of its mutual information, tested against the independence null over all node pairs, is below `max.fdr`; as in [learn_ARACNE_graph()], the test is run on the raw mutual information, before DPI
+#' @param percentile.threshold a numeric between 0 and 1, or NULL (the default, leaving this rule off), used only when `graph` is NULL. Supplying it replaces the `max.fdr` test: the ARACNE edges that survive DPI are ranked by mutual information and the weakest `percentile.threshold` fraction of them is dropped, so 0 keeps every survivor and leaves DPI as the only pruning. Unlike `max.fdr`, a positive value is not calibrated across graph sizes. Ranking within the survivors (not all node pairs) keeps the cut responsive at any sparsity
 
 #' @return a list containing: 'graph', the igraph the communities were detected on (restricted to `rownames(x)`, with the absolute edge weights Louvain used); 'graph.adj', the p x p matrix of those weights in `rownames(x)` order (0 where there is no edge), ready to pass as `adj` to [adj_fuzzy_modules()]; 'initial.mods', the raw Louvain partition; and 'final.mods', that partition after splitting and merging to satisfy the size limits
 
@@ -46,9 +56,10 @@ find_Louvain_mods <- function(x,
                               graph = NULL,
                               min.size = 10,
                               max.size = NULL,
-                              resolution = 1,
+                              resolution = 0.5,
                               eps = 0.001,
-                              percentile.threshold = 0) {
+                              max.fdr = 0.05,
+                              percentile.threshold = NULL) {
   if (is.null(rownames(x)) || anyDuplicated(rownames(x))) {
     stop("x must have unique row names; they identify the features as graph vertices.", call. = FALSE)
   }
@@ -75,20 +86,34 @@ find_Louvain_mods <- function(x,
       stop("Package minet is required to learn the ARACNE graph. Install with: ",
            "BiocManager::install('minet'), or supply a graph.", call. = FALSE)
     }
-    if (!is.numeric(percentile.threshold) || length(percentile.threshold) != 1 ||
-        percentile.threshold < 0 || percentile.threshold > 1) {
-      stop("percentile.threshold must be a single number between 0 and 1.", call. = FALSE)
+    # percentile.threshold, when supplied, replaces the default max.fdr rule
+    use.percentile <- !is.null(percentile.threshold)
+    if (use.percentile) {
+      if (!is.numeric(percentile.threshold) || length(percentile.threshold) != 1 ||
+          percentile.threshold < 0 || percentile.threshold > 1) {
+        stop("percentile.threshold must be a single number between 0 and 1.", call. = FALSE)
+      }
+    } else if (!is.numeric(max.fdr) || length(max.fdr) != 1 || max.fdr <= 0 || max.fdr > 1) {
+      stop("max.fdr must be a single number in (0, 1], or supply percentile.threshold.",
+           call. = FALSE)
     }
     message("Learning the ARACNE graph...")
     # mutual information (minet expects samples x features), then DPI pruning
     mim <- minet::build.mim(dataset = t(x))
     aracne.mat <- minet::aracne(mim, eps = eps)
     diag(aracne.mat) <- 0
-    # drop the weakest percentile.threshold of the DPI survivors; >= so that 0
-    # keeps every survivor
-    cut <- .percentile_threshold(aracne.mat, percentile.threshold,
-                                 "ARACNE mutual information", nonzero.only = TRUE)
-    aracne.mat[aracne.mat < cut] <- 0
+    if (use.percentile) {
+      # drop the weakest percentile.threshold of the DPI survivors; >= so that 0
+      # keeps every survivor
+      cut <- .percentile_threshold(aracne.mat, percentile.threshold,
+                                   "ARACNE mutual information", nonzero.only = TRUE)
+      aracne.mat[aracne.mat < cut] <- 0
+    } else {
+      # keep the survivors whose raw MI is significant under the independence
+      # null (BH over all pairs); tested on mim, not the DPI output, exactly as
+      # learn_ARACNE_graph() does
+      aracne.mat[.matrix_p_adjust(.mi_pvalue(mim, ncol(x))) >= max.fdr] <- 0
+    }
     graph <- igraph::graph_from_adjacency_matrix(aracne.mat, mode = "undirected",
                                                  weighted = TRUE)
   } else {
