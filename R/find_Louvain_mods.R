@@ -159,11 +159,12 @@ find_Louvain_mods <- function(x,
   # own subgraph, falling back to average-linkage on 1 - |cor| (cut into the
   # fewest pieces that fit) when the subgraph does not split. Splitting runs
   # before merging, so every oversized community holds only graph vertices.
-  repeat {
-    sz  <- table(memb)
-    big <- as.integer(names(sz)[sz > max.size])
-    if (length(big) == 0) break
-    nodes <- rn[memb == big[1]]
+  # A split piece can itself exceed max.size, so the sizes are re-checked after
+  # every split.
+  sz <- table(memb)
+  while (any(sz > max.size)) {
+    big   <- as.integer(names(sz)[sz > max.size][1])
+    nodes <- rn[memb == big]
     sg  <- igraph::induced_subgraph(graph, nodes)
     # membership() follows the subgraph's vertex order; index it by name
     sub <- stats::setNames(
@@ -174,27 +175,30 @@ find_Louvain_mods <- function(x,
       d  <- 1 - abs(stats::cor(t(x[nodes, , drop = FALSE])))
       d[is.na(d)] <- 1                                # a constant feature is unrelated to all
       hc <- stats::hclust(stats::as.dist(d), method = "average")
-      k  <- ceiling(length(nodes) / max.size)
-      repeat {
+      # the fewest pieces whose largest fits (k = length(nodes) always does)
+      k   <- ceiling(length(nodes) / max.size)
+      sub <- stats::cutree(hc, k = k)
+      while (max(table(sub)) > max.size && k < length(nodes)) {
+        k   <- k + 1L
         sub <- stats::cutree(hc, k = k)
-        if (max(table(sub)) <= max.size || k >= length(nodes)) break
-        k <- k + 1L
       }
     }
     message("Splitting a community of ", length(nodes), " nodes to satisfy max.size.")
     # the first piece keeps the id, the others get fresh ids beyond the current max
-    memb[nodes] <- ifelse(sub == 1L, big[1], max(memb) + sub - 1L)
+    memb[nodes] <- ifelse(sub == 1L, big, max(memb) + sub - 1L)
+    sz <- table(memb)
   }
 
   # Enforce min.size: merge undersized communities, smallest first, into the
   # community they share the most edge weight with (the highest mean |cor| if
   # they have no edge to any), as long as the merged size stays within max.size.
   # A community that fits nowhere is kept: small modules are legal, only noisier.
+  # Each merge changes the sizes, so the undersized set is recomputed after every
+  # pass; a community that fits nowhere joins `stuck` and is not tried again.
   stuck <- integer(0)
-  repeat {
-    sz    <- table(memb)
-    small <- setdiff(as.integer(names(sz)[sz < min.size]), stuck)
-    if (length(small) == 0 || length(sz) == 1L) break
+  sz    <- table(memb)
+  small <- setdiff(as.integer(names(sz)[sz < min.size]), stuck)
+  while (length(small) > 0 && length(sz) > 1L) {
     m      <- small[which.min(sz[as.character(small)])]
     nodes  <- rn[memb == m]
     others <- setdiff(as.integer(names(sz)), m)
@@ -209,9 +213,11 @@ find_Louvain_mods <- function(x,
     score[(sz[as.character(others)] + length(nodes)) > max.size] <- -Inf
     if (all(!is.finite(score))) {
       stuck <- c(stuck, m)
-      next
+    } else {
+      memb[nodes] <- others[which.max(score)]
     }
-    memb[nodes] <- others[which.max(score)]
+    sz    <- table(memb)
+    small <- setdiff(as.integer(names(sz)[sz < min.size]), stuck)
   }
   if (length(stuck) > 0) {
     warning(length(stuck), " module(s) remain below min.size because merging them would exceed max.size.",

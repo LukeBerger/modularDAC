@@ -9,25 +9,28 @@ find_Louvain_mods(
   graph = NULL,
   min.size = 10,
   max.size = NULL,
-  resolution = 1,
+  resolution = 0.5,
   eps = 0.001,
-  percentile.threshold = 0
+  max.fdr = 0.05,
+  percentile.threshold = NULL
 )
 }
 \arguments{
 \item{x}{a numeric matrix with p features (rows) and n samples (columns), with unique row names}
 
-\item{graph}{an igraph object or NULL (the default). If NULL, an ARACNE graph is learned from \code{x} (see \code{eps} and \code{percentile.threshold}). Otherwise an undirected graph whose vertex names are feature names; vertices not in \code{rownames(x)} are dropped, features of \code{x} absent from the graph start as singleton communities, and edge weights (if any) are used as absolute values, with an unweighted graph treated as all weights 1}
+\item{graph}{an igraph object or NULL (the default). If NULL, an ARACNE graph is learned from \code{x} (see \code{eps}, \code{max.fdr} and \code{percentile.threshold}). Otherwise an undirected graph whose vertex names are feature names; vertices not in \code{rownames(x)} are dropped, features of \code{x} absent from the graph start as singleton communities, and edge weights (if any) are used as absolute values, with an unweighted graph treated as all weights 1}
 
 \item{min.size}{an integer, the minimum number of nodes in a module; smaller communities are merged into a neighbour where the merged size stays within \code{max.size}, and any that cannot be merged are kept, with a warning}
 
 \item{max.size}{an integer, or NULL for no cap; the maximum number of nodes allowed in a module}
 
-\item{resolution}{a numeric, the Louvain resolution passed to \code{\link[igraph:cluster_louvain]{igraph::cluster_louvain()}}; higher values give more, smaller communities}
+\item{resolution}{a numeric, the Louvain resolution passed to \code{\link[igraph:cluster_louvain]{igraph::cluster_louvain()}} for the initial partition and for re-splitting communities larger than \code{max.size}; higher values give more, smaller communities. The default 0.5 sits below igraph's 1 because the DPI-pruned ARACNE graph has almost no triangles, and at resolution 1 Louvain fragments such a near-tree into many small communities that the size rules then have to merge back}
 
 \item{eps}{a numeric, the DPI tolerance passed to \code{\link[minet:aracne]{minet::aracne()}}; used only when \code{graph} is NULL}
 
-\item{percentile.threshold}{a numeric between 0 and 1, used only when \code{graph} is NULL: the ARACNE edges that survive DPI are ranked by mutual information and the weakest \code{percentile.threshold} fraction of them is dropped. The default 0 keeps every survivor, leaving DPI as the only pruning; a positive value is not calibrated across graph sizes. Ranking within the survivors (not all node pairs) keeps the cut responsive at any sparsity}
+\item{max.fdr}{a numeric between 0 and 1, used only when \code{graph} is NULL and \code{percentile.threshold} is NULL: the default edge rule (0.05). A DPI survivor is kept when the Benjamini-Hochberg adjusted p-value of its mutual information, tested against the independence null over all node pairs, is below \code{max.fdr}; as in \code{\link[=learn_ARACNE_graph]{learn_ARACNE_graph()}}, the test is run on the raw mutual information, before DPI}
+
+\item{percentile.threshold}{a numeric between 0 and 1, or NULL (the default, leaving this rule off), used only when \code{graph} is NULL. Supplying it replaces the \code{max.fdr} test: the ARACNE edges that survive DPI are ranked by mutual information and the weakest \code{percentile.threshold} fraction of them is dropped, so 0 keeps every survivor and leaves DPI as the only pruning. Unlike \code{max.fdr}, a positive value is not calibrated across graph sizes. Ranking within the survivors (not all node pairs) keeps the cut responsive at any sparsity}
 }
 \value{
 a list containing: 'graph', the igraph the communities were detected on (restricted to \code{rownames(x)}, with the absolute edge weights Louvain used); 'graph.adj', the p x p matrix of those weights in \code{rownames(x)} order (0 where there is no edge), ready to pass as \code{adj} to \code{\link[=adj_fuzzy_modules]{adj_fuzzy_modules()}}; 'initial.mods', the raw Louvain partition; and 'final.mods', that partition after splitting and merging to satisfy the size limits
@@ -37,15 +40,24 @@ Learns a sparse feature graph from the data with ARACNE and partitions it with
 the Louvain algorithm, then enforces the module size limits. ARACNE is run
 directly through minet: mutual information from \code{\link[minet:build.mim]{minet::build.mim()}}, indirect
 edges pruned by the data processing inequality (DPI) in \code{\link[minet:aracne]{minet::aracne()}}, and
-optionally the weakest \code{percentile.threshold} of the surviving edges dropped.
+the surviving edges kept only where their mutual information is significant
+(Benjamini-Hochberg adjusted p-value below \code{max.fdr}), the same edge rule and
+independence test as \code{\link[=learn_ARACNE_graph]{learn_ARACNE_graph()}}. \code{percentile.threshold} replaces
+that test with a cut of the weakest DPI survivors.
+}
+\details{
+The DPI is kept on purpose even though modules do not need indirect edges
+removed: in data with a strong shared component, the raw significant
+mutual-information graph links most pairs across modules, and it is the DPI
+that strips that cross-module association out.
+
 A community larger than \code{max.size} is
 re-split by Louvain on its own subgraph, falling back to average-linkage
 clustering on \verb{1 - |cor|} if that subgraph will not split. A community smaller
 than \code{min.size} is merged, smallest first, into the community it shares the
 most edge weight with (the highest mean absolute correlation if it has no
 edges to any), provided the merged community stays within \code{max.size}.
-}
-\details{
+
 Unlike \code{\link[=find_WGCNA_mods]{find_WGCNA_mods()}}, there is no unassigned group: a feature with no
 edges starts as its own community and is merged like any other undersized
 one, so every feature lands in a real module and the cut cannot come back

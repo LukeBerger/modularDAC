@@ -110,8 +110,10 @@ test_that("find_Louvain_mods() uses absolute weights, so signed weights are allo
 test_that("adj_fuzzy_modules() on graph.adj with min.adj > 0 recruits only graph neighbours", {
   fx <- make_lfr_fixture()
 
+  # a tight max.size can leave an unmergeable small module (a warning, not under test here)
   set.seed(1)
-  l <- suppressMessages(find_Louvain_mods(fx$x, graph = fx$g, min.size = 10, max.size = 40))
+  l <- suppressWarnings(suppressMessages(
+    find_Louvain_mods(fx$x, graph = fx$g, min.size = 10, max.size = 40)))
   fz <- adj_fuzzy_modules(fx$x, l$graph.adj, l$final.mods,
                           max.size = 80, ratio = 2, min.adj = 1e-12)
 
@@ -147,9 +149,11 @@ test_that("find_Louvain_mods() rejects bad input", {
   igraph::V(g.other)$name <- paste0("Other_", seq_len(igraph::vcount(g.other)))
   expect_error(suppressMessages(find_Louvain_mods(x, graph = g.other)), "match rownames")
 
-  # a percentile outside [0, 1] when the ARACNE graph is to be learned
+  # an edge rule out of range when the ARACNE graph is to be learned
   skip_if_not_installed("minet")
   expect_error(suppressMessages(find_Louvain_mods(x, percentile.threshold = 1.5)), "between 0 and 1")
+  expect_error(suppressMessages(find_Louvain_mods(x, max.fdr = 0)), "max.fdr")
+  expect_error(suppressMessages(find_Louvain_mods(x, max.fdr = NULL)), "max.fdr")
 })
 
 test_that("find_Louvain_mods() removes zero-variance features with a warning", {
@@ -170,7 +174,7 @@ test_that("find_Louvain_mods() removes zero-variance features with a warning", {
   expect_true(.module_check(x[-3, ], l$final.mods))
 })
 
-test_that("find_Louvain_mods() keeps every DPI survivor by default and fewer as the percentile rises", {
+test_that("find_Louvain_mods() keeps every DPI survivor at percentile 0 and fewer as the percentile rises", {
   skip_if_not_installed("minet")
   fx <- make_lfr_fixture()
 
@@ -190,3 +194,59 @@ test_that("find_Louvain_mods() keeps every DPI survivor by default and fewer as 
   # dropping the weakest quarter keeps about three quarters of the survivors
   expect_equal(edges[2] / n.survivors, 0.75, tolerance = 0.02)
 })
+
+test_that("find_Louvain_mods() by default learns the same graph as learn_ARACNE_graph() at max.fdr", {
+  skip_if_not_installed("minet")
+  fx <- make_lfr_fixture()
+
+  # an undirected edge set as sorted 'a|b' strings, with the MI weight attached
+  edge_set <- function(g) {
+    el <- igraph::as_edgelist(g, names = TRUE)
+    stats::setNames(igraph::E(g)$weight, paste(pmin(el[, 1], el[, 2]), pmax(el[, 1], el[, 2]), sep = "|"))
+  }
+
+  # the default (max.fdr = 0.05) and a non-default level both match the learner
+  for (fdr in c(0.05, 0.2)) {
+    args <- list(fx$x, max.size = 60)
+    if (fdr != 0.05) args$max.fdr <- fdr
+    set.seed(1)
+    l <- suppressWarnings(suppressMessages(do.call(find_Louvain_mods, args)))
+    ref <- suppressMessages(learn_ARACNE_graph(fx$x, eps = 0.001, max.fdr = fdr))$graph
+
+    got <- edge_set(l$graph); want <- edge_set(ref)
+    expect_setequal(names(got), names(want))
+    expect_equal(got[names(want)], want)
+  }
+})
+
+test_that("find_Louvain_mods()'s max.fdr keeps a subset of the DPI survivors that grows with max.fdr", {
+  skip_if_not_installed("minet")
+  fx <- make_lfr_fixture()
+
+  a <- minet::aracne(minet::build.mim(dataset = t(fx$x)), eps = 0.001)
+  diag(a) <- 0
+  n.survivors <- sum(a[upper.tri(a)] > 0)
+
+  edges <- vapply(c(0.01, 0.05, 0.5), function(fdr) {
+    set.seed(1)
+    igraph::ecount(suppressWarnings(suppressMessages(
+      find_Louvain_mods(fx$x, max.size = 60, max.fdr = fdr)))$graph)
+  }, numeric(1))
+
+  expect_true(all(diff(edges) >= 0))
+  expect_lte(edges[3], n.survivors)
+})
+
+test_that("find_Louvain_mods()'s percentile.threshold overrides max.fdr", {
+  skip_if_not_installed("minet")
+  fx <- make_lfr_fixture()
+
+  set.seed(1)
+  a <- suppressWarnings(suppressMessages(
+    find_Louvain_mods(fx$x, max.size = 60, percentile.threshold = 0)))
+  set.seed(1)
+  b <- suppressWarnings(suppressMessages(
+    find_Louvain_mods(fx$x, max.size = 60, percentile.threshold = 0, max.fdr = 1e-6)))
+  expect_equal(igraph::ecount(a$graph), igraph::ecount(b$graph))
+})
+
