@@ -83,10 +83,23 @@ SENTINELS <- c("R/divide_and_conquer.R", "R/learn_ARACNE_graph.R",
 
 # ---------------------------------------------------------------- utilities --
 
+# R for Windows sets HOME to the user's Documents folder, so git -- started from
+# R as a child process -- looks for ~/.gitconfig there, finds no user.name or
+# user.email, and cannot make the merge commit (which then fails with no
+# conflicts to resolve). Git's own default home on Windows is USERPROFILE, so
+# when R's HOME leaves git without an identity, every git call is run with HOME
+# pointed there instead (set below, after the identity check).
+git.home <- NULL
+
 # stderr is left to flow to the console rather than captured, so git's own
 # messages stay visible; the exit status is what decides success.
 run <- function(..., allow.fail = FALSE) {
   cmd <- paste(...)
+  if (!is.null(git.home)) {
+    old.home <- Sys.getenv("HOME")
+    Sys.setenv(HOME = git.home)
+    on.exit(Sys.setenv(HOME = old.home), add = TRUE)
+  }
   out <- suppressWarnings(system(cmd, intern = TRUE))
   st <- attr(out, "status")
   if (is.null(st)) st <- 0L
@@ -94,13 +107,27 @@ run <- function(..., allow.fail = FALSE) {
     stop("command failed (status ", st, "): ", cmd, call. = FALSE)
   }
   attr(out, "status") <- st
-  out
+  invisible(out)   # so top-level calls do not print their output
 }
 
 step <- function(...) cat("==> ", ..., "\n", sep = "")
 
+# TRUE when git can see both halves of a commit identity
+has.identity <- function() {
+  all(vapply(c("user.name", "user.email"), function(k)
+    length(run("git config", k, allow.fail = TRUE)) > 0, logical(1)))
+}
+
 if (!file.exists("DESCRIPTION")) {
   stop("run this from the package root (the directory holding DESCRIPTION).", call. = FALSE)
+}
+if (!has.identity() && .Platform$OS.type == "windows" && nzchar(Sys.getenv("USERPROFILE"))) {
+  git.home <- Sys.getenv("USERPROFILE")
+}
+if (!has.identity()) {
+  stop("git has no user.name / user.email, so the merge commit would fail. Set them ",
+       "with `git config --global` (or `--local` in this repository) and re-run.",
+       call. = FALSE)
 }
 if (length(run("git status --porcelain")) > 0) {
   stop("working tree is not clean; commit or stash first.", call. = FALSE)

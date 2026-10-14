@@ -16,7 +16,7 @@ The algorithm runs in three stages.
 **1. Divide.** 
 Partition the features into modules, then expand them to create overlapping **fuzzy modules**.
 
-The partition comes from `find_WGCNA_mods()` (co-expression modules via WGCNA) or `find_ICA_mods()` (independent components, which overlap naturally). The expansion step uses `eigen_fuzzy_modules()` or `adj_fuzzy_modules()` to recruit  features outside a module that correlate most strongly with it, up to a size or ratio cap.
+The partition comes from `find_WGCNA_mods()` (co-expression modules via WGCNA), `find_Louvain_mods()` (Louvain communities on an ARACNE graph learned from the data) or `find_ICA_mods()` (independent components, which overlap naturally). The expansion step uses `eigen_fuzzy_modules()` or `adj_fuzzy_modules()` to recruit  features outside a module that correlate most strongly with it, up to a size or ratio cap.
 
 The expansion is necessary in order  to  1) ensure modules contain overlapping pairs of nodes which can be used to stitch together the final network and 2) provide nodes at the boundaries of the module with the necessary information to condition their partial correlations on.
 
@@ -157,7 +157,7 @@ output parser (see `?divide_and_conquer`).
 
 ## What is in the package
 
-**Module detection** — `find_WGCNA_mods()`, `find_ICA_mods()`
+**Module detection** — `find_WGCNA_mods()`, `find_Louvain_mods()`, `find_ICA_mods()`
 
 **Module growth** — `eigen_fuzzy_modules()`, `adj_fuzzy_modules()`
 
