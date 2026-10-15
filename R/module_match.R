@@ -48,13 +48,14 @@ module_match <- function(m1, m2){
   size2 <- unname(lengths(idx2))
 
   # --- OUTPUT 1: overlap matrix of shared-node counts ---
-  # membership indicators over the shared node universe; the matrix product then
-  # counts, for each (i, j), the nodes shared between module i and module j
-  membership <- function(idx){
-    matrix(vapply(idx, function(s) as.integer(nodes1 %in% s), integer(length(nodes1))),
-           nrow = length(nodes1))
-  }
-  overlap.matrix <- crossprod(membership(idx1), membership(idx2)) # t(A) %*% B
+  # membership indicators over the shared node universe (one column per module);
+  # the matrix product then counts, for each (i, j), the nodes shared between
+  # module i and module j
+  membership1 <- matrix(vapply(idx1, function(s) as.integer(nodes1 %in% s), integer(length(nodes1))),
+                        nrow = length(nodes1))
+  membership2 <- matrix(vapply(idx2, function(s) as.integer(nodes1 %in% s), integer(length(nodes1))),
+                        nrow = length(nodes1))
+  overlap.matrix <- crossprod(membership1, membership2) # t(A) %*% B
   dimnames(overlap.matrix) <- list(lab1, lab2)
 
   # --- OUTPUT 2: best-match table ---

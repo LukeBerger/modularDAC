@@ -153,7 +153,7 @@ find_Louvain_mods <- function(x,
   memb[igraph::V(graph)$name] <- as.integer(lv)
   miss <- which(is.na(memb))
   memb[miss] <- max(c(0L, memb), na.rm = TRUE) + seq_along(miss)
-  initial.index.vector <- match(memb, sort(unique(memb)))
+  initial.index.vector <- as.numeric(match(memb, sort(unique(memb))))
 
   # Enforce max.size: split one oversized community at a time by Louvain on its
   # own subgraph, falling back to average-linkage on 1 - |cor| (cut into the
@@ -225,24 +225,29 @@ find_Louvain_mods <- function(x,
   }
 
   # renumber the final modules to a contiguous 1:N sequence
-  final.index.vector <- match(memb, sort(unique(memb)))
+  final.index.vector <- as.numeric(match(memb, sort(unique(memb))))
 
-  # build module objects (a non-overlapping partition owns all of its own nodes,
-  # so core.list == index.list)
-  build_mods <- function(src, iv) {
-    iv <- as.numeric(iv)
-    il <- split(seq_len(p), iv)
-    methods::new("module",
-                 source = src,
-                 data.dim = dim(x),
-                 overlapping = FALSE,
-                 index.vector = iv,
-                 index.list = il,
-                 name.list = split(rn, iv),
-                 core.list = il)
-  }
-  initial.mods <- build_mods("find_Louvain_mods initial mods", initial.index.vector)
-  final.mods   <- build_mods("find_Louvain_mods sized mods",   final.index.vector)
+  # build the module objects (a non-overlapping partition owns all of its own
+  # nodes, so core.list == index.list)
+  initial.index.list <- split(seq_len(p), initial.index.vector)
+  initial.mods <- methods::new("module",
+                               source = "find_Louvain_mods initial mods",
+                               data.dim = dim(x),
+                               overlapping = FALSE,
+                               index.vector = initial.index.vector,
+                               index.list = initial.index.list,
+                               name.list = split(rn, initial.index.vector),
+                               core.list = initial.index.list)
+
+  final.index.list <- split(seq_len(p), final.index.vector)
+  final.mods <- methods::new("module",
+                             source = "find_Louvain_mods sized mods",
+                             data.dim = dim(x),
+                             overlapping = FALSE,
+                             index.vector = final.index.vector,
+                             index.list = final.index.list,
+                             name.list = split(rn, final.index.vector),
+                             core.list = final.index.list)
 
   return(list(
     graph = graph,
