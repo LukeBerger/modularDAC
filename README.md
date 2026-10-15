@@ -16,7 +16,9 @@ The algorithm runs in three stages.
 **1. Divide.** 
 Partition the features into modules, then expand them to create overlapping **fuzzy modules**.
 
-The partition comes from `find_WGCNA_mods()` (co-expression modules via WGCNA), `find_Louvain_mods()` (Louvain communities on an ARACNE graph learned from the data) or `find_ICA_mods()` (independent components, which overlap naturally). The expansion step uses `eigen_fuzzy_modules()` or `adj_fuzzy_modules()` to recruit  features outside a module that correlate most strongly with it, up to a size or ratio cap.
+By default the partition comes from `find_Louvain_mods()`. It learns a sparse ARACNE graph from the data (mutual information between features, with indirect edges pruned and only significant edges kept), splits that graph into Louvain communities, and then splits or merges communities to fit the module size limits. The default expansion, `adj_fuzzy_modules()`, grows each module along the same graph: it recruits the outside features with the strongest edges to the module, up to a size or ratio cap. Recruiting only graph neighbours approximates the Markov blanket of each feature in the module.
+
+`find_WGCNA_mods()` (co-expression modules via WGCNA) and `find_ICA_mods()` (independent components, which overlap naturally) are alternative partitions. `eigen_fuzzy_modules()` is an alternative expansion that recruits the features most correlated with a module's eigengene. These two WGCNA functions were the defaults up to the [`last-wgcna-default`](https://github.com/LukeBerger/modularDAC/tree/last-wgcna-default) tag. Louvain replaced them because on larger simulated graphs WGCNA's co-expression cut often collapsed into a single module.
 
 The expansion is necessary in order  to  1) ensure modules contain overlapping pairs of nodes which can be used to stitch together the final network and 2) provide nodes at the boundaries of the module with the necessary information to condition their partial correlations on.
 
@@ -45,15 +47,16 @@ devtools::install_github("LukeBerger/modularDAC")
 ```
 
 Most dependencies are optional and only checked when you call a function that
-needs one. For the example below you need `WGCNA` and `SILGGM`, plus
-`SummarizedExperiment` to load the example data:
+needs one. For the example below you need `minet` (to learn the ARACNE graph)
+and `SILGGM`, plus `SummarizedExperiment` to load the example data:
 
 ```r
-install.packages(c("WGCNA", "SILGGM", "flashClust", "dynamicTreeCut"))
+install.packages("SILGGM")
 
-# WGCNA pulls in a few Bioconductor packages
+# minet and SummarizedExperiment come from Bioconductor, and so do a few
+# packages that WGCNA (a required dependency) pulls in
 # install.packages("BiocManager")
-BiocManager::install(c("GO.db", "impute", "preprocessCore", "SummarizedExperiment"))
+BiocManager::install(c("minet", "SummarizedExperiment", "GO.db", "impute", "preprocessCore"))
 ```
 
 ---
@@ -94,35 +97,52 @@ dim(x)
 
 ```r
 set.seed(1)
-mods <- find_WGCNA_mods(x, min.size = 10, max.size = 60)
+mods <- find_Louvain_mods(x, min.size = 10, max.size = 60)
 
 lengths(mods$final.mods@index.list)
-#>  1  2  3
-#> 57 31 32
+#>  1  2  3  4
+#> 45 31 16 28
 ```
 
-`max.size` caps how large a module may get, which is what bounds the size of
-each sub-problem. `find_WGCNA_mods()` returns the WGCNA adjacency alongside two
-module objects: `initial.mods` (the natural cut) and `final.mods` (after
-splitting anything over `max.size`).
-
-The partition does not overlap yet, so grow it:
+Louvain is randomised, so set a seed for a reproducible partition. `max.size`
+caps how large a module may get, which is what bounds the size of each
+sub-problem. `find_Louvain_mods()` returns the ARACNE graph it clustered
+(`graph`), the same edge weights as a 120 × 120 feature-by-feature matrix
+(`graph.adj`), and two module objects: `initial.mods` (the raw Louvain
+communities) and `final.mods` (after splitting anything over `max.size` and
+merging anything under `min.size`):
 
 ```r
-fuzzy <- eigen_fuzzy_modules(x, mods$final.mods, max.size = 80, ratio = 1.5)
+lengths(mods$initial.mods@index.list)
+#>  1  2  3  4  5  6
+#> 43 31 16  1 28  1
+```
+
+The two single-feature communities are features with no edges in the ARACNE
+graph. They fell below `min.size`, so both were merged into module 1.
+
+The partition does not overlap yet, so grow it along the same graph:
+
+```r
+fuzzy <- adj_fuzzy_modules(x, mods$graph.adj, mods$final.mods,
+                           max.size = 80, ratio = 1.5, min.adj = 1e-12)
 
 lengths(fuzzy@index.list)   # core + recruited auxiliary features
-#> [1] 80 46 48
+#> [1] 67 46 24 42
 
 lengths(fuzzy@core.list)    # the features each module owns — unchanged
-#>  1  2  3
-#> 57 31 32
+#>  1  2  3  4
+#> 45 31 16 28
 ```
 
 Each module grew by up to `ratio` times its original size (capped at
-`max.size`), recruiting the outside features most correlated with its
-eigengene. The core sets still partition all 120 features: every feature is
-owned exactly once, which is what makes the stitch in step 3 well defined.
+`max.size`), recruiting the outside features with the strongest edges to its
+core. `graph.adj` is 0 between features with no edge, so any positive
+`min.adj` limits the recruits to graph neighbours, and a module that runs out of
+neighbours stops growing early. Here every module had more neighbours than
+`ratio` allowed, so the ratio set the sizes. The core sets still partition all
+120 features: every feature is owned exactly once, which is what makes the
+stitch in step 3 well defined.
 
 ### 2 & 3. Conquer and combine
 
@@ -130,7 +150,7 @@ owned exactly once, which is what makes the stitch in step 3 well defined.
 dac <- divide_and_conquer(x, fuzzy, n.cores = 1)
 
 dac$graph
-#> IGRAPH ... UNW- 120 123 --
+#> IGRAPH ... UNW- 120 130 --
 #> + attr: name (v/c), weight (e/n)
 ```
 
@@ -157,9 +177,9 @@ output parser (see `?divide_and_conquer`).
 
 ## What is in the package
 
-**Module detection** — `find_WGCNA_mods()`, `find_Louvain_mods()`, `find_ICA_mods()`
+**Module detection** — `find_Louvain_mods()` (default), `find_WGCNA_mods()`, `find_ICA_mods()`
 
-**Module growth** — `eigen_fuzzy_modules()`, `adj_fuzzy_modules()`
+**Module growth** — `adj_fuzzy_modules()` (default), `eigen_fuzzy_modules()`
 
 **Graph learning** — `learn_SILGGM_graph()`, `learn_WGCNA_graph()`,
 `learn_ARACNE_graph()`, `learn_CLR_graph()`, `learn_GENIE3_graph()`,
@@ -281,17 +301,17 @@ Each module's `number_edges` comes back in `other.outputs`:
 
 ```r
 sapply(random.dac$other.outputs, function(o) o$number_edges)
-#> [1] 473 145 164
+#> [1] 355 145  41 130
 
 random.dac$graph
-#> IGRAPH ... UNW- 120 628 --
+#> IGRAPH ... UNW- 120 565 --
 #> + attr: name (v/c), weight (e/n)
 ```
 
 Each module draws its edges independently, so the modules disagree about the
 features they share. The stitch settles those disagreements with the same
-ownership and `weight.summary` rules as any other learner, and 628 of the 782
-edges drawn across the three modules survive.
+ownership and `weight.summary` rules as any other learner, and 565 of the 671
+edges drawn across the four modules survive.
 
 Because this learner is random, `set.seed()` only makes the result reproducible
 when `n.cores = 1`. Parallel workers each draw from their own random stream.
