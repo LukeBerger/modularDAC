@@ -102,31 +102,6 @@ find_WGCNA_mods <- function(x,
   # minimum number of modules to retain when merging (a floor for .merge_modules)
   min.mods <- max(1, ceiling(nrow(x) / max.size))
 
-  # build the co-expression adjacency, TOM distance, dendrogram and natural
-  # (dynamic tree cut) partition at one soft-threshold power
-  cut.at.power <- function(b) {
-    adj <- WGCNA::adjacency(datExpr = t.x,
-                            power = b,
-                            corFnc = cor.FN,
-                            type = "unsigned",
-                            corOptions = cor.options)
-    dis <- WGCNA::TOMdist(adjMat = adj, TOMType = "unsigned")
-    dendro <- flashClust::flashClust(d = stats::as.dist(dis), method = hclust.method)
-    iv <- dynamicTreeCut::cutreeDynamic(dendro = dendro,
-                                        cutHeight = cut.height,
-                                        method = "hybrid",
-                                        distM = dis,
-                                        deepSplit = deep.split,
-                                        pamRespectsDendro = FALSE,
-                                        minClusterSize = min.size)
-    list(adj = adj, dis = dis, dendro = dendro, index.vector = iv,
-         n.mods = length(unique(iv[iv != 0])), beta = b)
-  }
-
-  message("Generating initial modules...")
-  fit <- cut.at.power(beta)
-  n.powers.tried <- 1L
-
   # Retry across powers. pickSoftThreshold selects the smallest power whose
   # signed scale-free R^2 clears min.sft, which says nothing about whether the
   # resulting TOM resolves into modules, and on a weakly scale-free network that
@@ -139,43 +114,64 @@ find_WGCNA_mods <- function(x,
   # .assign_unassigned has no module to recruit into and .split_to_max_size
   # never splits group 0, so the whole graph would be returned as a single
   # "module 0".
-  if (fit$n.mods < min.natural.mods && auto.beta && retry.betas) {
+  #
+  # The powers to try, in order: the chosen power, then (only when it was picked
+  # automatically and retry.betas is TRUE) the remaining candidates.
+  powers.to.try <- beta
+  if (auto.beta && retry.betas) {
     r2 <- -sign(sft$fitIndices$slope) * sft$fitIndices$SFT.R.sq
     candidates <- sft$fitIndices$Power[order(r2, decreasing = TRUE)]
-    candidates <- setdiff(candidates, beta)
-    for (b in candidates) {
-      message("Natural cut gave ", fit$n.mods, " module(s) at power ", fit$beta,
-              "; retrying at power ", b, ".")
-      trial <- cut.at.power(b)
-      n.powers.tried <- n.powers.tried + 1L
-      if (trial$n.mods >= min.natural.mods) { fit <- trial; break }
-      fit <- trial   # keep the most recent attempt for the error message below
-    }
+    powers.to.try <- c(beta, setdiff(candidates, beta))
   }
 
-  if (fit$n.mods < 1) {
+  # At each power, build the co-expression adjacency, TOM distance, dendrogram
+  # and natural (dynamic tree cut) partition, stopping at the first power whose
+  # cut has at least min.natural.mods modules. If none does, the most recent
+  # attempt is kept for the error message below.
+  message("Generating initial modules...")
+  n.mods <- -Inf   # no cut made yet
+  n.powers.tried <- 0L
+  while (n.mods < min.natural.mods && n.powers.tried < length(powers.to.try)) {
+    if (n.powers.tried > 0L) {
+      message("Natural cut gave ", n.mods, " module(s) at power ", beta,
+              "; retrying at power ", powers.to.try[n.powers.tried + 1L], ".")
+    }
+    n.powers.tried <- n.powers.tried + 1L
+    beta <- powers.to.try[n.powers.tried]
+    adj <- WGCNA::adjacency(datExpr = t.x,
+                            power = beta,
+                            corFnc = cor.FN,
+                            type = "unsigned",
+                            corOptions = cor.options)
+    dis <- WGCNA::TOMdist(adjMat = adj, TOMType = "unsigned")
+    dendro <- flashClust::flashClust(d = stats::as.dist(dis), method = hclust.method)
+    initial.index.vector <- dynamicTreeCut::cutreeDynamic(dendro = dendro,
+                                                          cutHeight = cut.height,
+                                                          method = "hybrid",
+                                                          distM = dis,
+                                                          deepSplit = deep.split,
+                                                          pamRespectsDendro = FALSE,
+                                                          minClusterSize = min.size)
+    n.mods <- length(unique(initial.index.vector[initial.index.vector != 0]))
+  }
+
+  if (n.mods < 1) {
     stop("WGCNA module detection failed: the dynamic tree cut assigned every ",
          "feature to the unassigned group ",
          if (n.powers.tried > 1)
            paste0("at all ", n.powers.tried, " soft-threshold powers tried")
          else if (auto.beta && !retry.betas)
-           paste0("at power ", fit$beta, " (retry.betas = FALSE; set it TRUE to try other powers)")
+           paste0("at power ", beta, " (retry.betas = FALSE; set it TRUE to try other powers)")
          else
-           paste0("at the supplied power ", fit$beta, " (pass beta = NULL to search other powers)"),
+           paste0("at the supplied power ", beta, " (pass beta = NULL to search other powers)"),
          ". Use find_ICA_mods(), supply a partition directly, or check the input ",
          "for degenerate correlation structure.", call. = FALSE)
   }
-  if (fit$n.mods < min.natural.mods) {
-    warning("Natural module detection produced only ", fit$n.mods,
+  if (n.mods < min.natural.mods) {
+    warning("Natural module detection produced only ", n.mods,
             " module(s) (min.natural.mods = ", min.natural.mods,
             "); the partition may be degenerate.", call. = FALSE)
   }
-
-  beta   <- fit$beta
-  adj    <- fit$adj
-  dis    <- fit$dis
-  dendro <- fit$dendro
-  initial.index.vector <- fit$index.vector
 
   # merge similar modules based on eigengene similarity
   if (merge) {
@@ -236,23 +232,29 @@ find_WGCNA_mods <- function(x,
          "feature into a real module.", call. = FALSE)
   }
 
-  # build module objects (a non-overlapping partition owns all of its own nodes,
-  # so core.list == index.list)
+  # build the module objects (a non-overlapping partition owns all of its own
+  # nodes, so core.list == index.list)
   initial.index.vector <- as.numeric(initial.index.vector)
-  final.index.vector   <- as.numeric(final.index.vector)
-  build_mods <- function(src, iv){
-    il <- split(seq_len(nrow(x)), iv)
-    methods::new("module",
-                 source = src,
-                 data.dim = dim(x),
-                 overlapping = FALSE,
-                 index.vector = iv,
-                 index.list = il,
-                 name.list = split(rownames(x), iv),
-                 core.list = il)
-  }
-  initial.mods <- build_mods("find_WGCNA_mods initial mods", initial.index.vector)
-  final.mods   <- build_mods("find_WGCNA_mods sized mods",   final.index.vector)
+  initial.index.list   <- split(seq_len(nrow(x)), initial.index.vector)
+  initial.mods <- methods::new("module",
+                               source = "find_WGCNA_mods initial mods",
+                               data.dim = dim(x),
+                               overlapping = FALSE,
+                               index.vector = initial.index.vector,
+                               index.list = initial.index.list,
+                               name.list = split(rownames(x), initial.index.vector),
+                               core.list = initial.index.list)
+
+  final.index.vector <- as.numeric(final.index.vector)
+  final.index.list   <- split(seq_len(nrow(x)), final.index.vector)
+  final.mods <- methods::new("module",
+                             source = "find_WGCNA_mods sized mods",
+                             data.dim = dim(x),
+                             overlapping = FALSE,
+                             index.vector = final.index.vector,
+                             index.list = final.index.list,
+                             name.list = split(rownames(x), final.index.vector),
+                             core.list = final.index.list)
 
   return(list(
     wgcna.adj = adj,
